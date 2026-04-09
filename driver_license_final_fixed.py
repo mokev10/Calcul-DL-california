@@ -1,9 +1,9 @@
 # driver_license_final_fixed.py
-# Version complète : health check, photo par défaut selon Sexe (M/F), upload photo, export SVG et PDF
-# Remplacez IMAGE_M_URL et IMAGE_F_URL par vos URLs si vous voulez utiliser des images distantes.
+# Version complète : health check, photo par défaut selon Sexe (M/F), export SVG et PDF
+# Note : ajoutez "requests" dans requirements.txt si ce n'est pas déjà présent.
 
 import streamlit as st
-import datetime, random, hashlib, io, base64
+import datetime, random, hashlib, io, base64, requests
 import streamlit.components.v1 as components
 from typing import Dict
 
@@ -15,10 +15,10 @@ from reportlab.lib.utils import ImageReader
 st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
-# Configurer ici les images par défaut (remplacez par vos URLs si besoin)
+# Images par défaut (M / F)
 # -------------------------
-IMAGE_M_URL = "<URL_IMAGE_M>"  # remplacer par le lien de l'image pour Sexe "M"
-IMAGE_F_URL = "<URL_IMAGE_F>"  # remplacer par le lien de l'image pour Sexe "F"
+IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
+IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
 
 # -------------------------
 # CSS + Google Font
@@ -208,7 +208,7 @@ offices = {
 }
 
 # -------------------------
-# FORMULAIRE
+# FORMULAIRE (sans upload photo)
 # -------------------------
 st.title("Générateur officiel de permis CA")
 
@@ -231,9 +231,6 @@ endorse = st.text_input("Endorsements","NONE")
 iss = st.date_input("Date d'émission", datetime.date.today())
 
 office_choice = st.selectbox("Field Office", list(offices.keys()))
-
-# Photo upload
-photo_file = st.file_uploader("Télécharger une photo (optionnel)", type=["png","jpg","jpeg"])
 
 generate = st.button("Générer la carte")
 
@@ -294,6 +291,17 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
         return svg_bytes.decode("utf-8")
     except Exception:
         return str(svg_tree)
+
+# -------------------------
+# Récupérer image distante (retourne bytes ou None)
+# -------------------------
+def fetch_image_bytes(url: str) -> bytes | None:
+    try:
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        return resp.content
+    except Exception:
+        return None
 
 # -------------------------
 # PDF generation (reportlab)
@@ -384,30 +392,24 @@ if generate:
     aamva = build_aamva_tags(fields)
     data_bytes = aamva.encode("utf-8")
 
-    # HTML carte (affichage)
-    photo_html = ""
+    # Choisir l'image par défaut selon le sexe et récupérer les bytes
     photo_bytes = None
-    if photo_file is not None:
-        photo_bytes = photo_file.read()
+    photo_src = IMAGE_M_URL if sex == "M" else IMAGE_F_URL
+    photo_bytes = fetch_image_bytes(photo_src)
+
+    # Préparer HTML pour affichage (embed base64 si image récupérée)
+    if photo_bytes:
         b64 = base64.b64encode(photo_bytes).decode("utf-8")
-        # détecter type approximatif pour le data URI (png par défaut)
-        mime = "image/jpeg"
-        try:
-            header = photo_file.type
-            if header:
-                mime = header
-        except Exception:
-            pass
-        photo_html = f"<div class='photo'><img src='data:{mime};base64,{b64}'/></div>"
+        # essayer détecter type (png/jpg) par magic header simple
+        mime = "image/png"
+        if photo_bytes[:3] == b'\xff\xd8\xff':
+            mime = "image/jpeg"
+        photo_html = f"<div class='photo'><img src='data:{mime};base64,{b64}' alt='photo'/></div>"
     else:
-        # choisir l'image par défaut selon le sexe
-        if sex == "M":
-            photo_src = IMAGE_M_URL
-        else:
-            photo_src = IMAGE_F_URL
-        # si l'utilisateur n'a pas remplacé les placeholders, la balise restera avec la valeur placeholder
+        # fallback : utiliser l'URL directe (si le navigateur peut la charger)
         photo_html = f"<div class='photo'><img src='{photo_src}' alt='photo par défaut'/></div>"
 
+    # HTML carte (affichage)
     html = f"""
     <div class="card">
         <div class="header">
@@ -472,7 +474,6 @@ if generate:
             svg_bytes = svg_str.encode("utf-8")
             st.download_button("Télécharger PDF417 (SVG)", data=svg_bytes, file_name="pdf417.svg", mime="image/svg+xml")
     with cols[1]:
-        # Générer PDF simple avec reportlab
         pdf_bytes = create_pdf_bytes({
             "Nom": ln,
             "Prénom": fn,
