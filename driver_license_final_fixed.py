@@ -4,6 +4,8 @@
 
 import streamlit as st
 import datetime, random, hashlib
+import streamlit.components.v1 as components
+from typing import Dict
 
 st.set_page_config(page_title="Permis CA", layout="centered")
 
@@ -68,10 +70,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------------
+# Sidebar: paramètres PDF417 (optionnel)
+# -------------------------
+st.sidebar.header("Paramètres PDF417 (optionnel)")
+columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
+security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0,9)), index=2)
+scale_param = st.sidebar.slider("Échelle", 1, 6, 3)
+ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
+color_param = st.sidebar.color_picker("Couleur du code", "#000000")
+st.sidebar.markdown("Si pdf417gen n'est pas complet, l'app affichera un message d'avertissement.")
+
+# -------------------------
 # Utilitaires (améliorés mais comportement identique)
 # -------------------------
 def seed(*x):
-    # Utiliser une représentation stable des dates pour seed
     parts = []
     for item in x:
         if isinstance(item, (datetime.date, datetime.datetime)):
@@ -84,7 +96,6 @@ def rdigits(r,n):
     return "".join(r.choice("0123456789") for _ in range(n))
 
 def rletter(r, initial):
-    # Si initial est une lettre, l'utiliser en majuscule, sinon choisir aléatoirement
     try:
         if isinstance(initial, str) and initial and initial[0].isalpha():
             return initial[0].upper()
@@ -93,7 +104,6 @@ def rletter(r, initial):
     return r.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 def next_sequence(r):
-    # Conserver le comportement existant (2 chiffres)
     return str(r.randint(10,99))
 
 # -------------------------
@@ -200,7 +210,6 @@ def validate_inputs():
         errors.append("Date de naissance ne peut pas être dans le futur.")
     if iss > datetime.date.today():
         errors.append("Date d'émission ne peut pas être dans le futur.")
-    # poids/taille raisonnables
     if w < 30 or w > 500:
         errors.append("Poids hors plage attendue.")
     if h1 < 0 or h1 > 8 or h2 < 0 or h2 > 11:
@@ -208,52 +217,102 @@ def validate_inputs():
     return errors
 
 # -------------------------
+# AAMVA builder (texte pour PDF417)
+# -------------------------
+def build_aamva_tags(fields: Dict[str,str]) -> str:
+    header = "@\n\rANSI 636014080102DL"
+    parts = [header]
+    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
+        val = fields.get(tag)
+        if val:
+            parts.append(f"{tag}{val}")
+    return "\u001e\r".join(parts) + "\r"
+
+# -------------------------
+# Import pdf417gen (vendorisé) si disponible
+# -------------------------
+_PDF417_AVAILABLE = False
+try:
+    from pdf417gen import encode, render_svg
+    _PDF417_AVAILABLE = True
+except Exception:
+    try:
+        import pdf417gen
+        from pdf417gen import encode, render_svg
+        _PDF417_AVAILABLE = True
+    except Exception:
+        _PDF417_AVAILABLE = False
+
+def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
+    if not _PDF417_AVAILABLE:
+        raise RuntimeError("Module pdf417gen non disponible.")
+    codes = encode(data_bytes, columns=columns, security_level=security_level, force_binary=False)
+    svg_tree = render_svg(codes, scale=scale, ratio=ratio, color=color)
+    # si render_svg renvoie un ElementTree, convertir en string
+    try:
+        import xml.etree.ElementTree as ET
+        svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
+        return svg_bytes.decode("utf-8")
+    except Exception:
+        # si render_svg renvoie déjà une string
+        return str(svg_tree)
+
+# -------------------------
 # GÉNÉRATION DE LA CARTE (logique inchangée mais plus robuste)
 # -------------------------
 if generate:
-    # validations
     errs = validate_inputs()
     if errs:
         for e in errs:
             st.error(e)
         st.stop()
 
-    # Random déterministe
     r = random.Random(seed(ln,fn,dob))
-
-    # DL : lettre + 7 chiffres (même règle)
     dl = rletter(r, ln[0] if ln else "") + rdigits(r,7)
 
-    # EXP : 5 ans après ISS, aligné sur mois/jour de DOB (même règle)
     exp_year = iss.year + 5
     try:
         exp = datetime.date(exp_year, dob.month, dob.day)
     except ValueError:
-        # Cas 29 février -> fallback au 28 février (gestion non invasive)
         if dob.month == 2 and dob.day == 29:
             exp = datetime.date(exp_year, 2, 28)
         else:
-            # fallback général : utiliser le dernier jour du mois
             last_day = (datetime.date(exp_year, dob.month % 12 + 1, 1) - datetime.timedelta(days=1)).day
             exp = datetime.date(exp_year, dob.month, min(dob.day, last_day))
 
-    # Field office code et DD (même logique, format conservé)
     office_code = offices[office_choice]
-    seq = next_sequence(r)
-    # garantir que seq est 2 chiffres
-    seq = seq.zfill(2)
+    seq = next_sequence(r).zfill(2)
     dd = f"{iss.strftime('%m/%d/%Y')}{office_code}{seq}FD/{iss.year%100}"
 
-    # Normalisations d'affichage (MAJ pour codes, format taille)
     eyes_disp = (eyes or "").upper()
     hair_disp = (hair or "").upper()
     cls_disp = (cls or "").upper()
     rstr_disp = (rstr or "").upper()
     endorse_disp = (endorse or "").upper()
-    # Format taille standard (ex: 5'10")
     height_str = f"{int(h1)}'{int(h2)}\""
 
-    # HTML inchangé visuellement, mêmes champs et labels
+    # champs AAMVA
+    fields = {
+        "DCS": ln.upper(),
+        "DAC": fn.upper(),
+        "DBB": dob.strftime("%m%d%Y"),
+        "DBA": exp.strftime("%m%d%Y"),
+        "DBD": iss.strftime("%m%d%Y"),
+        "DAQ": dl,
+        "DAG": "2570 24TH STREET",
+        "DAI": "ANYTOWN",
+        "DAJ": "CA",
+        "DAK": "95818",
+        "DCF": dd,
+        "DAU": f"{int(h1)}{int(h2)}",
+        "DAY": eyes_disp,
+        "DAZ": hair_disp,
+    }
+
+    aamva = build_aamva_tags(fields)
+    data_bytes = aamva.encode("utf-8")
+
+    # HTML carte (inchangé visuel)
     html = f"""
     <div class="card">
         <div class="header">
@@ -293,4 +352,19 @@ if generate:
     """
     st.markdown(html, unsafe_allow_html=True)
 
-
+    # Génération et affichage du PDF417 sous la carte
+    if _PDF417_AVAILABLE:
+        try:
+            svg_str = generate_pdf417_svg(data_bytes,
+                                         columns=columns_param,
+                                         security_level=security_level_param,
+                                         scale=scale_param,
+                                         ratio=ratio_param,
+                                         color=color_param)
+            svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
+            components.html(svg_html, height=220, scrolling=True)
+        except Exception as e:
+            st.error("Erreur génération PDF417 : " + str(e))
+            st.info("Vérifiez le module pdf417gen dans le dossier vendorisé.")
+    else:
+        st.warning("pdf417gen non disponible. Vendorisez le module ou complétez pdf417gen/__init__.py pour exposer encode et render_svg.")
