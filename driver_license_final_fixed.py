@@ -1,5 +1,6 @@
 # driver_license_final_fixed.py
 # Version complète et autonome : validations, health check intégré et intégration PDF417 si disponible
+# Correction : format DD -> date + office_code + "/" + seq + "FD/" + year_suffix
 
 import streamlit as st
 import datetime, random, hashlib
@@ -303,7 +304,8 @@ if generate:
 
     office_code = offices[office_choice]
     seq = next_sequence(r).zfill(2)
-    dd = f"{iss.strftime('%m/%d/%Y')}{office_code}{seq}FD/{iss.year%100}"
+    # Correction : insérer une barre oblique entre office_code et seq
+    dd = f"{iss.strftime('%m/%d/%Y')}{office_code}/{seq}FD/{iss.year%100}"
 
     eyes_disp = (eyes or "").upper()
     hair_disp = (hair or "").upper()
