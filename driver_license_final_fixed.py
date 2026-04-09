@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Version complète : health check, photo par défaut selon Sexe (M/F), export SVG et PDF
-# Ajouts : champ Adresse (ligne 1) dans l'interface, parser AAMVA intégré, affichage payload et JSON parsé
+# Ajouts : champ Adresse (ligne 1/2), Ville, État, Code postal dans l'interface,
+#         parser AAMVA intégré, affichage payload et JSON parsé
 # Note : ajoutez "requests", "reportlab", "pdf417gen" (si vendorisé) dans requirements.txt si nécessaire.
 
 import streamlit as st
@@ -288,6 +289,11 @@ fn = st.text_input("Prénom", "ROSA")
 address1 = st.text_input("Adresse (ligne 1)", "2570 24TH STREET")
 # Optionnel : ligne 2
 address2 = st.text_input("Adresse (ligne 2)", "")
+# Nouveaux champs demandés : Ville, État, Code postal
+city = st.text_input("Ville", "ANYTOWN")
+state = st.text_input("État (abbrev.)", "CA")
+postal_code = st.text_input("Code postal", "95818")
+
 sex = st.selectbox("Sexe", ["M","F"])
 dob = st.date_input("Date de naissance", datetime.date(1990,1,1))
 
@@ -327,6 +333,12 @@ def validate_inputs():
         errors.append("Taille hors plage attendue.")
     if not address1 or not address1.strip():
         errors.append("Adresse (ligne 1) requise.")
+    if not city or not city.strip():
+        errors.append("Ville requise.")
+    if not state or not state.strip():
+        errors.append("État requis.")
+    if not postal_code or not postal_code.strip():
+        errors.append("Code postal requis.")
     return errors
 
 # -------------------------
@@ -448,7 +460,7 @@ if generate:
     endorse_disp = (endorse or "").upper()
     height_str = f"{int(h1)}'{int(h2)}\""
 
-    # champs AAMVA (utilise address1 et address2 si fournis)
+    # champs AAMVA (utilise address1/address2/city/state/postal_code)
     fields = {
         "DCS": ln.upper(),
         "DAC": fn.upper(),
@@ -458,9 +470,9 @@ if generate:
         "DAQ": dl,
         "DAG": address1.upper(),
         "DAH": address2.upper() if address2 else None,
-        "DAI": "ANYTOWN",
-        "DAJ": "CA",
-        "DAK": "95818",
+        "DAI": city.upper(),
+        "DAJ": state.upper(),
+        "DAK": re.sub(r"\D", "", postal_code)[:10],
         "DCF": dd,
         "DAU": f"{int(h1)}{int(h2)}",
         "DAY": eyes_disp,
@@ -508,6 +520,8 @@ if generate:
                 <div class="value">{dob.strftime('%m/%d/%Y')}</div>
                 <div class="label">Adresse</div>
                 <div class="value">{address1} {address2}</div>
+                <div class="label">Ville / État / Code postal</div>
+                <div class="value">{city} / {state} / {postal_code}</div>
                 <div class="label">Field Office</div>
                 <div class="value">{office_choice}</div>
                 <div class="label">DD</div>
@@ -570,6 +584,9 @@ if generate:
             "Sexe": sex,
             "DOB": dob.strftime("%m/%d/%Y"),
             "Adresse": f"{address1} {address2}".strip(),
+            "Ville": city,
+            "État": state,
+            "Code postal": postal_code,
             "Field Office": office_choice,
             "DD": dd,
             "ISS": iss.strftime("%m/%d/%Y"),
