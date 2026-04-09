@@ -20,5 +20,6 @@
     echo "Show setup.py in nested folder if present:"
     if [ -f Calcul-DL-california/setup.py ]; then echo "=== nested setup.py ==="; sed -n '1,200p' Calcul-DL-california/setup.py; else echo "no setup.py in Calcul-DL-california"; fi
 
-- name: Install package (editable) from subfolder path
-  run: python -m pip install -e ./Calcul-DL-california
+- name: Install package (editable)
+  run: python -m pip install -e .
+
