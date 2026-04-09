@@ -1,11 +1,13 @@
+#!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Version complète : health check, photo par défaut selon Sexe (M/F), export SVG et PDF
-# Note : ajoutez "requests" dans requirements.txt si ce n'est pas déjà présent.
+# Ajouts : champ Adresse (ligne 1) dans l'interface, parser AAMVA intégré, affichage payload et JSON parsé
+# Note : ajoutez "requests", "reportlab", "pdf417gen" (si vendorisé) dans requirements.txt si nécessaire.
 
 import streamlit as st
-import datetime, random, hashlib, io, base64, requests
+import datetime, random, hashlib, io, base64, requests, re
 import streamlit.components.v1 as components
-from typing import Dict
+from typing import Dict, Optional
 
 # PDF generation
 from reportlab.lib.pagesizes import letter
@@ -144,6 +146,74 @@ def next_sequence(r):
     return str(r.randint(10,99))
 
 # -------------------------
+# Parser AAMVA minimal (pour afficher/valider le payload généré)
+# -------------------------
+AAMVA_MAP = {
+    "DCS": "last_name",
+    "DAC": "first_name",
+    "DCT": "full_name_trunc",
+    "DBB": "date_of_birth",
+    "DBA": "expiration_date",
+    "DBD": "issue_date",
+    "DAQ": "id_number",
+    "DAG": "address1",
+    "DAH": "address2",
+    "DAI": "city",
+    "DAJ": "state",
+    "DAK": "postal_code",
+    "DCF": "document_discriminator",
+    "DAU": "height",
+    "DAY": "eye_color",
+    "DAZ": "hair_color",
+}
+
+def mmddyyyy_to_iso(s: str) -> Optional[str]:
+    s = s.strip()
+    if not re.fullmatch(r"\d{6,8}", s):
+        return None
+    try:
+        return datetime.datetime.strptime(s, "%m%d%Y").date().isoformat()
+    except Exception:
+        return None
+
+def normalize_name(name: str) -> str:
+    name = name.strip().replace("<", " ").replace("/", " ")
+    return " ".join(part.capitalize() for part in name.split())
+
+def parse_payload(payload: str) -> Dict[str, Optional[str]]:
+    s = payload.replace("\r\n", "\n").replace("\r", "\n")
+    s = s.lstrip("\n\r @\u001e")
+    lines = [ln for ln in s.split("\n") if ln.strip() != ""]
+    result = {"raw_lines": lines}
+    token_re = re.compile(r"^([A-Z]{3})(.*)$")
+    for ln in lines:
+        m = token_re.match(ln)
+        if m:
+            code = m.group(1)
+            value = m.group(2).strip()
+            key = AAMVA_MAP.get(code)
+            if key:
+                if key in ("date_of_birth","expiration_date","issue_date"):
+                    iso = mmddyyyy_to_iso(value)
+                    result[key] = iso or value
+                elif key in ("first_name","last_name"):
+                    result[key] = normalize_name(value)
+                else:
+                    result[key] = value
+            else:
+                result[f"raw_{code}"] = value
+        else:
+            if ln.startswith("ANSI") or ln.startswith("AAMVA"):
+                result["header"] = ln.strip()
+            else:
+                result.setdefault("other_lines", []).append(ln.strip())
+    if result.get("first_name") or result.get("last_name"):
+        result["full_name"] = " ".join(p for p in [result.get("first_name"), result.get("last_name")] if p)
+    if "postal_code" in result and result["postal_code"]:
+        result["postal_code"] = re.sub(r"\D", "", result["postal_code"])
+    return result
+
+# -------------------------
 # Bureaux Field Office
 # -------------------------
 offices = {
@@ -214,6 +284,10 @@ st.title("Générateur officiel de permis CA")
 
 ln = st.text_input("Nom de famille", "HARMS")
 fn = st.text_input("Prénom", "ROSA")
+# Adresse (ligne 1) ajoutée
+address1 = st.text_input("Adresse (ligne 1)", "2570 24TH STREET")
+# Optionnel : ligne 2
+address2 = st.text_input("Adresse (ligne 2)", "")
 sex = st.selectbox("Sexe", ["M","F"])
 dob = st.date_input("Date de naissance", datetime.date(1990,1,1))
 
@@ -251,6 +325,8 @@ def validate_inputs():
         errors.append("Poids hors plage attendue.")
     if h1 < 0 or h1 > 8 or h2 < 0 or h2 > 11:
         errors.append("Taille hors plage attendue.")
+    if not address1 or not address1.strip():
+        errors.append("Adresse (ligne 1) requise.")
     return errors
 
 # -------------------------
@@ -259,10 +335,11 @@ def validate_inputs():
 def build_aamva_tags(fields: Dict[str,str]) -> str:
     header = "@\n\rANSI 636014080102DL"
     parts = [header]
-    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
+    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAH","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
         val = fields.get(tag)
         if val:
             parts.append(f"{tag}{val}")
+    # join with record separator and end with CR as common in AAMVA payloads
     return "\u001e\r".join(parts) + "\r"
 
 # -------------------------
@@ -295,7 +372,7 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
 # -------------------------
 # Récupérer image distante (retourne bytes ou None)
 # -------------------------
-def fetch_image_bytes(url: str) -> bytes | None:
+def fetch_image_bytes(url: str) -> Optional[bytes]:
     try:
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
@@ -371,7 +448,7 @@ if generate:
     endorse_disp = (endorse or "").upper()
     height_str = f"{int(h1)}'{int(h2)}\""
 
-    # champs AAMVA
+    # champs AAMVA (utilise address1 et address2 si fournis)
     fields = {
         "DCS": ln.upper(),
         "DAC": fn.upper(),
@@ -379,7 +456,8 @@ if generate:
         "DBA": exp.strftime("%m%d%Y"),
         "DBD": iss.strftime("%m%d%Y"),
         "DAQ": dl,
-        "DAG": "2570 24TH STREET",
+        "DAG": address1.upper(),
+        "DAH": address2.upper() if address2 else None,
         "DAI": "ANYTOWN",
         "DAJ": "CA",
         "DAK": "95818",
@@ -388,6 +466,9 @@ if generate:
         "DAY": eyes_disp,
         "DAZ": hair_disp,
     }
+
+    # Nettoyage: retirer clés None
+    fields = {k: v for k, v in fields.items() if v is not None}
 
     aamva = build_aamva_tags(fields)
     data_bytes = aamva.encode("utf-8")
@@ -400,13 +481,11 @@ if generate:
     # Préparer HTML pour affichage (embed base64 si image récupérée)
     if photo_bytes:
         b64 = base64.b64encode(photo_bytes).decode("utf-8")
-        # essayer détecter type (png/jpg) par magic header simple
         mime = "image/png"
         if photo_bytes[:3] == b'\xff\xd8\xff':
             mime = "image/jpeg"
         photo_html = f"<div class='photo'><img src='data:{mime};base64,{b64}' alt='photo'/></div>"
     else:
-        # fallback : utiliser l'URL directe (si le navigateur peut la charger)
         photo_html = f"<div class='photo'><img src='{photo_src}' alt='photo par défaut'/></div>"
 
     # HTML carte (affichage)
@@ -427,6 +506,8 @@ if generate:
                 <div class="value">{sex}</div>
                 <div class="label">DOB</div>
                 <div class="value">{dob.strftime('%m/%d/%Y')}</div>
+                <div class="label">Adresse</div>
+                <div class="value">{address1} {address2}</div>
                 <div class="label">Field Office</div>
                 <div class="value">{office_choice}</div>
                 <div class="label">DD</div>
@@ -448,6 +529,15 @@ if generate:
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
+
+    # Afficher le payload AAMVA brut (utile pour debug / export)
+    st.subheader("Payload AAMVA (brut)")
+    st.code(aamva, language="text")
+
+    # Bouton pour afficher le JSON parsé
+    if st.button("Afficher AAMVA JSON parsé"):
+        parsed = parse_payload(aamva)
+        st.json(parsed)
 
     # Génération et affichage du PDF417 sous la carte
     svg_str = None
@@ -479,6 +569,7 @@ if generate:
             "Prénom": fn,
             "Sexe": sex,
             "DOB": dob.strftime("%m/%d/%Y"),
+            "Adresse": f"{address1} {address2}".strip(),
             "Field Office": office_choice,
             "DD": dd,
             "ISS": iss.strftime("%m/%d/%Y"),
@@ -489,3 +580,4 @@ if generate:
             "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
         }, photo_bytes=photo_bytes)
         st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
+```
