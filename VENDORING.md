@@ -25,3 +25,7 @@ Responsabilités
 Contact
 - Auteur du vendorising : mokev10
 - Date : YYYY-MM-DD
+Source: aamva-parser (TypeScript) by joptimus
+Repository: https://github.com/joptimus/aamva-parser
+License: ISC
+Notes: This Python port reproduces parsing logic and field mappings from the original TypeScript implementation (versions 1-12). Some enums and mappers simplified for readability; verify edge cases against original tests.
