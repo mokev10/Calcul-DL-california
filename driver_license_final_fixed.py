@@ -351,7 +351,7 @@ if generate:
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
-
+ 
     # Génération et affichage du PDF417 sous la carte
     if _PDF417_AVAILABLE:
         try:
