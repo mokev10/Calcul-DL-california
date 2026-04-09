@@ -1,6 +1,5 @@
 # driver_license_final_fixed.py
-# Version robuste : validations et gestion des cas limites
-# Interface et règles inchangées
+# Version complète et autonome : validations, health check intégré et intégration PDF417 si disponible
 
 import streamlit as st
 import datetime, random, hashlib
@@ -10,7 +9,7 @@ from typing import Dict
 st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
-# CSS pour la carte (inchangé)
+# CSS pour la carte
 # -------------------------
 st.markdown("""
 <style>
@@ -81,7 +80,29 @@ color_param = st.sidebar.color_picker("Couleur du code", "#000000")
 st.sidebar.markdown("Si pdf417gen n'est pas complet, l'app affichera un message d'avertissement.")
 
 # -------------------------
-# Utilitaires (améliorés mais comportement identique)
+# Debug / health check intégré (Option A)
+# Coche la case dans la sidebar pour exécuter uniquement le health check
+# -------------------------
+if st.sidebar.checkbox("Activer health check (debug)"):
+    st.sidebar.markdown("### Health Check pdf417gen")
+    try:
+        import pdf417gen
+        from pdf417gen import encode, render_svg
+        st.sidebar.success("Import pdf417gen OK")
+        st.sidebar.write("pdf417gen path:", getattr(pdf417gen, "__file__", "n/a"))
+        try:
+            codes = encode(b"TEST", columns=3, security_level=2, force_binary=False)
+            st.sidebar.write("encode() OK, type:", type(codes).__name__)
+        except Exception as e:
+            st.sidebar.warning("encode() raised: " + str(e))
+        st.sidebar.write("render_svg callable:", callable(render_svg))
+    except Exception as exc:
+        st.sidebar.error("Import pdf417gen failed: " + str(exc))
+        st.sidebar.info("Vérifie que pdf417gen/ est à la racine et contient __init__.py")
+    st.stop()
+
+# -------------------------
+# Utilitaires
 # -------------------------
 def seed(*x):
     parts = []
@@ -107,7 +128,7 @@ def next_sequence(r):
     return str(r.randint(10,99))
 
 # -------------------------
-# Bureaux Field Office (inchangé)
+# Bureaux Field Office
 # -------------------------
 offices = {
     "Baie de San Francisco — Corte Madera (525)": 525,
@@ -171,7 +192,7 @@ offices = {
 }
 
 # -------------------------
-# FORMULAIRE (inchangé visuellement)
+# FORMULAIRE
 # -------------------------
 st.title("Générateur officiel de permis CA")
 
@@ -198,7 +219,7 @@ office_choice = st.selectbox("Field Office", list(offices.keys()))
 generate = st.button("Générer la carte")
 
 # -------------------------
-# VALIDATIONS MINIMALES (non invasives)
+# VALIDATIONS MINIMALES
 # -------------------------
 def validate_inputs():
     errors = []
@@ -258,7 +279,7 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
         return str(svg_tree)
 
 # -------------------------
-# GÉNÉRATION DE LA CARTE (logique inchangée mais plus robuste)
+# GÉNÉRATION DE LA CARTE
 # -------------------------
 if generate:
     errs = validate_inputs()
@@ -312,7 +333,7 @@ if generate:
     aamva = build_aamva_tags(fields)
     data_bytes = aamva.encode("utf-8")
 
-    # HTML carte (inchangé visuel)
+    # HTML carte (affichage)
     html = f"""
     <div class="card">
         <div class="header">
@@ -351,7 +372,7 @@ if generate:
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
- 
+
     # Génération et affichage du PDF417 sous la carte
     if _PDF417_AVAILABLE:
         try:
