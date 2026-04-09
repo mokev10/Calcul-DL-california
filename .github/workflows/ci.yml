@@ -11,18 +11,15 @@
           echo
           echo "=== python introspect pdf417gen ==="
           python - <<'PY'
-import importlib, sys, traceback
+import importlib, sys, traceback, os
+print("CWD:", os.getcwd())
+print("sys.path[0]:", sys.path[0])
 try:
-    # ensure repo root is in sys.path
-    import os
-    print("CWD:", os.getcwd())
-    print("sys.path[0]:", sys.path[0])
-    # try import and introspect
     mod = importlib.import_module("pdf417gen")
     print("pdf417gen.__file__:", getattr(mod, "__file__", None))
     print("has parse attr:", hasattr(mod, "parse"))
     print("callable parse:", callable(getattr(mod, "parse", None)))
-    print("dir(pdf417gen) sample:", [n for n in dir(mod) if n.startswith("parse") or n in ('get_version','get_age','get_full_name')])
+    print("dir(pdf417gen) sample:", [n for n in dir(mod) if n in ('parse','get_version','get_age','get_full_name')])
 except Exception:
     traceback.print_exc()
 PY
