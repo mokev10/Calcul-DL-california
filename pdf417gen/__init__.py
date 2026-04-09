@@ -1,22 +1,21 @@
 # pdf417gen/__init__.py
 """
 pdf417gen package: safe, lazy exports for encoding/rendering and AAMVA helpers.
-This file ensures `from pdf417gen import parse` always succeeds at import time.
+This file ensures `from pdf417gen import parse` always exists at import time.
 """
 
-# --- encoding/rendering placeholders (existing API) ---
+# encoding/rendering placeholders
 try:
     from .encoding import encode, encode_macro
     from .rendering import render_image, render_svg
 except Exception:
     def _missing_encoding(*args, **kwargs):
-        raise RuntimeError("pdf417gen: encoding/rendering functions are not available in this installation.")
+        raise RuntimeError("pdf417gen: encoding/rendering functions are not available.")
     encode = encode_macro = render_image = render_svg = _missing_encoding
 
-# --- Lazy wrapper factory for aamva helpers ---
+# Lazy wrapper factory
 def _wrap(name):
     def _fn(*args, **kwargs):
-        # import the aamva module only when the function is called
         mod = __import__(__name__ + ".aamva", fromlist=[name])
         real = getattr(mod, name)
         return real(*args, **kwargs)
@@ -24,7 +23,7 @@ def _wrap(name):
     _fn.__doc__ = f"Lazy wrapper for pdf417gen.aamva.{name}"
     return _fn
 
-# Bind lazy wrappers to module globals so they exist at import time
+# Bind wrappers
 parse = _wrap("parse")
 get_version = _wrap("get_version")
 is_expired = _wrap("is_expired")
@@ -36,7 +35,7 @@ get_full_name = _wrap("get_full_name")
 get_state = _wrap("get_state")
 is_cdl = _wrap("is_cdl")
 
-# Expose names explicitly
+# Expose names
 globals().update({
     "encode": encode,
     "encode_macro": encode_macro,
