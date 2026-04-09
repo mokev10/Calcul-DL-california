@@ -2,9 +2,6 @@
 from datetime import datetime
 from typing import Optional
 
-from .license_parser import LicenseParser
-from .models.license import License
-
 __all__ = [
     "parse",
     "get_version",
@@ -18,24 +15,32 @@ __all__ = [
     "is_cdl",
 ]
 
-def parse(barcode: str) -> License:
+def parse(barcode: str):
+    """
+    Parse the raw PDF417 barcode string and return a License-like object.
+    Lazy import to avoid circular import issues during package installation/tests.
+    """
+    from .license_parser import LicenseParser
     parser = LicenseParser(barcode)
     return parser.parse()
 
 def get_version(barcode: str) -> Optional[str]:
+    from .license_parser import LicenseParser
     parser = LicenseParser(barcode)
     return parser.parse_version()
 
 def is_expired(barcode: str) -> bool:
+    from .license_parser import LicenseParser
     parser = LicenseParser(barcode)
     return parser.is_expired()
 
 def get_age(barcode: str) -> Optional[int]:
     lic = parse(barcode)
-    if not lic.date_of_birth:
+    # Support both snake_case and camelCase attributes on the License object
+    dob = getattr(lic, "date_of_birth", None) or getattr(lic, "dateOfBirth", None)
+    if not dob:
         return None
     today = datetime.now()
-    dob = lic.date_of_birth
     age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
     return age
 
@@ -49,17 +54,22 @@ def is_under18(barcode: str) -> bool:
 
 def is_acceptable(barcode: str) -> bool:
     lic = parse(barcode)
-    return lic.is_acceptable()
+    # call method if present, otherwise fallback to False
+    return getattr(lic, "is_acceptable", lambda: False)()
 
 def get_full_name(barcode: str) -> Optional[str]:
     lic = parse(barcode)
-    parts = [p for p in (lic.first_name, lic.middle_name, lic.last_name) if p]
+    first = getattr(lic, "first_name", None) or getattr(lic, "firstName", None)
+    middle = getattr(lic, "middle_name", None) or getattr(lic, "middleName", None)
+    last = getattr(lic, "last_name", None) or getattr(lic, "lastName", None)
+    parts = [p for p in (first, middle, last) if p]
     return " ".join(parts) if parts else None
 
 def get_state(barcode: str) -> Optional[str]:
     lic = parse(barcode)
-    return lic.state
+    return getattr(lic, "state", None) or getattr(lic, "stateCode", None)
 
 def is_cdl(barcode: str) -> bool:
     lic = parse(barcode)
-    return lic.cdl_indicator == "1"
+    cdl = getattr(lic, "cdl_indicator", None) or getattr(lic, "cdlIndicator", None)
+    return cdl == "1"
