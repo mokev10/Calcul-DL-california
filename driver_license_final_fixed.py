@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Générateur de permis CA (Streamlit)
-# Ajouts : Adresse 1/2, Ville, État, Code postal + lookup ZIP -> city/state/office automatique
+# Ajouts : lookup ZIP <-> city <-> field office bidirectionnel, initialisation session_state robuste
 # Note : ajoutez "requests", "reportlab", "pdf417gen" (si vendorisé) dans requirements.txt si nécessaire.
 
 import streamlit as st
@@ -19,14 +19,12 @@ st.set_page_config(page_title="Permis CA", layout="centered")
 # -------------------------
 # Petite "base de données" ZIP -> city/state/office
 # Ajoute ici les codes postaux que tu veux supporter.
-# Exemple fourni : 94925 -> Corte Madera (et bureau correspondant)
 ZIP_DB = {
     "94925": {
         "city": "Corte Madera",
         "state": "CA",
         "office": "Baie de San Francisco — Corte Madera (525)"
     },
-    # Exemples supplémentaires (ajoute/modifie selon besoin)
     "95818": {
         "city": "Sacramento",
         "state": "CA",
@@ -44,15 +42,23 @@ ZIP_DB = {
     }
 }
 
+# Build reverse indices for quick lookup
+CITY_TO_ZIPS: Dict[str, list] = {}
+OFFICE_TO_ZIPS: Dict[str, list] = {}
+for z, info in ZIP_DB.items():
+    city_u = info["city"].upper()
+    CITY_TO_ZIPS.setdefault(city_u, []).append(z)
+    office = info.get("office")
+    if office:
+        OFFICE_TO_ZIPS.setdefault(office, []).append(z)
+
 # -------------------------
 # Images par défaut (M / F)
-# -------------------------
 IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
 IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
 
 # -------------------------
 # CSS + Google Font
-# -------------------------
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -68,56 +74,19 @@ html, body, [class*="css"]  {
     box-shadow: 0 10px 30px rgba(0,0,0,0.15);
     margin: auto;
 }
-.header {
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    font-weight:700;
-    font-size:14px;
-    margin-bottom:10px;
-}
-.body {
-    display:flex;
-    gap:12px;
-}
-.photo {
-    width:90px;
-    height:110px;
-    background:#e5e7eb;
-    border-radius:8px;
-    overflow:hidden;
-}
-.photo img {
-    width:100%;
-    height:100%;
-    object-fit:cover;
-    display:block;
-}
-.info {
-    flex:1;
-    font-size:12px;
-}
-.label {
-    opacity:0.7;
-    font-size:10px;
-}
-.value {
-    font-weight:700;
-    margin-bottom:4px;
-}
-.badge {
-    background:white;
-    color:#1e3a8a;
-    padding:2px 6px;
-    border-radius:6px;
-    font-weight:700;
-}
+.header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:14px; margin-bottom:10px; }
+.body { display:flex; gap:12px; }
+.photo { width:90px; height:110px; background:#e5e7eb; border-radius:8px; overflow:hidden; }
+.photo img { width:100%; height:100%; object-fit:cover; display:block; }
+.info { flex:1; font-size:12px; }
+.label { opacity:0.7; font-size:10px; }
+.value { font-weight:700; margin-bottom:4px; }
+.badge { background:white; color:#1e3a8a; padding:2px 6px; border-radius:6px; font-weight:700; }
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------
 # Sidebar: paramètres PDF417 (optionnel)
-# -------------------------
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0,9)), index=2)
@@ -128,7 +97,6 @@ st.sidebar.markdown("Si pdf417gen n'est pas complet, l'app affichera un message 
 
 # -------------------------
 # Debug / health check intégré
-# -------------------------
 if st.sidebar.checkbox("Activer health check (debug)"):
     st.sidebar.markdown("### Health Check pdf417gen")
     try:
@@ -149,7 +117,6 @@ if st.sidebar.checkbox("Activer health check (debug)"):
 
 # -------------------------
 # Utilitaires
-# -------------------------
 def seed(*x):
     parts = []
     for item in x:
@@ -175,24 +142,12 @@ def next_sequence(r):
 
 # -------------------------
 # Parser AAMVA minimal (pour afficher/valider le payload généré)
-# -------------------------
 AAMVA_MAP = {
-    "DCS": "last_name",
-    "DAC": "first_name",
-    "DCT": "full_name_trunc",
-    "DBB": "date_of_birth",
-    "DBA": "expiration_date",
-    "DBD": "issue_date",
-    "DAQ": "id_number",
-    "DAG": "address1",
-    "DAH": "address2",
-    "DAI": "city",
-    "DAJ": "state",
-    "DAK": "postal_code",
-    "DCF": "document_discriminator",
-    "DAU": "height",
-    "DAY": "eye_color",
-    "DAZ": "hair_color",
+    "DCS": "last_name", "DAC": "first_name", "DCT": "full_name_trunc",
+    "DBB": "date_of_birth", "DBA": "expiration_date", "DBD": "issue_date",
+    "DAQ": "id_number", "DAG": "address1", "DAH": "address2",
+    "DAI": "city", "DAJ": "state", "DAK": "postal_code",
+    "DCF": "document_discriminator", "DAU": "height", "DAY": "eye_color", "DAZ": "hair_color",
 }
 
 def mmddyyyy_to_iso(s: str) -> Optional[str]:
@@ -243,7 +198,6 @@ def parse_payload(payload: str) -> Dict[str, Optional[str]]:
 
 # -------------------------
 # Bureaux Field Office
-# -------------------------
 offices = {
     "Baie de San Francisco — Corte Madera (525)": 525,
     "Baie de San Francisco — Daly City (599)": 599,
@@ -306,72 +260,114 @@ offices = {
 }
 
 # -------------------------
-# Callback pour mise à jour automatique depuis postal code
+# Initialisation sûre des clés session_state utilisées par les callbacks/widgets
+defaults = {
+    "ln_input": "HARMS",
+    "fn_input": "ROSA",
+    "address1_input": "2570 24TH STREET",
+    "address2_input": "",
+    "postal_code_input": "94925",
+    "city_input": "Corte Madera",
+    "state_input": "CA",
+    "sex_input": "M",
+    "dob_input": datetime.date(1990,1,1),
+    "h1_input": 5,
+    "h2_input": 10,
+    "w_input": 160,
+    "eyes_input": "BRN",
+    "hair_input": "BRN",
+    "cls_input": "C",
+    "rstr_input": "NONE",
+    "endorse_input": "NONE",
+    "iss_input": datetime.date.today(),
+    "office_choice": list(offices.keys())[0],
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
 # -------------------------
+# Callbacks pour mise à jour automatique
 def postal_code_changed():
-    """Callback appelé quand l'utilisateur modifie le champ postal_code_input."""
     pc = st.session_state.get("postal_code_input", "").strip()
-    pc_digits = re.sub(r"\D", "", pc)
-    # garder au plus 10 caractères (AAMVA peut accepter plus pour certains pays)
-    pc_digits = pc_digits[:10]
+    pc_digits = re.sub(r"\D", "", pc)[:10]
     if pc_digits in ZIP_DB:
         info = ZIP_DB[pc_digits]
-        # Mettre à jour ville/état
         st.session_state["city_input"] = info.get("city", st.session_state.get("city_input", ""))
         st.session_state["state_input"] = info.get("state", st.session_state.get("state_input", ""))
-        # Mettre à jour le choix du field office si présent dans la liste
         office_name = info.get("office")
-        if office_name and office_name in list(offices.keys()):
+        if office_name and office_name in offices:
             st.session_state["office_choice"] = office_name
-    else:
-        # si inconnu, ne pas écraser les valeurs existantes (ou on peut vider)
-        pass
+
+def city_changed():
+    city_val = st.session_state.get("city_input", "").strip().upper()
+    if not city_val:
+        return
+    zips = CITY_TO_ZIPS.get(city_val)
+    if zips:
+        # choose first zip for that city
+        chosen = zips[0]
+        st.session_state["postal_code_input"] = chosen
+        info = ZIP_DB[chosen]
+        st.session_state["state_input"] = info.get("state", st.session_state.get("state_input", ""))
+        if info.get("office") in offices:
+            st.session_state["office_choice"] = info.get("office")
+
+def office_changed():
+    office_val = st.session_state.get("office_choice", "")
+    if not office_val:
+        return
+    zips = OFFICE_TO_ZIPS.get(office_val)
+    if zips:
+        chosen = zips[0]
+        st.session_state["postal_code_input"] = chosen
+        info = ZIP_DB[chosen]
+        st.session_state["city_input"] = info.get("city", st.session_state.get("city_input", ""))
+        st.session_state["state_input"] = info.get("state", st.session_state.get("state_input", ""))
 
 # -------------------------
-# FORMULAIRE (sans upload photo)
-# -------------------------
+# FORMULAIRE (widgets)
 st.title("Générateur officiel de permis CA")
 
-ln = st.text_input("Nom de famille", "HARMS", key="ln_input")
-fn = st.text_input("Prénom", "ROSA", key="fn_input")
-# Adresse (ligne 1/2)
-address1 = st.text_input("Adresse (ligne 1)", "2570 24TH STREET", key="address1_input")
-address2 = st.text_input("Adresse (ligne 2)", "", key="address2_input")
+ln = st.text_input("Nom de famille", st.session_state["ln_input"], key="ln_input")
+fn = st.text_input("Prénom", st.session_state["fn_input"], key="fn_input")
+address1 = st.text_input("Adresse (ligne 1)", st.session_state["address1_input"], key="address1_input")
+address2 = st.text_input("Adresse (ligne 2)", st.session_state["address2_input"], key="address2_input")
 
-# Nouveaux champs demandés : Ville, État, Code postal
-# postal_code_input déclenche postal_code_changed via on_change
 postal_col, city_col = st.columns([2,3])
 with postal_col:
-    postal_code = st.text_input("Code postal", "94925", key="postal_code_input", on_change=postal_code_changed)
+    postal_code = st.text_input("Code postal", st.session_state["postal_code_input"], key="postal_code_input", on_change=postal_code_changed)
 with city_col:
-    city = st.text_input("Ville", "Corte Madera", key="city_input")
+    city = st.text_input("Ville", st.session_state["city_input"], key="city_input", on_change=city_changed)
 
-state = st.text_input("État (abbrev.)", "CA", key="state_input")
-
-sex = st.selectbox("Sexe", ["M","F"], key="sex_input")
-dob = st.date_input("Date de naissance", datetime.date(1990,1,1), key="dob_input")
+state = st.text_input("État (abbrev.)", st.session_state["state_input"], key="state_input")
+sex = st.selectbox("Sexe", ["M","F"], index=0 if st.session_state["sex_input"]=="M" else 1, key="sex_input")
+dob = st.date_input("Date de naissance", st.session_state["dob_input"], key="dob_input")
 
 col1, col2 = st.columns(2)
 with col1:
-    h1 = st.number_input("Pieds",0,8,5, key="h1_input")
-    w = st.number_input("Poids (lb)",30,500,160, key="w_input")
+    h1 = st.number_input("Pieds",0,8,st.session_state["h1_input"], key="h1_input")
+    w = st.number_input("Poids (lb)",30,500,st.session_state["w_input"], key="w_input")
 with col2:
-    h2 = st.number_input("Pouces",0,11,10, key="h2_input")
-    eyes = st.text_input("Yeux","BRN", key="eyes_input")
-hair = st.text_input("Cheveux","BRN", key="hair_input")
-cls = st.text_input("Classe","C", key="cls_input")
-rstr = st.text_input("Restrictions","NONE", key="rstr_input")
-endorse = st.text_input("Endorsements","NONE", key="endorse_input")
-iss = st.date_input("Date d'émission", datetime.date.today(), key="iss_input")
+    h2 = st.number_input("Pouces",0,11,st.session_state["h2_input"], key="h2_input")
+    eyes = st.text_input("Yeux", st.session_state["eyes_input"], key="eyes_input")
+hair = st.text_input("Cheveux", st.session_state["hair_input"], key="hair_input")
+cls = st.text_input("Classe", st.session_state["cls_input"], key="cls_input")
+rstr = st.text_input("Restrictions", st.session_state["rstr_input"], key="rstr_input")
+endorse = st.text_input("Endorsements", st.session_state["endorse_input"], key="endorse_input")
+iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_input")
 
-# Field office selectbox (utilise session_state pour pouvoir être mis à jour)
-office_choice = st.selectbox("Field Office", list(offices.keys()), index=0, key="office_choice")
+# Field office selectbox with on_change callback
+office_list = list(offices.keys())
+# ensure current office_choice is valid index
+if st.session_state.get("office_choice") not in office_list:
+    st.session_state["office_choice"] = office_list[0]
+office_choice = st.selectbox("Field Office", office_list, index=office_list.index(st.session_state["office_choice"]), key="office_choice", on_change=office_changed)
 
 generate = st.button("Générer la carte")
 
 # -------------------------
 # VALIDATIONS MINIMALES
-# -------------------------
 def validate_inputs():
     errors = []
     if not st.session_state.get("ln_input", "").strip():
@@ -398,7 +394,6 @@ def validate_inputs():
 
 # -------------------------
 # AAMVA builder (texte pour PDF417)
-# -------------------------
 def build_aamva_tags(fields: Dict[str,str]) -> str:
     header = "@\n\rANSI 636014080102DL"
     parts = [header]
@@ -406,12 +401,10 @@ def build_aamva_tags(fields: Dict[str,str]) -> str:
         val = fields.get(tag)
         if val:
             parts.append(f"{tag}{val}")
-    # join with record separator and end with CR as common in AAMVA payloads
     return "\u001e\r".join(parts) + "\r"
 
 # -------------------------
 # Import pdf417gen (vendorisé) si disponible
-# -------------------------
 _PDF417_AVAILABLE = False
 try:
     from pdf417gen import encode, render_svg
@@ -438,7 +431,6 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
 
 # -------------------------
 # Récupérer image distante (retourne bytes ou None)
-# -------------------------
 def fetch_image_bytes(url: str) -> Optional[bytes]:
     try:
         resp = requests.get(url, timeout=5)
@@ -449,7 +441,6 @@ def fetch_image_bytes(url: str) -> Optional[bytes]:
 
 # -------------------------
 # PDF generation (reportlab)
-# -------------------------
 def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
@@ -483,7 +474,6 @@ def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
 
 # -------------------------
 # GÉNÉRATION DE LA CARTE
-# -------------------------
 if generate:
     errs = validate_inputs()
     if errs:
@@ -491,7 +481,6 @@ if generate:
             st.error(e)
         st.stop()
 
-    # récupérer valeurs depuis session_state (pour cohérence)
     ln_val = st.session_state["ln_input"]
     fn_val = st.session_state["fn_input"]
     address1_val = st.session_state["address1_input"]
@@ -524,7 +513,6 @@ if generate:
     endorse_disp = (st.session_state.get("endorse_input") or "").upper()
     height_str = f"{int(st.session_state.get('h1_input',0))}'{int(st.session_state.get('h2_input',0))}\""
 
-    # champs AAMVA (utilise address1/address2/city/state/postal_code)
     fields = {
         "DCS": ln_val.upper(),
         "DAC": fn_val.upper(),
@@ -543,18 +531,15 @@ if generate:
         "DAZ": hair_disp,
     }
 
-    # Nettoyage: retirer clés None
     fields = {k: v for k, v in fields.items() if v is not None}
 
     aamva = build_aamva_tags(fields)
     data_bytes = aamva.encode("utf-8")
 
-    # Choisir l'image par défaut selon le sexe et récupérer les bytes
     photo_bytes = None
     photo_src = IMAGE_M_URL if st.session_state.get("sex_input") == "M" else IMAGE_F_URL
     photo_bytes = fetch_image_bytes(photo_src)
 
-    # Préparer HTML pour affichage (embed base64 si image récupérée)
     if photo_bytes:
         b64 = base64.b64encode(photo_bytes).decode("utf-8")
         mime = "image/png"
@@ -564,7 +549,6 @@ if generate:
     else:
         photo_html = f"<div class='photo'><img src='{photo_src}' alt='photo par défaut'/></div>"
 
-    # HTML carte (affichage)
     html = f"""
     <div class="card">
         <div class="header">
@@ -574,50 +558,33 @@ if generate:
         <div class="body">
             {photo_html}
             <div class="info">
-                <div class="label">Nom</div>
-                <div class="value">{ln_val}</div>
-                <div class="label">Prénom</div>
-                <div class="value">{fn_val}</div>
-                <div class="label">Sexe</div>
-                <div class="value">{st.session_state.get('sex_input')}</div>
-                <div class="label">DOB</div>
-                <div class="value">{st.session_state['dob_input'].strftime('%m/%d/%Y')}</div>
-                <div class="label">Adresse</div>
-                <div class="value">{address1_val} {address2_val}</div>
-                <div class="label">Ville / État / Code postal</div>
-                <div class="value">{city_val} / {state_val} / {postal_val}</div>
-                <div class="label">Field Office</div>
-                <div class="value">{st.session_state['office_choice']}</div>
-                <div class="label">DD</div>
-                <div class="value">{dd}</div>
-                <div class="label">ISS</div>
-                <div class="value">{st.session_state['iss_input'].strftime('%m/%d/%Y')}</div>
-                <div class="label">EXP</div>
-                <div class="value">{exp.strftime('%m/%d/%Y')}</div>
-                <div class="label">Classe</div>
-                <div class="value">{cls_disp}</div>
-                <div class="label">Restrictions</div>
-                <div class="value">{rstr_disp}</div>
-                <div class="label">Endorsements</div>
-                <div class="value">{endorse_disp}</div>
-                <div class="label">Yeux / Cheveux / Taille / Poids</div>
-                <div class="value">{eyes_disp} / {hair_disp} / {height_str} / {w} lb</div>
+                <div class="label">Nom</div><div class="value">{ln_val}</div>
+                <div class="label">Prénom</div><div class="value">{fn_val}</div>
+                <div class="label">Sexe</div><div class="value">{st.session_state.get('sex_input')}</div>
+                <div class="label">DOB</div><div class="value">{st.session_state['dob_input'].strftime('%m/%d/%Y')}</div>
+                <div class="label">Adresse</div><div class="value">{address1_val} {address2_val}</div>
+                <div class="label">Ville / État / Code postal</div><div class="value">{city_val} / {state_val} / {postal_val}</div>
+                <div class="label">Field Office</div><div class="value">{st.session_state['office_choice']}</div>
+                <div class="label">DD</div><div class="value">{dd}</div>
+                <div class="label">ISS</div><div class="value">{st.session_state['iss_input'].strftime('%m/%d/%Y')}</div>
+                <div class="label">EXP</div><div class="value">{exp.strftime('%m/%d/%Y')}</div>
+                <div class="label">Classe</div><div class="value">{cls_disp}</div>
+                <div class="label">Restrictions</div><div class="value">{rstr_disp}</div>
+                <div class="label">Endorsements</div><div class="value">{endorse_disp}</div>
+                <div class="label">Yeux / Cheveux / Taille / Poids</div><div class="value">{eyes_disp} / {hair_disp} / {height_str} / {w} lb</div>
             </div>
         </div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
 
-    # Afficher le payload AAMVA brut (utile pour debug / export)
     st.subheader("Payload AAMVA (brut)")
     st.code(aamva, language="text")
 
-    # Bouton pour afficher le JSON parsé
     if st.button("Afficher AAMVA JSON parsé"):
         parsed = parse_payload(aamva)
         st.json(parsed)
 
-    # Génération et affichage du PDF417 sous la carte
     svg_str = None
     if _PDF417_AVAILABLE:
         try:
@@ -635,7 +602,6 @@ if generate:
     else:
         st.warning("pdf417gen non disponible. Vendorisez le module ou complétez pdf417gen/__init__.py pour exposer encode et render_svg.")
 
-    # Boutons de téléchargement
     cols = st.columns(2)
     with cols[0]:
         if svg_str:
