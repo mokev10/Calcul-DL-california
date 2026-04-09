@@ -1,19 +1,27 @@
 # driver_license_final_fixed.py
-# Version complète et autonome : validations, health check intégré et intégration PDF417 si disponible
-# Correction : format DD -> date + office_code + "/" + seq + "FD/" + year_suffix
+# Version complète : health check, upload photo, export SVG et PDF (reportlab), police Google
 
 import streamlit as st
-import datetime, random, hashlib
+import datetime, random, hashlib, io, base64
 import streamlit.components.v1 as components
 from typing import Dict
+
+# PDF generation
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
 st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
-# CSS pour la carte
+# CSS + Google Font
 # -------------------------
 st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
+html, body, [class*="css"]  {
+    font-family: 'Inter', sans-serif;
+}
 .card {
     width: 450px;
     border-radius: 14px;
@@ -40,6 +48,12 @@ st.markdown("""
     height:110px;
     background:#e5e7eb;
     border-radius:8px;
+    overflow:hidden;
+}
+.photo img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
 }
 .info {
     flex:1;
@@ -52,12 +66,6 @@ st.markdown("""
 .value {
     font-weight:700;
     margin-bottom:4px;
-}
-.footer {
-    margin-top:10px;
-    display:flex;
-    justify-content:space-between;
-    font-size:11px;
 }
 .badge {
     background:white;
@@ -81,8 +89,7 @@ color_param = st.sidebar.color_picker("Couleur du code", "#000000")
 st.sidebar.markdown("Si pdf417gen n'est pas complet, l'app affichera un message d'avertissement.")
 
 # -------------------------
-# Debug / health check intégré (Option A)
-# Coche la case dans la sidebar pour exécuter uniquement le health check
+# Debug / health check intégré
 # -------------------------
 if st.sidebar.checkbox("Activer health check (debug)"):
     st.sidebar.markdown("### Health Check pdf417gen")
@@ -217,6 +224,9 @@ iss = st.date_input("Date d'émission", datetime.date.today())
 
 office_choice = st.selectbox("Field Office", list(offices.keys()))
 
+# Photo upload
+photo_file = st.file_uploader("Télécharger une photo (optionnel)", type=["png","jpg","jpeg"])
+
 generate = st.button("Générer la carte")
 
 # -------------------------
@@ -270,14 +280,46 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
         raise RuntimeError("Module pdf417gen non disponible.")
     codes = encode(data_bytes, columns=columns, security_level=security_level, force_binary=False)
     svg_tree = render_svg(codes, scale=scale, ratio=ratio, color=color)
-    # si render_svg renvoie un ElementTree, convertir en string
     try:
         import xml.etree.ElementTree as ET
         svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
         return svg_bytes.decode("utf-8")
     except Exception:
-        # si render_svg renvoie déjà une string
         return str(svg_tree)
+
+# -------------------------
+# PDF generation (reportlab)
+# -------------------------
+def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    x = 72
+    y = height - 72
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
+    y -= 24
+
+    c.setFont("Helvetica", 11)
+    for k, v in fields.items():
+        c.drawString(x, y, f"{k}: {v}")
+        y -= 16
+        if y < 72:
+            c.showPage()
+            y = height - 72
+
+    if photo_bytes:
+        try:
+            img = ImageReader(io.BytesIO(photo_bytes))
+            c.drawImage(img, width - 72 - 90, height - 72 - 110, width=90, height=110)
+        except Exception:
+            pass
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.read()
 
 # -------------------------
 # GÉNÉRATION DE LA CARTE
@@ -304,7 +346,6 @@ if generate:
 
     office_code = offices[office_choice]
     seq = next_sequence(r).zfill(2)
-    # Correction : insérer une barre oblique entre office_code et seq
     dd = f"{iss.strftime('%m/%d/%Y')}{office_code}/{seq}FD/{iss.year%100}"
 
     eyes_disp = (eyes or "").upper()
@@ -336,6 +377,15 @@ if generate:
     data_bytes = aamva.encode("utf-8")
 
     # HTML carte (affichage)
+    photo_html = ""
+    photo_bytes = None
+    if photo_file is not None:
+        photo_bytes = photo_file.read()
+        b64 = base64.b64encode(photo_bytes).decode("utf-8")
+        photo_html = f"<div class='photo'><img src='data:image/jpeg;base64,{b64}'/></div>"
+    else:
+        photo_html = "<div class='photo'></div>"
+
     html = f"""
     <div class="card">
         <div class="header">
@@ -343,7 +393,7 @@ if generate:
             <div class="badge">{dl}</div>
         </div>
         <div class="body">
-            <div class="photo"></div>
+            {photo_html}
             <div class="info">
                 <div class="label">Nom</div>
                 <div class="value">{ln}</div>
@@ -376,6 +426,7 @@ if generate:
     st.markdown(html, unsafe_allow_html=True)
 
     # Génération et affichage du PDF417 sous la carte
+    svg_str = None
     if _PDF417_AVAILABLE:
         try:
             svg_str = generate_pdf417_svg(data_bytes,
@@ -391,3 +442,27 @@ if generate:
             st.info("Vérifiez le module pdf417gen dans le dossier vendorisé.")
     else:
         st.warning("pdf417gen non disponible. Vendorisez le module ou complétez pdf417gen/__init__.py pour exposer encode et render_svg.")
+
+    # Boutons de téléchargement
+    cols = st.columns(2)
+    with cols[0]:
+        if svg_str:
+            svg_bytes = svg_str.encode("utf-8")
+            st.download_button("Télécharger PDF417 (SVG)", data=svg_bytes, file_name="pdf417.svg", mime="image/svg+xml")
+    with cols[1]:
+        # Générer PDF simple avec reportlab
+        pdf_bytes = create_pdf_bytes({
+            "Nom": ln,
+            "Prénom": fn,
+            "Sexe": sex,
+            "DOB": dob.strftime("%m/%d/%Y"),
+            "Field Office": office_choice,
+            "DD": dd,
+            "ISS": iss.strftime("%m/%d/%Y"),
+            "EXP": exp.strftime("%m/%d/%Y"),
+            "Classe": cls_disp,
+            "Restrictions": rstr_disp,
+            "Endorsements": endorse_disp,
+            "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
+        }, photo_bytes=photo_bytes)
+        st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
