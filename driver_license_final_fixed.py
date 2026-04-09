@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
-# Version complète : health check, photo par défaut selon Sexe (M/F), export SVG et PDF
-# Ajouts : champ Adresse (ligne 1/2), Ville, État, Code postal dans l'interface,
-#         parser AAMVA intégré, affichage payload et JSON parsé
+# Générateur de permis CA (Streamlit)
+# Ajouts : Adresse 1/2, Ville, État, Code postal + lookup ZIP -> city/state/office automatique
 # Note : ajoutez "requests", "reportlab", "pdf417gen" (si vendorisé) dans requirements.txt si nécessaire.
 
 import streamlit as st
@@ -16,6 +15,34 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
 st.set_page_config(page_title="Permis CA", layout="centered")
+
+# -------------------------
+# Petite "base de données" ZIP -> city/state/office
+# Ajoute ici les codes postaux que tu veux supporter.
+# Exemple fourni : 94925 -> Corte Madera (et bureau correspondant)
+ZIP_DB = {
+    "94925": {
+        "city": "Corte Madera",
+        "state": "CA",
+        "office": "Baie de San Francisco — Corte Madera (525)"
+    },
+    # Exemples supplémentaires (ajoute/modifie selon besoin)
+    "95818": {
+        "city": "Sacramento",
+        "state": "CA",
+        "office": "Sacramento / Nord — Sacramento (Broadway) (500)"
+    },
+    "94102": {
+        "city": "San Francisco",
+        "state": "CA",
+        "office": "Baie de San Francisco — San Francisco (503)"
+    },
+    "94015": {
+        "city": "Daly City",
+        "state": "CA",
+        "office": "Baie de San Francisco — Daly City (599)"
+    }
+}
 
 # -------------------------
 # Images par défaut (M / F)
@@ -279,38 +306,66 @@ offices = {
 }
 
 # -------------------------
+# Callback pour mise à jour automatique depuis postal code
+# -------------------------
+def postal_code_changed():
+    """Callback appelé quand l'utilisateur modifie le champ postal_code_input."""
+    pc = st.session_state.get("postal_code_input", "").strip()
+    pc_digits = re.sub(r"\D", "", pc)
+    # garder au plus 10 caractères (AAMVA peut accepter plus pour certains pays)
+    pc_digits = pc_digits[:10]
+    if pc_digits in ZIP_DB:
+        info = ZIP_DB[pc_digits]
+        # Mettre à jour ville/état
+        st.session_state["city_input"] = info.get("city", st.session_state.get("city_input", ""))
+        st.session_state["state_input"] = info.get("state", st.session_state.get("state_input", ""))
+        # Mettre à jour le choix du field office si présent dans la liste
+        office_name = info.get("office")
+        if office_name and office_name in list(offices.keys()):
+            st.session_state["office_choice"] = office_name
+    else:
+        # si inconnu, ne pas écraser les valeurs existantes (ou on peut vider)
+        pass
+
+# -------------------------
 # FORMULAIRE (sans upload photo)
 # -------------------------
 st.title("Générateur officiel de permis CA")
 
-ln = st.text_input("Nom de famille", "HARMS")
-fn = st.text_input("Prénom", "ROSA")
-# Adresse (ligne 1) ajoutée
-address1 = st.text_input("Adresse (ligne 1)", "2570 24TH STREET")
-# Optionnel : ligne 2
-address2 = st.text_input("Adresse (ligne 2)", "")
-# Nouveaux champs demandés : Ville, État, Code postal
-city = st.text_input("Ville", "ANYTOWN")
-state = st.text_input("État (abbrev.)", "CA")
-postal_code = st.text_input("Code postal", "95818")
+ln = st.text_input("Nom de famille", "HARMS", key="ln_input")
+fn = st.text_input("Prénom", "ROSA", key="fn_input")
+# Adresse (ligne 1/2)
+address1 = st.text_input("Adresse (ligne 1)", "2570 24TH STREET", key="address1_input")
+address2 = st.text_input("Adresse (ligne 2)", "", key="address2_input")
 
-sex = st.selectbox("Sexe", ["M","F"])
-dob = st.date_input("Date de naissance", datetime.date(1990,1,1))
+# Nouveaux champs demandés : Ville, État, Code postal
+# postal_code_input déclenche postal_code_changed via on_change
+postal_col, city_col = st.columns([2,3])
+with postal_col:
+    postal_code = st.text_input("Code postal", "94925", key="postal_code_input", on_change=postal_code_changed)
+with city_col:
+    city = st.text_input("Ville", "Corte Madera", key="city_input")
+
+state = st.text_input("État (abbrev.)", "CA", key="state_input")
+
+sex = st.selectbox("Sexe", ["M","F"], key="sex_input")
+dob = st.date_input("Date de naissance", datetime.date(1990,1,1), key="dob_input")
 
 col1, col2 = st.columns(2)
 with col1:
-    h1 = st.number_input("Pieds",0,8,5)
-    w = st.number_input("Poids (lb)",30,500,160)
+    h1 = st.number_input("Pieds",0,8,5, key="h1_input")
+    w = st.number_input("Poids (lb)",30,500,160, key="w_input")
 with col2:
-    h2 = st.number_input("Pouces",0,11,10)
-    eyes = st.text_input("Yeux","BRN")
-hair = st.text_input("Cheveux","BRN")
-cls = st.text_input("Classe","C")
-rstr = st.text_input("Restrictions","NONE")
-endorse = st.text_input("Endorsements","NONE")
-iss = st.date_input("Date d'émission", datetime.date.today())
+    h2 = st.number_input("Pouces",0,11,10, key="h2_input")
+    eyes = st.text_input("Yeux","BRN", key="eyes_input")
+hair = st.text_input("Cheveux","BRN", key="hair_input")
+cls = st.text_input("Classe","C", key="cls_input")
+rstr = st.text_input("Restrictions","NONE", key="rstr_input")
+endorse = st.text_input("Endorsements","NONE", key="endorse_input")
+iss = st.date_input("Date d'émission", datetime.date.today(), key="iss_input")
 
-office_choice = st.selectbox("Field Office", list(offices.keys()))
+# Field office selectbox (utilise session_state pour pouvoir être mis à jour)
+office_choice = st.selectbox("Field Office", list(offices.keys()), index=0, key="office_choice")
 
 generate = st.button("Générer la carte")
 
@@ -319,25 +374,25 @@ generate = st.button("Générer la carte")
 # -------------------------
 def validate_inputs():
     errors = []
-    if not ln or not ln.strip():
+    if not st.session_state.get("ln_input", "").strip():
         errors.append("Nom de famille requis.")
-    if not fn or not fn.strip():
+    if not st.session_state.get("fn_input", "").strip():
         errors.append("Prénom requis.")
-    if dob > datetime.date.today():
+    if st.session_state.get("dob_input") > datetime.date.today():
         errors.append("Date de naissance ne peut pas être dans le futur.")
-    if iss > datetime.date.today():
+    if st.session_state.get("iss_input") > datetime.date.today():
         errors.append("Date d'émission ne peut pas être dans le futur.")
-    if w < 30 or w > 500:
+    if st.session_state.get("w_input", 0) < 30 or st.session_state.get("w_input", 0) > 500:
         errors.append("Poids hors plage attendue.")
-    if h1 < 0 or h1 > 8 or h2 < 0 or h2 > 11:
+    if st.session_state.get("h1_input", 0) < 0 or st.session_state.get("h1_input", 0) > 8 or st.session_state.get("h2_input", 0) < 0 or st.session_state.get("h2_input", 0) > 11:
         errors.append("Taille hors plage attendue.")
-    if not address1 or not address1.strip():
+    if not st.session_state.get("address1_input", "").strip():
         errors.append("Adresse (ligne 1) requise.")
-    if not city or not city.strip():
+    if not st.session_state.get("city_input", "").strip():
         errors.append("Ville requise.")
-    if not state or not state.strip():
+    if not st.session_state.get("state_input", "").strip():
         errors.append("État requis.")
-    if not postal_code or not postal_code.strip():
+    if not st.session_state.get("postal_code_input", "").strip():
         errors.append("Code postal requis.")
     return errors
 
@@ -436,45 +491,54 @@ if generate:
             st.error(e)
         st.stop()
 
-    r = random.Random(seed(ln,fn,dob))
-    dl = rletter(r, ln[0] if ln else "") + rdigits(r,7)
+    # récupérer valeurs depuis session_state (pour cohérence)
+    ln_val = st.session_state["ln_input"]
+    fn_val = st.session_state["fn_input"]
+    address1_val = st.session_state["address1_input"]
+    address2_val = st.session_state["address2_input"]
+    city_val = st.session_state["city_input"]
+    state_val = st.session_state["state_input"]
+    postal_val = re.sub(r"\D", "", st.session_state["postal_code_input"])[:10]
 
-    exp_year = iss.year + 5
+    r = random.Random(seed(ln_val,fn_val,st.session_state["dob_input"]))
+    dl = rletter(r, ln_val[0] if ln_val else "") + rdigits(r,7)
+
+    exp_year = st.session_state["iss_input"].year + 5
     try:
-        exp = datetime.date(exp_year, dob.month, dob.day)
+        exp = datetime.date(exp_year, st.session_state["dob_input"].month, st.session_state["dob_input"].day)
     except ValueError:
-        if dob.month == 2 and dob.day == 29:
+        if st.session_state["dob_input"].month == 2 and st.session_state["dob_input"].day == 29:
             exp = datetime.date(exp_year, 2, 28)
         else:
-            last_day = (datetime.date(exp_year, dob.month % 12 + 1, 1) - datetime.timedelta(days=1)).day
-            exp = datetime.date(exp_year, dob.month, min(dob.day, last_day))
+            last_day = (datetime.date(exp_year, st.session_state["dob_input"].month % 12 + 1, 1) - datetime.timedelta(days=1)).day
+            exp = datetime.date(exp_year, st.session_state["dob_input"].month, min(st.session_state["dob_input"].day, last_day))
 
-    office_code = offices[office_choice]
+    office_code = offices[st.session_state["office_choice"]]
     seq = next_sequence(r).zfill(2)
-    dd = f"{iss.strftime('%m/%d/%Y')}{office_code}/{seq}FD/{iss.year%100}"
+    dd = f"{st.session_state['iss_input'].strftime('%m/%d/%Y')}{office_code}/{seq}FD/{st.session_state['iss_input'].year%100}"
 
-    eyes_disp = (eyes or "").upper()
-    hair_disp = (hair or "").upper()
-    cls_disp = (cls or "").upper()
-    rstr_disp = (rstr or "").upper()
-    endorse_disp = (endorse or "").upper()
-    height_str = f"{int(h1)}'{int(h2)}\""
+    eyes_disp = (st.session_state.get("eyes_input") or "").upper()
+    hair_disp = (st.session_state.get("hair_input") or "").upper()
+    cls_disp = (st.session_state.get("cls_input") or "").upper()
+    rstr_disp = (st.session_state.get("rstr_input") or "").upper()
+    endorse_disp = (st.session_state.get("endorse_input") or "").upper()
+    height_str = f"{int(st.session_state.get('h1_input',0))}'{int(st.session_state.get('h2_input',0))}\""
 
     # champs AAMVA (utilise address1/address2/city/state/postal_code)
     fields = {
-        "DCS": ln.upper(),
-        "DAC": fn.upper(),
-        "DBB": dob.strftime("%m%d%Y"),
+        "DCS": ln_val.upper(),
+        "DAC": fn_val.upper(),
+        "DBB": st.session_state["dob_input"].strftime("%m%d%Y"),
         "DBA": exp.strftime("%m%d%Y"),
-        "DBD": iss.strftime("%m%d%Y"),
+        "DBD": st.session_state["iss_input"].strftime("%m%d%Y"),
         "DAQ": dl,
-        "DAG": address1.upper(),
-        "DAH": address2.upper() if address2 else None,
-        "DAI": city.upper(),
-        "DAJ": state.upper(),
-        "DAK": re.sub(r"\D", "", postal_code)[:10],
+        "DAG": address1_val.upper(),
+        "DAH": address2_val.upper() if address2_val else None,
+        "DAI": city_val.upper(),
+        "DAJ": state_val.upper(),
+        "DAK": postal_val,
         "DCF": dd,
-        "DAU": f"{int(h1)}{int(h2)}",
+        "DAU": f"{int(st.session_state.get('h1_input',0))}{int(st.session_state.get('h2_input',0))}",
         "DAY": eyes_disp,
         "DAZ": hair_disp,
     }
@@ -487,7 +551,7 @@ if generate:
 
     # Choisir l'image par défaut selon le sexe et récupérer les bytes
     photo_bytes = None
-    photo_src = IMAGE_M_URL if sex == "M" else IMAGE_F_URL
+    photo_src = IMAGE_M_URL if st.session_state.get("sex_input") == "M" else IMAGE_F_URL
     photo_bytes = fetch_image_bytes(photo_src)
 
     # Préparer HTML pour affichage (embed base64 si image récupérée)
@@ -511,23 +575,23 @@ if generate:
             {photo_html}
             <div class="info">
                 <div class="label">Nom</div>
-                <div class="value">{ln}</div>
+                <div class="value">{ln_val}</div>
                 <div class="label">Prénom</div>
-                <div class="value">{fn}</div>
+                <div class="value">{fn_val}</div>
                 <div class="label">Sexe</div>
-                <div class="value">{sex}</div>
+                <div class="value">{st.session_state.get('sex_input')}</div>
                 <div class="label">DOB</div>
-                <div class="value">{dob.strftime('%m/%d/%Y')}</div>
+                <div class="value">{st.session_state['dob_input'].strftime('%m/%d/%Y')}</div>
                 <div class="label">Adresse</div>
-                <div class="value">{address1} {address2}</div>
+                <div class="value">{address1_val} {address2_val}</div>
                 <div class="label">Ville / État / Code postal</div>
-                <div class="value">{city} / {state} / {postal_code}</div>
+                <div class="value">{city_val} / {state_val} / {postal_val}</div>
                 <div class="label">Field Office</div>
-                <div class="value">{office_choice}</div>
+                <div class="value">{st.session_state['office_choice']}</div>
                 <div class="label">DD</div>
                 <div class="value">{dd}</div>
                 <div class="label">ISS</div>
-                <div class="value">{iss.strftime('%m/%d/%Y')}</div>
+                <div class="value">{st.session_state['iss_input'].strftime('%m/%d/%Y')}</div>
                 <div class="label">EXP</div>
                 <div class="value">{exp.strftime('%m/%d/%Y')}</div>
                 <div class="label">Classe</div>
@@ -579,17 +643,17 @@ if generate:
             st.download_button("Télécharger PDF417 (SVG)", data=svg_bytes, file_name="pdf417.svg", mime="image/svg+xml")
     with cols[1]:
         pdf_bytes = create_pdf_bytes({
-            "Nom": ln,
-            "Prénom": fn,
-            "Sexe": sex,
-            "DOB": dob.strftime("%m/%d/%Y"),
-            "Adresse": f"{address1} {address2}".strip(),
-            "Ville": city,
-            "État": state,
-            "Code postal": postal_code,
-            "Field Office": office_choice,
+            "Nom": ln_val,
+            "Prénom": fn_val,
+            "Sexe": st.session_state.get("sex_input"),
+            "DOB": st.session_state["dob_input"].strftime("%m/%d/%Y"),
+            "Adresse": f"{address1_val} {address2_val}".strip(),
+            "Ville": city_val,
+            "État": state_val,
+            "Code postal": postal_val,
+            "Field Office": st.session_state["office_choice"],
             "DD": dd,
-            "ISS": iss.strftime("%m/%d/%Y"),
+            "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"),
             "EXP": exp.strftime("%m/%d/%Y"),
             "Classe": cls_disp,
             "Restrictions": rstr_disp,
