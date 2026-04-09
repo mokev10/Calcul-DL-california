@@ -1,4 +1,47 @@
-      - name: Debug pdf417gen package (print files and __init__.py)
+     jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install Python CI dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+
+      # <-- Insère l'étape de debug ICI, juste avant l'installation editable
+      - name: Debug repo layout before install
+        run: |
+          echo "PWD: $(pwd)"
+          echo "Root listing:"
+          ls -la
+          echo
+          echo "Listing inner folder if exists:"
+          ls -la Calcul-DL-california || true
+          echo
+          echo "Show setup.py / pyproject.toml in subfolder if present:"
+          if [ -f Calcul-DL-california/setup.py ]; then echo "=== setup.py ==="; sed -n '1,200p' Calcul-DL-california/setup.py; else echo "no setup.py in Calcul-DL-california"; fi
+          if [ -f Calcul-DL-california/pyproject.toml ]; then echo "=== pyproject.toml ==="; sed -n '1,200p' Calcul-DL-california/pyproject.toml; else echo "no pyproject.toml in Calcul-DL-california"; fi
+          echo
+          echo "Listing pdf417gen dir:"
+          ls -la Calcul-DL-california/pdf417gen || true
+          echo
+          echo "Show first lines of pdf417gen/__init__.py if present:"
+          if [ -f Calcul-DL-california/pdf417gen/__init__.py ]; then sed -n '1,200p' Calcul-DL-california/pdf417gen/__init__.py; else echo "no pdf417gen/__init__.py"; fi
+
+      - name: Install package (editable) from subfolder path
+        run: python -m pip install -e ./Calcul-DL-california
+
+      - name: Run tests
+        run: pytest -q
+
+ - name: Debug pdf417gen package (print files and __init__.py)
         run: |
           echo "=== ls -la pdf417gen ==="
           ls -la pdf417gen || true
