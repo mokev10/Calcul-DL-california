@@ -1,5 +1,6 @@
 # driver_license_final_fixed.py
-# Version complète : health check, upload photo, export SVG et PDF (reportlab), police Google
+# Version complète : health check, photo par défaut selon Sexe (M/F), upload photo, export SVG et PDF
+# Remplacez IMAGE_M_URL et IMAGE_F_URL par vos URLs si vous voulez utiliser des images distantes.
 
 import streamlit as st
 import datetime, random, hashlib, io, base64
@@ -12,6 +13,12 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 
 st.set_page_config(page_title="Permis CA", layout="centered")
+
+# -------------------------
+# Configurer ici les images par défaut (remplacez par vos URLs si besoin)
+# -------------------------
+IMAGE_M_URL = "<URL_IMAGE_M>"  # remplacer par le lien de l'image pour Sexe "M"
+IMAGE_F_URL = "<URL_IMAGE_F>"  # remplacer par le lien de l'image pour Sexe "F"
 
 # -------------------------
 # CSS + Google Font
@@ -54,6 +61,7 @@ html, body, [class*="css"]  {
     width:100%;
     height:100%;
     object-fit:cover;
+    display:block;
 }
 .info {
     flex:1;
@@ -382,9 +390,23 @@ if generate:
     if photo_file is not None:
         photo_bytes = photo_file.read()
         b64 = base64.b64encode(photo_bytes).decode("utf-8")
-        photo_html = f"<div class='photo'><img src='data:image/jpeg;base64,{b64}'/></div>"
+        # détecter type approximatif pour le data URI (png par défaut)
+        mime = "image/jpeg"
+        try:
+            header = photo_file.type
+            if header:
+                mime = header
+        except Exception:
+            pass
+        photo_html = f"<div class='photo'><img src='data:{mime};base64,{b64}'/></div>"
     else:
-        photo_html = "<div class='photo'></div>"
+        # choisir l'image par défaut selon le sexe
+        if sex == "M":
+            photo_src = IMAGE_M_URL
+        else:
+            photo_src = IMAGE_F_URL
+        # si l'utilisateur n'a pas remplacé les placeholders, la balise restera avec la valeur placeholder
+        photo_html = f"<div class='photo'><img src='{photo_src}' alt='photo par défaut'/></div>"
 
     html = f"""
     <div class="card">
