@@ -2,23 +2,24 @@
   run: |
     echo "PWD: $(pwd)"
     echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+    echo "Current branch:"
+    git rev-parse --abbrev-ref HEAD || true
+    echo
     echo "Root listing:"
     ls -la
     echo
-    echo "Show setup.py at root if present:"
-    if [ -f setup.py ]; then echo "=== setup.py ==="; sed -n '1,200p' setup.py; else echo "no setup.py at root"; fi
+    echo "Show setup.py / pyproject.toml at root:"
+    [ -f setup.py ] && echo "FOUND setup.py at root" && sed -n '1,120p' setup.py || echo "no setup.py at root"
+    [ -f pyproject.toml ] && echo "FOUND pyproject.toml at root" && sed -n '1,120p' pyproject.toml || echo "no pyproject.toml at root"
     echo
-    echo "Show pyproject.toml at root if present:"
-    if [ -f pyproject.toml ]; then echo "=== pyproject.toml ==="; sed -n '1,200p' pyproject.toml; else echo "no pyproject.toml at root"; fi
+    echo "Listing repo subfolder (if exists):"
+    ls -la Calcul-DL-california || true
     echo
-    echo "Listing pdf417gen dir at root if present:"
-    ls -la pdf417gen || true
+    echo "Show nested setup.py if present:"
+    [ -f Calcul-DL-california/setup.py ] && echo "FOUND nested setup.py" && sed -n '1,120p' Calcul-DL-california/setup.py || echo "no nested setup.py"
     echo
-    echo "If there is a nested folder with the repo name, list it:"
-    if [ -d Calcul-DL-california ]; then ls -la Calcul-DL-california || true; fi
-    echo
-    echo "Show setup.py in nested folder if present:"
-    if [ -f Calcul-DL-california/setup.py ]; then echo "=== nested setup.py ==="; sed -n '1,200p' Calcul-DL-california/setup.py; else echo "no setup.py in Calcul-DL-california"; fi
+    echo "List pdf417gen if present:"
+    ls -la pdf417gen || ls -la Calcul-DL-california/pdf417gen || true
 
 - name: Install package (editable) from subfolder path
   run: python -m pip install -e ./Calcul-DL-california
