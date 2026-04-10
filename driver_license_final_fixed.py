@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Générateur de permis CA (Streamlit)
-# Version complète : menus déroulants recherchables pour ZIP / Ville / Field Office,
-# synchronisation bidirectionnelle et génération AAMVA + PDF417.
-# Remplace entièrement le fichier précédent par celui-ci.
+# Version complète et autonome :
+# - menus déroulants recherchables pour ZIP / Ville / Field Office
+# - synchronisation bidirectionnelle
+# - possibilité d'importer une base ZIP (CSV) pour remplir ZIP_DB
+# - validation : accepte ZIPs numériques entre 90001 et 96162 si non présents dans la base
 #
-# Requirements (ajouter dans requirements.txt si nécessaire):
-# streamlit, requests, reportlab, pdf417gen (optionnel si vendorisé)
+# Usage : remplacer entièrement le fichier existant par celui-ci.
+# Requirements : streamlit, requests, reportlab, pdf417gen (optionnel si vendorisé)
 
 import streamlit as st
 import datetime
@@ -16,6 +18,7 @@ import io
 import base64
 import requests
 import re
+import csv
 import streamlit.components.v1 as components
 from typing import Dict, Optional, List
 
@@ -27,8 +30,8 @@ from reportlab.lib.utils import ImageReader
 st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
-# Petite "base de données" ZIP -> city/state/office
-# Étends ZIP_DB avec ton fichier complet si nécessaire.
+# Default minimal ZIP_DB (small sample). You can upload a CSV to replace/extend it.
+# CSV expected columns: zipcode,city,state,office
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": "Baie de San Francisco — Corte Madera (525)"},
     "95818": {"city": "Sacramento", "state": "CA", "office": "Sacramento / Nord — Sacramento (Broadway) (500)"},
@@ -36,13 +39,14 @@ ZIP_DB: Dict[str, Dict[str, str]] = {
     "94015": {"city": "Daly City", "state": "CA", "office": "Baie de San Francisco — Daly City (599)"},
 }
 
-# Build reverse indices for quick lookup
+# Helper to build reverse indices
 def build_indices(zip_db: Dict[str, Dict[str, str]]):
     city_to_zips: Dict[str, List[str]] = {}
     office_to_zips: Dict[str, List[str]] = {}
     for z, info in zip_db.items():
-        city_u = info["city"].upper()
-        city_to_zips.setdefault(city_u, []).append(z)
+        city_u = info.get("city", "").upper()
+        if city_u:
+            city_to_zips.setdefault(city_u, []).append(z)
         office = info.get("office")
         if office:
             office_to_zips.setdefault(office, []).append(z)
@@ -78,104 +82,71 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 )
 
 # -------------------------
-# Sidebar PDF417 params
+# Sidebar: allow uploading a CSV to populate ZIP_DB
+st.sidebar.header("Importer base ZIP (CSV)")
+st.sidebar.markdown("CSV columns: zipcode,city,state,office. Example header line: zipcode,city,state,office")
+uploaded = st.sidebar.file_uploader("Charger ZIP CSV", type=["csv"])
+if uploaded is not None:
+    try:
+        text = uploaded.read().decode("utf-8", errors="replace")
+        reader = csv.DictReader(io.StringIO(text))
+        new_db = {}
+        for row in reader:
+            z = re.sub(r"\D", "", (row.get("zipcode") or "").strip())
+            if not z:
+                continue
+            new_db[z] = {
+                "city": (row.get("city") or "").strip(),
+                "state": (row.get("state") or "").strip(),
+                "office": (row.get("office") or "").strip(),
+            }
+        if new_db:
+            ZIP_DB.update(new_db)
+            CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
+            st.sidebar.success(f"Importé {len(new_db)} entrées ZIP.")
+        else:
+            st.sidebar.warning("Aucune entrée valide trouvée dans le CSV.")
+    except Exception as e:
+        st.sidebar.error(f"Erreur lecture CSV: {e}")
+
+# -------------------------
+# Sidebar: PDF417 params
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2)
 scale_param = st.sidebar.slider("Échelle", 1, 6, 3)
 ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
 color_param = st.sidebar.color_picker("Couleur du code", "#000000")
-st.sidebar.markdown("Si pdf417gen n'est pas complet, l'app affichera un message d'avertissement.")
 
 # -------------------------
-# Offices (liste complète)
-OFFICE_LIST = [
-    "Baie de San Francisco — Corte Madera (525)",
-    "Baie de San Francisco — Daly City (599)",
-    "Baie de San Francisco — El Cerrito (585)",
-    "Baie de San Francisco — Fremont (643)",
-    "Baie de San Francisco — Hayward (521)",
-    "Baie de San Francisco — Los Gatos (641)",
-    "Baie de San Francisco — Novato (647)",
-    "Baie de San Francisco — Oakland (Claremont) (501)",
-    "Baie de San Francisco — Oakland (Coliseum) (604)",
-    "Baie de San Francisco — Pittsburg (651)",
-    "Baie de San Francisco — Pleasanton (639)",
-    "Baie de San Francisco — Redwood City (542)",
-    "Baie de San Francisco — San Francisco (503)",
-    "Baie de San Francisco — San Jose (Alma) (516)",
-    "Baie de San Francisco — San Jose (Driver License Center) (607)",
-    "Baie de San Francisco — San Mateo (594)",
-    "Baie de San Francisco — Santa Clara (632)",
-    "Baie de San Francisco — Vallejo (538)",
-    "Grand Los Angeles — Arleta (628)",
-    "Grand Los Angeles — Bellflower (610)",
-    "Grand Los Angeles — Culver City (514)",
-    "Grand Los Angeles — Glendale (540)",
-    "Grand Los Angeles — Hollywood (633)",
-    "Grand Los Angeles — Inglewood (544)",
-    "Grand Los Angeles — Long Beach (507)",
-    "Grand Los Angeles — Los Angeles (Hope St) (502)",
-    "Grand Los Angeles — Montebello (531)",
-    "Grand Los Angeles — Pasadena (510)",
-    "Grand Los Angeles — Santa Monica (548)",
-    "Grand Los Angeles — Torrance (592)",
-    "Grand Los Angeles — West Covina (591)",
-    "Orange County / Sud — Costa Mesa (627)",
-    "Orange County / Sud — Fullerton (547)",
-    "Orange County / Sud — Laguna Hills (642)",
-    "Orange County / Sud — Santa Ana (529)",
-    "Orange County / Sud — San Clemente (652)",
-    "Orange County / Sud — Westminster (623)",
-    "San Diego & Environs — Chula Vista (609)",
-    "San Diego & Environs — El Cajon (549)",
-    "San Diego & Environs — Oceanside (593)",
-    "San Diego & Environs — San Diego (Clairemont) (618)",
-    "San Diego & Environs — San Diego (Normal St) (504)",
-    "San Diego & Environs — San Marcos (637)",
-    "San Diego & Environs — San Ysidro (649)",
-    "Sacramento / Nord — Auburn (533)",
-    "Sacramento / Nord — Chico (534)",
-    "Sacramento / Nord — Eureka (522)",
-    "Sacramento / Nord — Redding (550)",
-    "Sacramento / Nord — Roseville (635)",
-    "Sacramento / Nord — Sacramento (Broadway) (500)",
-    "Sacramento / Nord — Sacramento (South) (603)",
-    "Sacramento / Nord — Woodland (535)",
-    "Vallée Centrale — Bakersfield (511)",
-    "Vallée Centrale — Fresno (505)",
-    "Vallée Centrale — Lodi (595)",
-    "Vallée Centrale — Modesto (536)",
-    "Vallée Centrale — Stockton (517)",
-    "Vallée Centrale — Visalia (519)",
-]
+# Offices master list (keeps full list for selectbox)
+OFFICE_MASTER = sorted({info.get("office") for info in ZIP_DB.values() if info.get("office")})
+# If you want to include a larger static list, extend OFFICE_MASTER here.
 
 # -------------------------
 # Session state defaults (safe init)
-defaults = {
-    "ln_input": "HARMS",
-    "fn_input": "ROSA",
-    "address1_input": "2570 24TH STREET",
-    "address2_input": "",
-    "zip_select": "94925",
-    "city_select": ZIP_DB.get("94925", {}).get("city", "Corte Madera"),
-    "state_input": ZIP_DB.get("94925", {}).get("state", "CA"),
-    "office_select": ZIP_DB.get("94925", {}).get("office", OFFICE_LIST[0]),
-    "sex_input": "M",
-    "dob_input": datetime.date(1990, 1, 1),
-    "h1_input": 5,
-    "h2_input": 10,
-    "w_input": 160,
-    "eyes_input": "BRN",
-    "hair_input": "BRN",
-    "cls_input": "C",
-    "rstr_input": "NONE",
-    "endorse_input": "NONE",
-    "iss_input": datetime.date.today(),
-}
-for k, v in defaults.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
+if "ln_input" not in st.session_state:
+    st.session_state.update({
+        "ln_input": "HARMS",
+        "fn_input": "ROSA",
+        "address1_input": "2570 24TH STREET",
+        "address2_input": "",
+        "zip_select": next(iter(ZIP_DB.keys())) if ZIP_DB else "90001",
+        "city_select": next(iter(ZIP_DB.values()))["city"] if ZIP_DB else "",
+        "state_input": next(iter(ZIP_DB.values()))["state"] if ZIP_DB else "CA",
+        "office_select": next(iter(ZIP_DB.values()))["office"] if ZIP_DB else "",
+        "sex_input": "M",
+        "dob_input": datetime.date(1990, 1, 1),
+        "h1_input": 5,
+        "h2_input": 10,
+        "w_input": 160,
+        "eyes_input": "BRN",
+        "hair_input": "BRN",
+        "cls_input": "C",
+        "rstr_input": "NONE",
+        "endorse_input": "NONE",
+        "iss_input": datetime.date.today(),
+    })
 
 # -------------------------
 # Utility functions
@@ -203,35 +174,53 @@ def next_sequence(r):
     return str(r.randint(10, 99))
 
 # -------------------------
-# Synchronization callbacks for selectboxes
+# Synchronization callbacks for selectboxes / inputs
 def update_from_zip():
-    z = st.session_state["zip_select"]
-    info = ZIP_DB.get(z)
-    if info:
-        st.session_state["city_select"] = info["city"]
-        st.session_state["state_input"] = info["state"]
-        st.session_state["office_select"] = info["office"]
+    z = st.session_state.get("zip_select", "").strip()
+    z_digits = re.sub(r"\D", "", z)
+    if z_digits in ZIP_DB:
+        info = ZIP_DB[z_digits]
+        st.session_state["city_select"] = info.get("city", "")
+        st.session_state["state_input"] = info.get("state", "")
+        st.session_state["office_select"] = info.get("office", "")
+    else:
+        # If numeric and within CA range, accept but clear city/office (user can choose)
+        try:
+            zi = int(z_digits)
+            if 90001 <= zi <= 96162:
+                st.session_state["city_select"] = ""
+                st.session_state["office_select"] = ""
+                st.session_state["state_input"] = "CA"
+            else:
+                st.warning("ZIP hors plage CA (90001–96162) et non présent dans la base.")
+        except Exception:
+            st.warning("ZIP invalide et non présent dans la base.")
 
 def update_from_city():
-    city = st.session_state["city_select"].strip().upper()
-    # find first matching zip
+    city = st.session_state.get("city_select", "").strip().upper()
+    if not city:
+        return
     zips = CITY_TO_ZIPS.get(city)
     if zips:
         chosen = zips[0]
         st.session_state["zip_select"] = chosen
         info = ZIP_DB[chosen]
-        st.session_state["state_input"] = info["state"]
-        st.session_state["office_select"] = info["office"]
+        st.session_state["state_input"] = info.get("state", "")
+        st.session_state["office_select"] = info.get("office", "")
+    else:
+        st.warning("Ville non trouvée dans la base locale. Vous pouvez ajouter via CSV.")
 
 def update_from_office():
-    office = st.session_state["office_select"]
+    office = st.session_state.get("office_select", "")
+    if not office:
+        return
     zips = OFFICE_TO_ZIPS.get(office)
     if zips:
         chosen = zips[0]
         st.session_state["zip_select"] = chosen
         info = ZIP_DB[chosen]
-        st.session_state["city_select"] = info["city"]
-        st.session_state["state_input"] = info["state"]
+        st.session_state["city_select"] = info.get("city", "")
+        st.session_state["state_input"] = info.get("state", "")
 
 # -------------------------
 # Parser AAMVA minimal (for debug)
@@ -355,7 +344,7 @@ def create_pdf_bytes(fields: Dict[str, str], photo_bytes: bytes = None) -> bytes
     return buffer.read()
 
 # -------------------------
-# FORMULAIRE (widgets)
+# FORM: widgets (selectboxes are searchable)
 st.title("Générateur officiel de permis CA")
 
 ln = st.text_input("Nom de famille", st.session_state["ln_input"], key="ln_input")
@@ -363,14 +352,35 @@ fn = st.text_input("Prénom", st.session_state["fn_input"], key="fn_input")
 address1 = st.text_input("Adresse (ligne 1)", st.session_state["address1_input"], key="address1_input")
 address2 = st.text_input("Adresse (ligne 2)", st.session_state["address2_input"], key="address2_input")
 
-# Selectable, searchable lists
+# Build options from current ZIP_DB
 zip_options = sorted(ZIP_DB.keys())
-city_options = sorted({info["city"] for info in ZIP_DB.values()})
-office_options = sorted({info["office"] for info in ZIP_DB.values()})
+city_options = sorted({info["city"] for info in ZIP_DB.values() if info.get("city")})
+office_options = sorted({info["office"] for info in ZIP_DB.values() if info.get("office")})
 
-zip_select = st.selectbox("Code postal", zip_options, index=zip_options.index(st.session_state["zip_select"]) if st.session_state["zip_select"] in zip_options else 0, key="zip_select", on_change=update_from_zip)
-city_select = st.selectbox("Ville", city_options, index=city_options.index(st.session_state["city_select"]) if st.session_state["city_select"] in city_options else 0, key="city_select", on_change=update_from_city)
-office_select = st.selectbox("Field Office", office_options + [o for o in OFFICE_LIST if o not in office_options], index=(office_options + [o for o in OFFICE_LIST if o not in office_options]).index(st.session_state["office_select"]) if st.session_state["office_select"] in (office_options + [o for o in OFFICE_LIST if o not in office_options]) else 0, key="office_select", on_change=update_from_office)
+# Selectboxes (searchable)
+zip_select = st.selectbox(
+    "Code postal",
+    options=zip_options,
+    index=zip_options.index(st.session_state.get("zip_select")) if st.session_state.get("zip_select") in zip_options else 0,
+    key="zip_select",
+    on_change=update_from_zip,
+)
+city_select = st.selectbox(
+    "Ville",
+    options=city_options,
+    index=city_options.index(st.session_state.get("city_select")) if st.session_state.get("city_select") in city_options else 0,
+    key="city_select",
+    on_change=update_from_city,
+)
+# include master offices to allow selection even if not in ZIP_DB
+office_all = sorted(set(office_options) | set(OFFICE_MASTER))
+office_select = st.selectbox(
+    "Field Office",
+    options=office_all,
+    index=office_all.index(st.session_state.get("office_select")) if st.session_state.get("office_select") in office_all else 0,
+    key="office_select",
+    on_change=update_from_office,
+)
 
 state = st.text_input("État (abbrev.)", st.session_state["state_input"], key="state_input")
 sex = st.selectbox("Sexe", ["M", "F"], index=0 if st.session_state["sex_input"] == "M" else 1, key="sex_input")
@@ -391,8 +401,8 @@ iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_
 
 generate = st.button("Générer la carte")
 
-# Debug panel (visible)
-st.markdown("### Debug session_state")
+# Debug panel (visible) to help diagnose issues
+st.markdown("### Debug session_state (pour diagnostic)")
 st.code({k: st.session_state[k] for k in sorted(st.session_state.keys())}, language="json")
 
 # -------------------------
@@ -419,6 +429,15 @@ def validate_inputs() -> List[str]:
         errors.append("État requis.")
     if not st.session_state.get("zip_select", "").strip():
         errors.append("Code postal requis.")
+    # Validate zip numeric range if not in DB
+    z = re.sub(r"\D", "", st.session_state.get("zip_select", ""))
+    if z and z not in ZIP_DB:
+        try:
+            zi = int(z)
+            if not (90001 <= zi <= 96162):
+                errors.append("Code postal hors plage CA (90001–96162).")
+        except Exception:
+            errors.append("Code postal invalide.")
     return errors
 
 def build_aamva_tags(fields: Dict[str, str]) -> str:
@@ -461,7 +480,7 @@ if generate:
     # Field office chosen from selectbox
     office_choice = st.session_state["office_select"]
     # office_code fallback: try to find numeric code in parentheses
-    m = re.search(r"\((\d{3})\)", office_choice)
+    m = re.search(r"\((\d{3})\)", office_choice or "")
     office_code = int(m.group(1)) if m else 0
 
     seq = next_sequence(r).zfill(2)
@@ -521,7 +540,7 @@ if generate:
         "<div class='label'>DOB</div><div class='value'>" + st.session_state["dob_input"].strftime("%m/%d/%Y") + "</div>"
         "<div class='label'>Adresse</div><div class='value'>" + f"{address1_val} {address2_val}" + "</div>"
         "<div class='label'>Ville / État / Code postal</div><div class='value'>" + f"{city_val} / {state_val} / {postal_val}" + "</div>"
-        "<div class='label'>Field Office</div><div class='value'>" + office_choice + "</div>"
+        "<div class='label'>Field Office</div><div class='value'>" + (office_choice or "") + "</div>"
         "<div class='label'>DD</div><div class='value'>" + dd + "</div>"
         "<div class='label'>ISS</div><div class='value'>" + st.session_state['iss_input'].strftime("%m/%d/%Y") + "</div>"
         "<div class='label'>EXP</div><div class='value'>" + exp.strftime("%m/%d/%Y") + "</div>"
