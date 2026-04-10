@@ -18,7 +18,6 @@ import re
 from typing import Dict, List, Optional
 import streamlit.components.v1 as components
 
-# ReportLab for PDF export
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
@@ -662,7 +661,6 @@ if generate:
             svg_str = svg_str.replace('<svg ', '<svg shape-rendering="crispEdges" vector-effect="non-scaling-stroke" style="image-rendering:pixelated; image-rendering:-moz-crisp-edges;" ')
             svg_str = re.sub(r'\sstroke="[^"]+"', '', svg_str)
             svg_str = re.sub(r'\sstroke-width="[^"]+"', '', svg_str)
-            # Ensure integer width/height if present
             svg_str = re.sub(r'width="([\d\.]+)"', lambda m: f'width="{int(float(m.group(1)))}"', svg_str)
             svg_str = re.sub(r'height="([\d\.]+)"', lambda m: f'height="{int(float(m.group(1)))}"', svg_str)
 
@@ -673,19 +671,24 @@ if generate:
             # Prepare downloads: SVG, PNG (rasterized), GIF (from PNG)
             png_bytes = None
             gif_bytes = None
+            raster_error = None
             try:
                 import cairosvg
-                from PIL import Image
-                # Rasterize SVG to PNG at a higher scale to avoid artifacts
-                png_bytes = cairosvg.svg2png(bytestring=svg_str.encode("utf-8"), scale=4)
-                # Convert PNG bytes to GIF bytes
+                from PIL import Image, ImageOps
+                # Rasterize SVG to PNG at a moderate scale to avoid OOM
+                raster_scale = max(1, min(4, int(scale_param)))  # prefer small integer scale
+                png_bytes = cairosvg.svg2png(bytestring=svg_str.encode("utf-8"), scale=raster_scale)
+                # Convert PNG bytes to GIF bytes (palette conversion)
                 img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
-                # If GIF needs palette, convert to P mode
+                # Create white background if transparency causes issues
+                bg = Image.new("RGBA", img.size, (255,255,255,255))
+                bg.paste(img, (0,0), img)
+                pal = bg.convert("P", palette=Image.ADAPTIVE)
                 gif_buf = io.BytesIO()
-                img.convert("P", palette=Image.ADAPTIVE).save(gif_buf, format="GIF")
+                pal.save(gif_buf, format="GIF")
                 gif_bytes = gif_buf.getvalue()
-            except Exception:
-                # If rasterization fails, leave png_bytes/gif_bytes as None
+            except Exception as ex:
+                raster_error = str(ex)
                 png_bytes = None
                 gif_bytes = None
 
@@ -718,6 +721,12 @@ if generate:
                     )
                 else:
                     st.button("GIF non disponible")
+
+            # If rasterization failed, show the error so you can debug
+            if raster_error:
+                st.error("La rasterisation SVG→PNG a échoué. Détails :")
+                st.code(raster_error, language="text")
+                st.info("Vérifie que 'cairosvg' et 'Pillow' sont installés et que 'scale' n'est pas trop élevé.")
 
         except Exception as e:
             st.error("Erreur génération PDF417 : " + str(e))
