@@ -2,12 +2,14 @@
 # aamva_validator_app.py
 # Streamlit app — Validateur et générateur d'exemples AAMVA / PDF417
 # But: vérifier header, séparateurs, dates, encodage, champs obligatoires et donner recommandations.
+#
+# Usage: streamlit run aamva_validator_app.py
 
 import streamlit as st
 import re
 import datetime
 import io
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Any
 
 st.set_page_config(page_title="AAMVA Validator & Example", layout="centered")
 
@@ -39,11 +41,9 @@ def has_valid_header(payload: str) -> Tuple[bool, str]:
     """
     if not payload:
         return False, "Payload vide."
-    # Cherche 'ANSI' et 'DL' dans les premières 200 chars
     head = payload[:200].upper()
     if "ANSI" not in head or "DL" not in head:
         return False, "Header manquant ou incorrect (attendu 'ANSI ... DL')."
-    # Vérifier motif AAMVA version (6360...)
     if not re.search(r"ANSI\s+63\d{2}", head):
         return False, "Header AAMVA non conforme (code version absent ou invalide)."
     return True, "Header OK."
@@ -52,23 +52,19 @@ def has_valid_header(payload: str) -> Tuple[bool, str]:
 def uses_group_separator(payload: str) -> Tuple[bool, str]:
     if GS in payload:
         return True, "Séparateur de groupe (0x1E) présent."
-    # parfois on voit le caractère visible '' (U+001E) ou séquences \u001e\r
     if "\\u001e" in payload or "\\x1E" in payload:
         return False, "Séparateur trouvé sous forme d'échappement (\\u001e). Remplacer par le caractère 0x1E réel."
     return False, "Séparateur de groupe (0x1E) absent. Les parseurs AAMVA exigent 0x1E entre champs."
 
 
 def ends_with_cr(payload: str) -> Tuple[bool, str]:
-    # AAMVA attend souvent un CR à la fin du record
     if payload.endswith("\r") or payload.endswith("\r\n") or payload.endswith("\n\r"):
         return True, "Fin de record OK (CR présent)."
     return False, "Fin de record manquante (ajouter un CR '\\r' à la fin)."
 
 
 def find_tags(payload: str) -> List[str]:
-    # Trouve toutes les balises de type 3 lettres majuscules suivies de données
     tags = re.findall(r"([A-Z]{3})(?=[^\r\n\x1E]*)", payload)
-    # dédupliquer en conservant l'ordre
     seen = set()
     out = []
     for t in tags:
@@ -87,7 +83,6 @@ def check_required_tags(payload: str) -> Tuple[bool, List[str]]:
 
 
 def check_date_format(value: str) -> bool:
-    # Attendu MMDDYYYY
     if not re.fullmatch(r"\d{8}", value):
         return False
     try:
@@ -101,7 +96,6 @@ def check_date_format(value: str) -> bool:
 
 
 def extract_tag_value(payload: str, tag: str) -> Optional[str]:
-    # Cherche tag suivi de données jusqu'au séparateur GS ou CR
     m = re.search(re.escape(tag) + r"([^\x1E\r\n]*)", payload)
     if m:
         return m.group(1).strip()
@@ -125,7 +119,6 @@ def check_ascii(payload: str) -> Tuple[bool, str]:
         payload.encode("ascii")
         return True, "Encodage ASCII OK."
     except UnicodeEncodeError as e:
-        # Indiquer la position approximative
         return False, f"Caractères non-ASCII détectés (accents ou symboles). Détail: {str(e)}"
 
 
@@ -136,12 +129,6 @@ def minimal_length_check(payload: str) -> Tuple[bool, str]:
 
 
 def svg_basic_checks(svg_text: str) -> List[str]:
-    """
-    Vérifications basiques si l'utilisateur colle un SVG PDF417 :
-    - présence d'attributs width/height ou viewBox
-    - présence d'éléments <rect> (généré par pdf417gen)
-    - recommandation scale >= 2 pour rasterisation
-    """
     issues = []
     if "<svg" not in svg_text.lower():
         issues.append("Le texte collé ne semble pas être un SVG.")
@@ -150,16 +137,11 @@ def svg_basic_checks(svg_text: str) -> List[str]:
         issues.append("SVG sans width/height ni viewBox explicite — vérifier dimensions.")
     if not re.search(r"<rect\b", svg_text, flags=re.IGNORECASE):
         issues.append("SVG sans <rect> détecté — le rasteriseur simple peut échouer si le SVG est complexe.")
-    # quiet zone check (approx) : recherche d'une marge blanche autour du code est difficile ici,
-    # on recommande manuellement
     issues.append("Recommandation : utiliser un scale entier (2–4) et laisser une marge blanche (quiet zone) autour du PDF417.")
     return issues
 
 
 def validate_aamva_payload(payload: str) -> Dict[str, List[str]]:
-    """
-    Retourne un dict avec 'errors' et 'warnings' et 'infos'.
-    """
     errors = []
     warnings = []
     infos = []
@@ -168,114 +150,92 @@ def validate_aamva_payload(payload: str) -> Dict[str, List[str]]:
         errors.append("Payload vide.")
         return {"errors": errors, "warnings": warnings, "infos": infos}
 
-    # Header
     ok, msg = has_valid_header(payload)
     if not ok:
         errors.append(msg)
     else:
         infos.append(msg)
 
-    # Group separator
     ok_gs, msg_gs = uses_group_separator(payload)
     if not ok_gs:
         errors.append(msg_gs)
     else:
         infos.append(msg_gs)
 
-    # End of record
     ok_end, msg_end = ends_with_cr(payload)
     if not ok_end:
         warnings.append(msg_end)
     else:
         infos.append(msg_end)
 
-    # Minimal length
     ok_len, msg_len = minimal_length_check(payload)
     if not ok_len:
         warnings.append(msg_len)
     else:
         infos.append(msg_len)
 
-    # Required tags
     ok_tags, missing = check_required_tags(payload)
     if not ok_tags:
         errors.append("Champs obligatoires manquants: " + ", ".join(missing))
     else:
         infos.append("Tous les champs obligatoires sont présents (au moins en apparence).")
 
-    # Dates
     date_errors = check_dates_in_payload(payload)
     if date_errors:
         errors.extend(date_errors)
     else:
         infos.append("Formats de date OK (MMDDYYYY).")
 
-    # ASCII / accents
     ok_ascii, ascii_msg = check_ascii(payload)
     if not ok_ascii:
         warnings.append(ascii_msg)
     else:
         infos.append(ascii_msg)
 
-    # Tag list
     tags = find_tags(payload)
     infos.append("Tags détectés (extrait) : " + ", ".join(tags[:20]) + ("..." if len(tags) > 20 else ""))
 
-    # If payload contains an embedded SVG (user pasted it), run basic svg checks
     if "<svg" in payload.lower():
         svg_issues = svg_basic_checks(payload)
         for s in svg_issues:
             warnings.append("SVG: " + s)
 
-    # Common pitfalls quick checks
-    # 1) Escaped separators
     if "\\u001e" in payload or "\\x1E" in payload:
         errors.append("Séparateur trouvé sous forme d'échappement (\\u001e ou \\x1E). Remplacer par le caractère 0x1E réel.")
-    # 2) Visible group separator glyph (U+001E) sometimes displayed as '' — acceptable but ensure actual byte present
-    if "" in payload and GS not in payload:
-        warnings.append("Caractère visible U+001E détecté mais le byte 0x1E peut manquer. Vérifier l'encodage réel.")
-
     return {"errors": errors, "warnings": warnings, "infos": infos}
 
 
 # -------------------------
 # Générateur d'exemple AAMVA (valeurs fictives)
 def build_aamva_tags(fields: Dict[str, str]) -> str:
-    """
-    Construit un payload AAMVA minimal avec séparateurs GS (0x1E) et CR final.
-    fields: dict tag -> value
-    """
     header = "@\r\nANSI 636014080102DL"
     parts = [header]
-    # ordre recommandé pour lisibilité
-    order = ["DAQ","DCS","DAC","DAD","DBB","DBA","DBD","DAG","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"]
+    order = ["DAQ", "DCS", "DAC", "DAD", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"]
     for tag in order:
         val = fields.get(tag)
         if val is not None:
             parts.append(f"{tag}{val}")
-    # join with GS and end with CR
     payload = GS.join(parts) + "\r"
     return payload
 
 
 def example_payload() -> str:
-    # Exemple cohérent (fictif)
     fields = {
-        "DAQ": "H40759",            # Driver license number
-        "DCS": "HARMS",             # Last name
-        "DAC": "ROSA",              # First name
-        "DAD": "MARIE",             # Middle name
-        "DBB": "01011990",          # DOB MMDDYYYY
-        "DBA": "01012031",          # Expiration
-        "DBD": "04102026",          # Issue date
-        "DAG": "2570 24TH STREET",  # Address 1
-        "DAI": "OAKLAND",           # City
-        "DAJ": "CA",                # State
-        "DAK": "94601",             # Postal
-        "DCF": "1234567890",        # Document discriminator
-        "DAU": "510",               # Height in inches (example)
-        "DAY": "BRN",               # Eyes
-        "DAZ": "BRN",               # Hair
+        "DAQ": "H40759",
+        "DCS": "HARMS",
+        "DAC": "ROSA",
+        "DAD": "MARIE",
+        "DBB": "01011990",
+        "DBA": "01012031",
+        "DBD": "04102026",
+        "DAG": "2570 24TH STREET",
+        "DAI": "OAKLAND",
+        "DAJ": "CA",
+        "DAK": "94601",
+        "DCF": "1234567890",
+        "DAU": "510",
+        "DAY": "BRN",
+        "DAZ": "BRN",
     }
     return build_aamva_tags(fields)
 
@@ -289,16 +249,16 @@ st.markdown(
     "Le validateur vérifie header, séparateurs (0x1E), formats de date, encodage et signale les erreurs courantes."
 )
 
-col1, col2 = st.columns([3,1])
+col1, col2 = st.columns([3, 1])
 with col1:
     payload_input = st.text_area("Payload AAMVA (brut)", height=220, value="", placeholder="Colle le payload AAMVA ici (commence par @ et ANSI ... DL).")
 with col2:
     if st.button("Générer un exemple"):
+        # Remplacer le contenu du champ par l'exemple sans utiliser experimental_set_query_params
         payload_input = example_payload()
-        st.experimental_set_query_params()  # for UI refresh
+        # Afficher l'exemple dans la zone de texte en réaffichant la page
         st.experimental_rerun()
 
-# If user pasted nothing but wants to validate example
 if not payload_input:
     st.info("Aucun payload collé. Clique sur 'Générer un exemple' pour insérer un payload de test.")
 else:
@@ -325,29 +285,22 @@ else:
             for i in infos:
                 st.write("- " + i)
 
-        # Suggestions automatiques pour corriger les pièges listés
         st.markdown("### Suggestions automatiques pour corriger les pièges fréquents")
         suggs = []
-        # Header
         ok_head, _ = has_valid_header(payload_input)
         if not ok_head:
             suggs.append("Vérifier l'en-tête : il doit contenir 'ANSI' et 'DL' (ex: '@\\r\\nANSI 636014080102DL').")
-        # GS
         ok_gs, _ = uses_group_separator(payload_input)
         if not ok_gs:
             suggs.append("Remplacer les séquences '\\\\u001e' ou '\\\\x1E' par le caractère réel 0x1E (Group Separator).")
-        # Dates
         date_errs = check_dates_in_payload(payload_input)
         if date_errs:
             suggs.append("Corriger les dates au format MMDDYYYY (ex: 01011990).")
-        # ASCII
         ok_ascii, ascii_msg = check_ascii(payload_input)
         if not ok_ascii:
             suggs.append("Supprimer ou translittérer les caractères accentués / non-ASCII (ex: é -> e).")
-        # SVG advice
         if "<svg" in payload_input.lower():
             suggs.append("Si tu fournis un SVG, assure-toi qu'il contient <rect> (PDF417 simple) ou utilise la conversion côté navigateur si le SVG est complexe.")
-        # Barcode size advice
         suggs.append("Pour l'impression/scan, viser ≥300 DPI et utiliser un scale entier (2–4) lors de la rasterisation; laisser une quiet zone blanche autour du code.")
         for s in suggs:
             st.write("- " + s)
@@ -355,7 +308,6 @@ else:
         st.markdown("### Exemple de payload (fictif) — prêt à copier")
         st.code(example_payload(), language="text")
 
-# Footer notes
 st.markdown("---")
 st.markdown(
     "**Notes** :\n\n"
