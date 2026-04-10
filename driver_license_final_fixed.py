@@ -3,9 +3,11 @@
 # Streamlit app — Générateur de permis CA
 # Intègre ZIP_DB depuis GitHub et un dictionnaire field_offices intégré.
 # Ajoute trois options de téléchargement du code-barres PDF417 : SVG, PNG, GIF.
+# Rasterisation SVG->PNG/GIF réalisée en Python en analysant les <rect> du SVG (Pillow required).
 #
 # Requirements:
-# pip install streamlit requests reportlab pdf417gen cairosvg pillow
+# pip install streamlit requests reportlab pdf417gen pillow
+# If pdf417gen is not available, PDF417 won't be generated; SVG download still works.
 
 import streamlit as st
 import datetime
@@ -15,12 +17,22 @@ import io
 import base64
 import requests
 import re
-from typing import Dict, List, Optional
+import xml.etree.ElementTree as ET
+from typing import Dict, List, Optional, Tuple
+
 import streamlit.components.v1 as components
 
+# ReportLab for PDF export
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+
+# Pillow for rasterization
+try:
+    from PIL import Image, ImageDraw
+    _PIL_AVAILABLE = True
+except Exception:
+    _PIL_AVAILABLE = False
 
 st.set_page_config(page_title="Permis CA", layout="centered")
 
@@ -285,11 +297,125 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
     codes = encode(data_bytes, columns=columns, security_level=security_level, force_binary=False)
     svg_tree = render_svg(codes, scale=scale, ratio=ratio, color=color)
     try:
-        import xml.etree.ElementTree as ET
         svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
         return svg_bytes.decode("utf-8")
     except Exception:
         return str(svg_tree)
+
+# -------------------------
+# Rasterization: parse <rect> elements and draw with Pillow
+def parse_svg_rects(svg_text: str) -> Tuple[Optional[Tuple[int,int]], List[Tuple[int,int,int,int,str]]]:
+    """
+    Parse SVG and return (canvas_size (w,h) or None, list of rects).
+    Each rect: (x, y, width, height, fill_color)
+    Works for simple SVGs composed of <rect> elements (as produced by pdf417gen).
+    """
+    try:
+        root = ET.fromstring(svg_text)
+    except Exception:
+        return None, []
+
+    # Determine width/height from attributes or viewBox
+    width = root.get('width')
+    height = root.get('height')
+    viewBox = root.get('viewBox') or root.get('viewbox')
+    canvas_size = None
+    if width and height:
+        try:
+            w = int(float(re.sub(r'[^\d\.]', '', width)))
+            h = int(float(re.sub(r'[^\d\.]', '', height)))
+            canvas_size = (w, h)
+        except Exception:
+            canvas_size = None
+    if not canvas_size and viewBox:
+        parts = re.split(r'[,\s]+', viewBox.strip())
+        if len(parts) >= 4:
+            try:
+                vb_w = int(float(parts[2]))
+                vb_h = int(float(parts[3]))
+                canvas_size = (vb_w, vb_h)
+            except Exception:
+                canvas_size = None
+
+    rects = []
+    # find all rect elements in any namespace
+    for rect in root.findall('.//{http://www.w3.org/2000/svg}rect') + root.findall('.//rect'):
+        try:
+            x = int(float(rect.get('x') or 0))
+            y = int(float(rect.get('y') or 0))
+            w = int(float(rect.get('width') or 0))
+            h = int(float(rect.get('height') or 0))
+            fill = rect.get('fill') or rect.get('style') or '#000'
+            # if style contains fill: extract
+            if 'fill:' in fill and ';' in fill:
+                m = re.search(r'fill:\s*([^;]+)', fill)
+                if m:
+                    fill = m.group(1).strip()
+            rects.append((x, y, w, h, fill))
+        except Exception:
+            continue
+    return canvas_size, rects
+
+def color_to_rgba(color_str: str) -> Tuple[int,int,int,int]:
+    # Accept #RRGGBB or rgb(...) or color names (basic)
+    s = (color_str or "").strip()
+    if s.startswith('#'):
+        s = s.lstrip('#')
+        if len(s) == 3:
+            r = int(s[0]*2, 16); g = int(s[1]*2, 16); b = int(s[2]*2, 16)
+        elif len(s) >= 6:
+            r = int(s[0:2], 16); g = int(s[2:4], 16); b = int(s[4:6], 16)
+        else:
+            r,g,b = 0,0,0
+        return (r,g,b,255)
+    m = re.match(r'rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)', s)
+    if m:
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3)), 255)
+    # basic named colors
+    named = {
+        'black': (0,0,0,255),
+        'white': (255,255,255,255),
+        'red': (255,0,0,255),
+        'green': (0,128,0,255),
+        'blue': (0,0,255,255)
+    }
+    return named.get(s.lower(), (0,0,0,255))
+
+def rasterize_rects_to_png_bytes(svg_text: str, scale: int = 3, bg=(255,255,255,255)) -> bytes:
+    """
+    Rasterize SVG composed of rects into PNG bytes using Pillow.
+    scale: integer scale factor to enlarge the output for crispness.
+    """
+    if not _PIL_AVAILABLE:
+        raise RuntimeError("Pillow (PIL) non disponible dans l'environnement.")
+
+    canvas_size, rects = parse_svg_rects(svg_text)
+    if not rects:
+        raise RuntimeError("Aucun élément <rect> trouvé dans le SVG. Rasterisation non supportée pour ce SVG.")
+
+    # If canvas_size unknown, compute bounding box from rects
+    if not canvas_size:
+        max_x = max((x + w) for (x,y,w,h,_) in rects)
+        max_y = max((y + h) for (x,y,w,h,_) in rects)
+        canvas_size = (max_x, max_y)
+
+    w0, h0 = canvas_size
+    w = max(1, int(w0 * scale))
+    h = max(1, int(h0 * scale))
+    img = Image.new("RGBA", (w, h), bg)
+    draw = ImageDraw.Draw(img)
+
+    for (x, y, rw, rh, fill) in rects:
+        rgba = color_to_rgba(fill)
+        x1 = int(x * scale)
+        y1 = int(y * scale)
+        x2 = int((x + rw) * scale)
+        y2 = int((y + rh) * scale)
+        draw.rectangle([x1, y1, x2, y2], fill=rgba)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 # -------------------------
 # UI: clean interface
@@ -313,7 +439,7 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2)
-scale_param = st.sidebar.slider("Échelle", 1, 6, 3)
+scale_param = st.sidebar.slider("Échelle (SVG generator)", 1, 6, 3)
 ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
 color_param = st.sidebar.color_picker("Couleur du code", "#000000")
 
@@ -345,7 +471,7 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # -------------------------
-# Synchronization callbacks
+# Synchronization callbacks (unchanged)
 def update_from_zip():
     z = st.session_state.get("zip_select", "").strip()
     z_digits = re.sub(r"\D", "", z)
@@ -395,7 +521,7 @@ def update_from_office():
         st.info("Aucune correspondance ZIP connue pour ce bureau dans la base locale.")
 
 # -------------------------
-# Widgets
+# Widgets (unchanged)
 st.title("Générateur officiel de permis CA")
 
 ln = st.text_input("Nom de famille", st.session_state["ln_input"], key="ln_input")
@@ -459,7 +585,7 @@ iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_
 generate = st.button("Générer la carte")
 
 # -------------------------
-# Validation & generation helpers
+# Validation & generation helpers (unchanged)
 def validate_inputs() -> List[str]:
     errors: List[str] = []
     if not st.session_state.get("ln_input", "").strip():
@@ -472,7 +598,7 @@ def validate_inputs() -> List[str]:
         errors.append("Date d'émission ne peut pas être dans le futur.")
     if st.session_state.get("w_input", 0) < 30 or st.session_state.get("w_input", 0) > 500:
         errors.append("Poids hors plage attendue.")
-    if st.session_state.get("h1_input", 0) < 0 or st.session_state.get("h1_input", 0) > 8 or st.session_state.get("h2_input", 0) < 0 or st.session_state.get("h2_input", 0) > 11:
+    if st.session_state.get("h1_input", 0) < 0 or st.session_state.get("h2_input", 0) < 0 or st.session_state.get("h1_input", 0) > 8 or st.session_state.get("h2_input", 0) > 11:
         errors.append("Taille hors plage attendue.")
     if not st.session_state.get("address1_input", "").strip():
         errors.append("Adresse (ligne 1) requise.")
@@ -647,7 +773,6 @@ if generate:
     # Generate PDF417 and provide downloads (SVG, PNG, GIF)
     if _PDF417_AVAILABLE:
         try:
-            # Generate SVG
             svg_str = generate_pdf417_svg(
                 data_bytes,
                 columns=columns_param,
@@ -668,31 +793,7 @@ if generate:
             svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
             components.html(svg_html, height=260, scrolling=True)
 
-            # Prepare downloads: SVG, PNG (rasterized), GIF (from PNG)
-            png_bytes = None
-            gif_bytes = None
-            raster_error = None
-            try:
-                import cairosvg
-                from PIL import Image, ImageOps
-                # Rasterize SVG to PNG at a moderate scale to avoid OOM
-                raster_scale = max(1, min(4, int(scale_param)))  # prefer small integer scale
-                png_bytes = cairosvg.svg2png(bytestring=svg_str.encode("utf-8"), scale=raster_scale)
-                # Convert PNG bytes to GIF bytes (palette conversion)
-                img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
-                # Create white background if transparency causes issues
-                bg = Image.new("RGBA", img.size, (255,255,255,255))
-                bg.paste(img, (0,0), img)
-                pal = bg.convert("P", palette=Image.ADAPTIVE)
-                gif_buf = io.BytesIO()
-                pal.save(gif_buf, format="GIF")
-                gif_bytes = gif_buf.getvalue()
-            except Exception as ex:
-                raster_error = str(ex)
-                png_bytes = None
-                gif_bytes = None
-
-            # Download buttons (SVG always available, PNG/GIF if generated)
+            # Prepare downloads: SVG always available
             cols = st.columns(3)
             with cols[0]:
                 st.download_button(
@@ -701,6 +802,28 @@ if generate:
                     file_name="pdf417.svg",
                     mime="image/svg+xml"
                 )
+
+            # Try rasterization to PNG and GIF using Pillow-only method
+            png_bytes = None
+            gif_bytes = None
+            raster_error = None
+            if _PIL_AVAILABLE:
+                try:
+                    # choose scale for rasterization (integer)
+                    raster_scale = max(1, int(scale_param))
+                    png_bytes = rasterize_rects_to_png_bytes(svg_str, scale=raster_scale)
+                    # create GIF from PNG (single frame)
+                    img = Image.open(io.BytesIO(png_bytes)).convert("P", palette=Image.ADAPTIVE)
+                    gif_buf = io.BytesIO()
+                    img.save(gif_buf, format="GIF")
+                    gif_bytes = gif_buf.getvalue()
+                except Exception as ex:
+                    raster_error = str(ex)
+                    png_bytes = None
+                    gif_bytes = None
+            else:
+                raster_error = "Pillow (PIL) non installé dans l'environnement."
+
             with cols[1]:
                 if png_bytes:
                     st.download_button(
@@ -711,6 +834,7 @@ if generate:
                     )
                 else:
                     st.button("PNG non disponible")
+
             with cols[2]:
                 if gif_bytes:
                     st.download_button(
@@ -722,16 +846,15 @@ if generate:
                 else:
                     st.button("GIF non disponible")
 
-            # If rasterization failed, show the error so you can debug
             if raster_error:
                 st.error("La rasterisation SVG→PNG a échoué. Détails :")
                 st.code(raster_error, language="text")
-                st.info("Vérifie que 'cairosvg' et 'Pillow' sont installés et que 'scale' n'est pas trop élevé.")
+                st.info("Si tu veux la rasterisation côté navigateur sans dépendances, utilise la page HTML/JS fournie précédemment.")
 
         except Exception as e:
             st.error("Erreur génération PDF417 : " + str(e))
     else:
-        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché ni téléchargeable.")
+        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché ni téléchargeable. Le SVG ne pourra pas être généré automatiquement.")
 
     pdf_bytes = create_pdf_bytes({
         "Nom": ln_val,
