@@ -2,8 +2,7 @@
 # driver_license_final_fixed.py
 # Streamlit app — Générateur de permis CA
 # Intègre ZIP_DB depuis GitHub et un dictionnaire field_offices intégré.
-# Ajoute trois options de téléchargement du code-barres PDF417 : SVG, PNG, GIF.
-# Ajoute prévisualisation PNG/GIF et prise en charge simple des <path> (M/L/Z) pour rasterisation.
+# Ajoute prévisualisation et téléchargements PDF417 (SVG/PNG/GIF) avec sections rétractables (UI/UX).
 #
 # Requirements:
 # pip install streamlit requests reportlab pdf417gen pillow
@@ -305,17 +304,12 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
 # -------------------------
 # Rasterization helpers: parse <rect> and simple <path> (M/L/Z)
 def parse_svg_shapes(svg_text: str) -> Tuple[Optional[Tuple[int,int]], List[Dict[str,Any]]]:
-    """
-    Retourne (canvas_size, shapes)
-    shapes: list d'objets {type:'rect'|'path', coords:..., fill:...}
-    """
     shapes: List[Dict[str,Any]] = []
     try:
         root = ET.fromstring(svg_text)
     except Exception:
         return None, []
 
-    # canvas size
     width = root.get('width')
     height = root.get('height')
     viewBox = root.get('viewBox') or root.get('viewbox')
@@ -337,7 +331,6 @@ def parse_svg_shapes(svg_text: str) -> Tuple[Optional[Tuple[int,int]], List[Dict
             except Exception:
                 canvas_size = None
 
-    # find rects
     for rect in root.findall('.//{http://www.w3.org/2000/svg}rect') + root.findall('.//rect'):
         try:
             x = float(rect.get('x') or 0)
@@ -353,7 +346,6 @@ def parse_svg_shapes(svg_text: str) -> Tuple[Optional[Tuple[int,int]], List[Dict
         except Exception:
             continue
 
-    # find simple paths (only absolute M/L/Z supported)
     for path in root.findall('.//{http://www.w3.org/2000/svg}path') + root.findall('.//path'):
         d = path.get('d') or ''
         fill = path.get('fill') or path.get('style') or '#000'
@@ -367,16 +359,9 @@ def parse_svg_shapes(svg_text: str) -> Tuple[Optional[Tuple[int,int]], List[Dict
     return canvas_size, shapes
 
 def parse_path_d_simple(d: str) -> Optional[List[Tuple[float,float]]]:
-    """
-    Parse a simple path 'd' string supporting absolute commands:
-    M x y L x y L x y ... Z
-    Returns list of points (x,y) or None if unsupported.
-    """
     if not d or not re.search(r'[MLZmlz]', d):
         return None
-    # Normalize: remove commas, ensure spaces between commands and numbers
     s = d.replace(',', ' ')
-    # Tokenize commands and numbers
     tokens = re.findall(r'[MLZmlz]|-?\d+\.?\d*', s)
     pts: List[Tuple[float,float]] = []
     i = 0
@@ -387,23 +372,17 @@ def parse_path_d_simple(d: str) -> Optional[List[Tuple[float,float]]]:
             cur_cmd = t
             i += 1
             continue
-        # if number encountered without explicit command, assume repeat of last command
         if cur_cmd is None:
             return None
         if cur_cmd.upper() == 'Z':
-            # close path, nothing to read
-            i += 0
             cur_cmd = None
             continue
-        # expect pairs of numbers for M or L
         try:
             x = float(t)
             y = float(tokens[i+1])
             pts.append((x,y))
             i += 2
-            # if command was 'm' or 'l' (relative), we do not support relative here
             if cur_cmd.islower():
-                # unsupported relative commands in this simple parser
                 return None
         except Exception:
             return None
@@ -437,10 +416,6 @@ def color_to_rgba(color_str: str) -> Tuple[int,int,int,int]:
     return named.get(s.lower(), (0,0,0,255))
 
 def rasterize_shapes_to_png_bytes(svg_text: str, scale: int = 3, bg=(255,255,255,255)) -> bytes:
-    """
-    Rasterize shapes (rects + simple paths) into PNG bytes using Pillow.
-    scale: integer scale factor.
-    """
     if not _PIL_AVAILABLE:
         raise RuntimeError("Pillow (PIL) non disponible dans l'environnement.")
 
@@ -448,7 +423,6 @@ def rasterize_shapes_to_png_bytes(svg_text: str, scale: int = 3, bg=(255,255,255
     if not shapes:
         raise RuntimeError("Aucun élément pris en charge (<rect> ou <path> simple) trouvé dans le SVG.")
 
-    # compute canvas if missing
     if not canvas_size:
         max_x = 0
         max_y = 0
@@ -479,11 +453,9 @@ def rasterize_shapes_to_png_bytes(svg_text: str, scale: int = 3, bg=(255,255,255
         elif s['type'] == 'path':
             pts = [(int(px*scale), int(py*scale)) for (px,py) in s['points']]
             rgba = color_to_rgba(s.get('fill'))
-            # draw polygon (closed)
             try:
                 draw.polygon(pts, fill=rgba)
             except Exception:
-                # fallback: draw lines
                 for i in range(len(pts)-1):
                     draw.line([pts[i], pts[i+1]], fill=rgba)
     buf = io.BytesIO()
@@ -847,98 +819,102 @@ if generate:
     )
     st.markdown(html, unsafe_allow_html=True)
 
-    st.subheader("Payload AAMVA (brut)")
-    st.code(aamva, language="text")
+    # Collapsible sections (expander) for Payload and Barcode
+    with st.expander("Afficher / Masquer — Payload AAMVA (brut)", expanded=False):
+        st.subheader("Payload AAMVA (brut)")
+        st.code(aamva, language="text")
 
-    # Generate PDF417 and provide downloads (SVG, PNG, GIF) + previews
-    if _PDF417_AVAILABLE:
-        try:
-            svg_str = generate_pdf417_svg(
-                data_bytes,
-                columns=columns_param,
-                security_level=security_level_param,
-                scale=scale_param,
-                ratio=ratio_param,
-                color=color_param
-            )
-
-            # Clean SVG to reduce rendering artifacts
-            svg_str = svg_str.replace('<svg ', '<svg shape-rendering="crispEdges" vector-effect="non-scaling-stroke" style="image-rendering:pixelated; image-rendering:-moz-crisp-edges;" ')
-            svg_str = re.sub(r'\sstroke="[^"]+"', '', svg_str)
-            svg_str = re.sub(r'\sstroke-width="[^"]+"', '', svg_str)
-            svg_str = re.sub(r'width="([\d\.]+)"', lambda m: f'width="{int(float(m.group(1)))}"', svg_str)
-            svg_str = re.sub(r'height="([\d\.]+)"', lambda m: f'height="{int(float(m.group(1)))}"', svg_str)
-
-            # Display SVG
-            svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
-            components.html(svg_html, height=260, scrolling=True)
-
-            # Prepare downloads: SVG always available
-            cols = st.columns(3)
-            with cols[0]:
-                st.download_button(
-                    "Télécharger PDF417 (SVG)",
-                    data=svg_str.encode("utf-8"),
-                    file_name="pdf417.svg",
-                    mime="image/svg+xml"
+    # Generate PDF417 and provide downloads (SVG, PNG, GIF) + previews inside expander
+    with st.expander("Afficher / Masquer — Code barre PDF417", expanded=False):
+        if _PDF417_AVAILABLE:
+            try:
+                svg_str = generate_pdf417_svg(
+                    data_bytes,
+                    columns=columns_param,
+                    security_level=security_level_param,
+                    scale=scale_param,
+                    ratio=ratio_param,
+                    color=color_param
                 )
 
-            # Rasterize to PNG/GIF using Pillow-based parser (rect + simple path)
-            png_bytes = None
-            gif_bytes = None
-            raster_error = None
-            if _PIL_AVAILABLE:
-                try:
-                    raster_scale = max(1, int(raster_scale_ui))
-                    png_bytes = rasterize_shapes_to_png_bytes(svg_str, scale=raster_scale)
-                    # preview PNG
-                    st.image(png_bytes, caption="Aperçu PNG", use_column_width=False, width=320)
-                    # create GIF (single frame) from PNG
-                    img = Image.open(io.BytesIO(png_bytes)).convert("P", palette=Image.ADAPTIVE)
-                    gif_buf = io.BytesIO()
-                    img.save(gif_buf, format="GIF", save_all=True, loop=0, duration=int(gif_delay_ui))
-                    gif_bytes = gif_buf.getvalue()
-                    # preview GIF
-                    st.image(gif_bytes, caption="Aperçu GIF", use_column_width=False, width=320)
-                except Exception as ex:
-                    raster_error = str(ex)
-                    png_bytes = None
-                    gif_bytes = None
-            else:
-                raster_error = "Pillow (PIL) non installé dans l'environnement."
+                # Clean SVG to reduce rendering artifacts
+                svg_str = svg_str.replace('<svg ', '<svg shape-rendering="crispEdges" vector-effect="non-scaling-stroke" style="image-rendering:pixelated; image-rendering:-moz-crisp-edges;" ')
+                svg_str = re.sub(r'\sstroke="[^"]+"', '', svg_str)
+                svg_str = re.sub(r'\sstroke-width="[^"]+"', '', svg_str)
+                svg_str = re.sub(r'width="([\d\.]+)"', lambda m: f'width="{int(float(m.group(1)))}"', svg_str)
+                svg_str = re.sub(r'height="([\d\.]+)"', lambda m: f'height="{int(float(m.group(1)))}"', svg_str)
 
-            with cols[1]:
-                if png_bytes:
+                # Display SVG in the expander
+                svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
+                components.html(svg_html, height=260, scrolling=True)
+
+                # Prepare downloads: SVG always available
+                cols = st.columns(3)
+                with cols[0]:
                     st.download_button(
-                        "Télécharger PDF417 (PNG)",
-                        data=png_bytes,
-                        file_name="pdf417.png",
-                        mime="image/png"
+                        "Télécharger PDF417 (SVG)",
+                        data=svg_str.encode("utf-8"),
+                        file_name="pdf417.svg",
+                        mime="image/svg+xml"
                     )
+
+                # Rasterize to PNG/GIF using Pillow-based parser (rect + simple path)
+                png_bytes = None
+                gif_bytes = None
+                raster_error = None
+                if _PIL_AVAILABLE:
+                    try:
+                        raster_scale = max(1, int(raster_scale_ui))
+                        png_bytes = rasterize_shapes_to_png_bytes(svg_str, scale=raster_scale)
+                        # preview PNG
+                        st.image(png_bytes, caption="Aperçu PNG", use_column_width=False, width=320)
+                        # create GIF (single frame) from PNG
+                        img = Image.open(io.BytesIO(png_bytes)).convert("P", palette=Image.ADAPTIVE)
+                        gif_buf = io.BytesIO()
+                        img.save(gif_buf, format="GIF", save_all=True, loop=0, duration=int(gif_delay_ui))
+                        gif_bytes = gif_buf.getvalue()
+                        # preview GIF
+                        st.image(gif_bytes, caption="Aperçu GIF", use_column_width=False, width=320)
+                    except Exception as ex:
+                        raster_error = str(ex)
+                        png_bytes = None
+                        gif_bytes = None
                 else:
-                    st.button("PNG non disponible")
-            with cols[2]:
-                if gif_bytes:
-                    st.download_button(
-                        "Télécharger PDF417 (GIF)",
-                        data=gif_bytes,
-                        file_name="pdf417.gif",
-                        mime="image/gif"
-                    )
-                else:
-                    st.button("GIF non disponible")
+                    raster_error = "Pillow (PIL) non installé dans l'environnement."
 
-            if raster_error:
-                st.error("La rasterisation SVG→PNG a échoué. Détails :")
-                st.code(raster_error, language="text")
-                st.info("Si tu veux la rasterisation côté navigateur sans dépendances, utilise la page HTML/JS fournie précédemment.")
+                with cols[1]:
+                    if png_bytes:
+                        st.download_button(
+                            "Télécharger PDF417 (PNG)",
+                            data=png_bytes,
+                            file_name="pdf417.png",
+                            mime="image/png"
+                        )
+                    else:
+                        st.button("PNG non disponible")
+                with cols[2]:
+                    if gif_bytes:
+                        st.download_button(
+                            "Télécharger PDF417 (GIF)",
+                            data=gif_bytes,
+                            file_name="pdf417.gif",
+                            mime="image/gif"
+                        )
+                    else:
+                        st.button("GIF non disponible")
 
-        except Exception as e:
-            st.error("Erreur génération PDF417 : " + str(e))
-    else:
-        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché ni téléchargeable automatiquement.")
-        st.info("Tu peux coller un SVG manuellement dans la zone d'édition si tu veux tester la rasterisation.")
+                if raster_error:
+                    st.error("La rasterisation SVG→PNG a échoué. Détails :")
+                    st.code(raster_error, language="text")
+                    st.info("Si tu veux la rasterisation côté navigateur sans dépendances, utilise la page HTML/JS fournie précédemment.")
 
+            except Exception as e:
+                st.error("Erreur génération PDF417 : " + str(e))
+        else:
+            st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché ni téléchargeable automatiquement.")
+            st.info("Tu peux coller un SVG manuellement si tu veux tester la rasterisation.")
+
+    # Final PDF download
     pdf_bytes = create_pdf_bytes({
         "Nom": ln_val,
         "Prénom": fn_val,
