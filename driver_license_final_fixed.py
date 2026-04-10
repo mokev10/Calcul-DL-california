@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# driver_license_final.py
-# Générateur de permis CA (Streamlit)
-# Version : intègre automatiquement ZIP_DB depuis GitHub et FIELD_OFFICE (PDF) pour remplir la colonne office.
+# driver_license_final_fixed.py
+# Streamlit app — Générateur de permis CA
+# Intègre ZIP_DB depuis GitHub et mappe les Field Offices via le dict fourni (pas de parsing PDF).
 # Remplace entièrement ton ancien fichier par celui-ci.
 #
-# Requirements recommandés :
-# pip install streamlit requests reportlab pdfplumber
-# pdf417gen est optionnel (vendorisez si nécessaire)
+# Requirements:
+# pip install streamlit requests reportlab
+# pdf417gen is optional (vendorisez si nécessaire)
 
 import streamlit as st
 import datetime
@@ -16,7 +16,7 @@ import io
 import base64
 import requests
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 import streamlit.components.v1 as components
 
 # ReportLab pour export PDF
@@ -27,12 +27,92 @@ from reportlab.lib.utils import ImageReader
 st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
-# CONFIG : URLs raw GitHub (modifier si besoin)
+# Configuration: GitHub raw URL for ZIP_DB.txt
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
-GITHUB_RAW_FIELD_OFFICE_PDF = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/FIELD_OFFICE.pdf"
 
 # -------------------------
-# Utilitaires
+# Field offices dict (user-provided)
+field_offices = {
+    "Baie de San Francisco": {
+        "Corte Madera": 525,
+        "Daly City": 599,
+        "El Cerrito": 585,
+        "Fremont": 643,
+        "Hayward": 521,
+        "Los Gatos": 641,
+        "Novato": 647,
+        "Oakland (Claremont)": 501,
+        "Oakland (Coliseum)": 604,
+        "Pittsburg": 651,
+        "Pleasanton": 639,
+        "Redwood City": 542,
+        "San Francisco": 503,
+        "San Jose (Alma)": 516,
+        "San Jose (Driver License Center)": 607,
+        "San Mateo": 594,
+        "Santa Clara": 632,
+        "Vallejo": 538
+    },
+
+    "Grand Los Angeles": {
+        "Arleta": 628,
+        "Bellflower": 610,
+        "Culver City": 514,
+        "Glendale": 540,
+        "Hollywood": 633,
+        "Inglewood": 544,
+        "Long Beach": 507,
+        "Los Angeles (Hope St)": 502,
+        "Montebello": 531,
+        "Pasadena": 510,
+        "Santa Monica": 548,
+        "Torrance": 592,
+        "West Covina": 591
+    },
+
+    "Orange County / Sud": {
+        "Costa Mesa": 627,
+        "Fullerton": 547,
+        "Laguna Hills": 642,
+        "Santa Ana": 529,
+        "San Clemente": 652,
+        "Westminster": 623,
+        "Chula Vista": 609,
+        "El Cajon": 549,
+        "Oceanside": 593,
+        "San Diego (Clairemont)": 618,
+        "San Diego (Normal St)": 504,
+        "San Marcos": 637,
+        "San Ysidro": 649,
+        "Auburn": 533,
+        "Chico": 534,
+        "Eureka": 522,
+        "Redding": 550,
+        "Roseville": 635,
+        "Sacramento (Broadway)": 500,
+        "Sacramento (South)": 603,
+        "Woodland": 535
+    },
+
+    "Vallée Centrale": {
+        "Bakersfield": 511,
+        "Fresno": 505,
+        "Lodi": 595,
+        "Modesto": 536,
+        "Stockton": 517,
+        "Visalia": 519
+    }
+}
+
+# Build a flat mapping city -> "Region — City (ID)"
+FIELD_OFFICE_MAP: Dict[str, str] = {}
+for region, cities in field_offices.items():
+    for city, code in cities.items():
+        label = f"{region} — {city} ({code})"
+        FIELD_OFFICE_MAP[city.upper()] = label
+
+# -------------------------
+# Utilities
 def seed(*x):
     parts = []
     for item in x:
@@ -58,33 +138,27 @@ def next_sequence(r):
     return str(r.randint(10, 99))
 
 # -------------------------
-# Récupération depuis GitHub
-def fetch_text_url(url: str, timeout: int = 10) -> Optional[str]:
+# Fetch ZIP_DB.txt from GitHub raw
+def fetch_github_zipdb(url: str) -> Optional[str]:
     try:
-        resp = requests.get(url, timeout=timeout)
+        resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         return resp.text
     except Exception:
         return None
 
-def fetch_binary_url(url: str, timeout: int = 10) -> Optional[bytes]:
-    try:
-        resp = requests.get(url, timeout=timeout)
-        resp.raise_for_status()
-        return resp.content
-    except Exception:
-        return None
-
 # -------------------------
-# Parsing ZIP_DB.txt (heuristique)
+# Parse ZIP_DB text into mapping zipcode -> {city,state,office}
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     db: Dict[str, Dict[str, str]] = {}
     if not text:
         return db
+
     t = text.replace("\r", "\n")
     t = re.sub(r"<\/?t(?:able|r|d|h)[^>]*>", "\n", t, flags=re.IGNORECASE)
     t = re.sub(r"&nbsp;|\t", " ", t)
     lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
+
     i = 0
     while i < len(lines):
         ln = lines[i]
@@ -117,7 +191,8 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
             i += 1
             continue
         i += 1
-    # pass supplémentaire : séquences Zip/City/State
+
+    # Additional pass: detect sequences Zip / City / State on consecutive lines
     for j in range(len(lines) - 2):
         a, b, c = lines[j], lines[j + 1], lines[j + 2]
         if re.fullmatch(r"\d{5}", a) and re.search(r"[A-Za-z]", b) and re.search(r"\bCA\b|\b[A-Z]{2}\b", c):
@@ -125,7 +200,8 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
             city = b.title()
             state = "CA" if "CA" in c else c.strip()
             db[z] = {"city": city, "state": state, "office": db.get(z, {}).get("office", "")}
-    # normaliser clés
+
+    # Normalize keys
     normalized: Dict[str, Dict[str, str]] = {}
     for z, info in db.items():
         zc = re.sub(r"\D", "", z)[:5]
@@ -138,125 +214,45 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     return normalized
 
 # -------------------------
-# Parsing FIELD_OFFICE.pdf -> mapping city -> office string (Region — City (ID))
-# Utilise pdfplumber si disponible, sinon tente heuristique sur bytes->texte
-def parse_field_office_pdf_bytes(pdf_bytes: bytes) -> Dict[str, str]:
-    mapping: Dict[str, str] = {}
-    if not pdf_bytes:
-        return mapping
-    # essayer pdfplumber si installé
-    try:
-        import pdfplumber
-        text_all = ""
-        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text() or ""
-                text_all += page_text + "\n"
-    except Exception:
-        # fallback : décoder bytes en texte (peut être brouillé)
-        try:
-            text_all = pdf_bytes.decode("utf-8", errors="replace")
-        except Exception:
-            text_all = ""
-    # nettoyer HTML/table tags éventuels
-    t = text_all.replace("\r", "\n")
-    t = re.sub(r"<\/?t(?:able|r|d|h)[^>]*>", "\n", t, flags=re.IGNORECASE)
-    lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
-    # heuristique : on cherche des blocs "Région" suivi de lignes "Ville / Secteur" + "Code ID"
-    region = ""
-    i = 0
-    while i < len(lines):
-        ln = lines[i]
-        # détecter un titre de région (ex: "Baie de San Francisco", "Grand Los Angeles", "Orange County / Sud", "Vallée Centrale")
-        if re.search(r"Baie de San Francisco|Grand Los Angeles|Orange County|Vallée Centrale|Central Valley|San Francisco Bay|Los Angeles", ln, re.IGNORECASE):
-            region = ln.strip()
-            i += 1
-            continue
-        # détecter pattern: City  (maybe)  ID  OR City \n ID
-        # cas 1: ligne contient "City   ID"
-        m_inline = re.match(r"^([A-Za-z' .\-&()]+)\s+(\d{2,3})$", ln)
-        if m_inline:
-            city = m_inline.group(1).strip().title()
-            code = m_inline.group(2).strip()
-            office_label = f"{region} — {city} ({code})" if region else f"{city} ({code})"
-            mapping[city.upper()] = office_label
-            i += 1
-            continue
-        # cas 2: ligne = City, ligne suivante = ID
-        if i + 1 < len(lines) and re.fullmatch(r"\d{2,3}", lines[i + 1]):
-            city = ln.strip().title()
-            code = lines[i + 1].strip()
-            office_label = f"{region} — {city} ({code})" if region else f"{city} ({code})"
-            mapping[city.upper()] = office_label
-            i += 2
-            continue
-        # cas 3: ligne contient "City" and next token contains code in same line separated by tabs/commas
-        m_split = re.match(r"^([A-Za-z' .\-&()]+)[,\t]+\s*(\d{2,3})$", ln)
-        if m_split:
-            city = m_split.group(1).strip().title()
-            code = m_split.group(2).strip()
-            office_label = f"{region} — {city} ({code})" if region else f"{city} ({code})"
-            mapping[city.upper()] = office_label
-            i += 1
-            continue
-        # cas 4: ligne contient "City  /  Code" with slashes
-        m_slash = re.match(r"^([A-Za-z' .\-&()]+)\s*/\s*(\d{2,3})$", ln)
-        if m_slash:
-            city = m_slash.group(1).strip().title()
-            code = m_slash.group(2).strip()
-            office_label = f"{region} — {city} ({code})" if region else f"{city} ({code})"
-            mapping[city.upper()] = office_label
-            i += 1
-            continue
-        i += 1
-    return mapping
-
-# -------------------------
-# Base minimale fallback (si fetch échoue)
+# Default minimal ZIP_DB fallback
 ZIP_DB: Dict[str, Dict[str, str]] = {
-    "94925": {"city": "Corte Madera", "state": "CA", "office": "Baie de San Francisco — Corte Madera (525)"},
-    "95818": {"city": "Sacramento", "state": "CA", "office": "Sacramento (500)"},
-    "94102": {"city": "San Francisco", "state": "CA", "office": "Baie de San Francisco — San Francisco (503)"},
-    "94015": {"city": "Daly City", "state": "CA", "office": "Baie de San Francisco — Daly City (599)"},
+    "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
+    "95818": {"city": "Sacramento", "state": "CA", "office": ""},
+    "94102": {"city": "San Francisco", "state": "CA", "office": ""},
+    "94015": {"city": "Daly City", "state": "CA", "office": ""},
 }
 
-# -------------------------
-# Charger ZIP_DB.txt depuis GitHub
-fetched_zip_text = fetch_text_url(GITHUB_RAW_ZIPDB)
-if fetched_zip_text:
-    parsed_zip = parse_zipdb_text(fetched_zip_text)
-    if parsed_zip:
-        # merge parsed (parsed prend la priorité)
-        ZIP_DB.update(parsed_zip)
+# Try to fetch and parse GitHub ZIP_DB
+fetched_text = fetch_github_zipdb(GITHUB_RAW_ZIPDB)
+if fetched_text:
+    parsed = parse_zipdb_text(fetched_text)
+    if parsed:
+        ZIP_DB.update(parsed)
 
-# Charger FIELD_OFFICE.pdf depuis GitHub et construire mapping city->office
-fetched_field_bytes = fetch_binary_url(GITHUB_RAW_FIELD_OFFICE_PDF)
-FIELD_OFFICE_MAP: Dict[str, str] = {}
-if fetched_field_bytes:
-    try:
-        FIELD_OFFICE_MAP = parse_field_office_pdf_bytes(fetched_field_bytes)
-    except Exception:
-        FIELD_OFFICE_MAP = {}
+# Apply FIELD_OFFICE_MAP to ZIP_DB where city matches
+def normalize_key(s: str) -> str:
+    return re.sub(r"[^\w]", "", (s or "").upper())
 
-# Si on a mapping de bureaux, appliquer aux ZIP_DB (si city correspond)
-if FIELD_OFFICE_MAP:
-    for z, info in list(ZIP_DB.items()):
-        city = (info.get("city") or "").strip().upper()
-        if city and city in FIELD_OFFICE_MAP:
-            ZIP_DB[z]["office"] = FIELD_OFFICE_MAP[city]
+# Build normalized mapping for approximate matching
+norm_field_map = {normalize_key(k): v for k, v in FIELD_OFFICE_MAP.items()}
+
+for z, info in ZIP_DB.items():
+    city = (info.get("city") or "").strip()
+    if city:
+        key = normalize_key(city)
+        if key in norm_field_map:
+            ZIP_DB[z]["office"] = norm_field_map[key]
         else:
-            # tentative de correspondance approximative : comparer sans accents et en enlevant espaces/points
-            def normalize(s: str) -> str:
-                s2 = s.upper()
-                s2 = re.sub(r"[^\w]", "", s2)
-                return s2
-            norm_city = normalize(info.get("city", ""))
-            for fc, office_label in FIELD_OFFICE_MAP.items():
-                if normalize(fc) == norm_city:
-                    ZIP_DB[z]["office"] = office_label
-                    break
+            # try partial match: remove parenthesis content and try again
+            city_simple = re.sub(r"\(.*?\)", "", city).strip()
+            key2 = normalize_key(city_simple)
+            if key2 in norm_field_map:
+                ZIP_DB[z]["office"] = norm_field_map[key2]
+            else:
+                ZIP_DB[z]["office"] = ""  # leave empty if no match
 
-# Construire indices inverses
+# -------------------------
+# Build indices
 def build_indices(zip_db: Dict[str, Dict[str, str]]):
     city_to_zips: Dict[str, List[str]] = {}
     office_to_zips: Dict[str, List[str]] = {}
@@ -272,7 +268,28 @@ def build_indices(zip_db: Dict[str, Dict[str, str]]):
 CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
 
 # -------------------------
-# CSS minimal (garder propre)
+# PDF417 optional import
+_PDF417_AVAILABLE = False
+try:
+    from pdf417gen import encode, render_svg
+    _PDF417_AVAILABLE = True
+except Exception:
+    _PDF417_AVAILABLE = False
+
+def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
+    if not _PDF417_AVAILABLE:
+        raise RuntimeError("Module pdf417gen non disponible.")
+    codes = encode(data_bytes, columns=columns, security_level=security_level, force_binary=False)
+    svg_tree = render_svg(codes, scale=scale, ratio=ratio, color=color)
+    try:
+        import xml.etree.ElementTree as ET
+        svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
+        return svg_bytes.decode("utf-8")
+    except Exception:
+        return str(svg_tree)
+
+# -------------------------
+# UI: minimal, clean interface (no debug panels)
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -289,8 +306,7 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 </style>
 """, unsafe_allow_html=True)
 
-# -------------------------
-# Sidebar : paramètres PDF417 uniquement (pas d'affichage source)
+# Sidebar: PDF417 params only
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2)
@@ -299,36 +315,7 @@ ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
 color_param = st.sidebar.color_picker("Couleur du code", "#000000")
 
 # -------------------------
-# PDF417 import attempt
-_PDF417_AVAILABLE = False
-try:
-    from pdf417gen import encode, render_svg
-    _PDF417_AVAILABLE = True
-except Exception:
-    try:
-        import pdf417gen
-        from pdf417gen import encode, render_svg
-        _PDF417_AVAILABLE = True
-    except Exception:
-        _PDF417_AVAILABLE = False
-
-def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
-    if not _PDF417_AVAILABLE:
-        raise RuntimeError("Module pdf417gen non disponible.")
-    codes = encode(data_bytes, columns=columns, security_level=security_level, force_binary=False)
-    svg_tree = render_svg(codes, scale=scale, ratio=ratio, color=color)
-    try:
-        import xml.etree.ElementTree as ET
-        svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
-        return svg_bytes.decode("utf-8")
-    except Exception:
-        return str(svg_tree)
-
-# -------------------------
-# Formulaire principal
-st.title("Générateur officiel de permis CA")
-
-# Defaults session_state
+# Session defaults
 defaults = {
     "ln_input": "HARMS",
     "fn_input": "ROSA",
@@ -354,7 +341,8 @@ for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# Synchronisation callbacks
+# -------------------------
+# Synchronization callbacks
 def update_from_zip():
     z = st.session_state.get("zip_select", "").strip()
     z_digits = re.sub(r"\D", "", z)
@@ -403,7 +391,10 @@ def update_from_office():
     else:
         st.info("Aucune correspondance ZIP connue pour ce bureau dans la base locale.")
 
+# -------------------------
 # Widgets
+st.title("Générateur officiel de permis CA")
+
 ln = st.text_input("Nom de famille", st.session_state["ln_input"], key="ln_input")
 fn = st.text_input("Prénom", st.session_state["fn_input"], key="fn_input")
 address1 = st.text_input("Adresse (ligne 1)", st.session_state["address1_input"], key="address1_input")
@@ -462,7 +453,7 @@ iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_
 generate = st.button("Générer la carte")
 
 # -------------------------
-# Validation & génération
+# Validation & generation helpers
 def validate_inputs() -> List[str]:
     errors: List[str] = []
     if not st.session_state.get("ln_input", "").strip():
@@ -539,6 +530,8 @@ def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
     buffer.seek(0)
     return buffer.read()
 
+# -------------------------
+# Generate card and outputs
 if generate:
     errs = validate_inputs()
     if errs:
@@ -602,7 +595,7 @@ if generate:
     aamva = build_aamva_tags(fields)
     data_bytes = aamva.encode("utf-8")
 
-    # photo par défaut
+    # photo default
     IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
     IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
     photo_src = IMAGE_M_URL if st.session_state.get("sex_input") == "M" else IMAGE_F_URL
@@ -645,20 +638,6 @@ if generate:
     st.subheader("Payload AAMVA (brut)")
     st.code(aamva, language="text")
 
-    if st.button("Afficher AAMVA JSON parsé"):
-        def parse_payload(payload: str) -> Dict[str,str]:
-            s = payload.replace("\r\n","\n").replace("\r","\n")
-            s = s.lstrip("\n\r @\u001e")
-            lines = [ln for ln in s.split("\n") if ln.strip()]
-            result = {}
-            for ln in lines:
-                m = re.match(r"^([A-Z]{3})(.*)$", ln)
-                if m:
-                    result[m.group(1)] = m.group(2).strip()
-            return result
-        st.json(parse_payload(aamva))
-
-    # PDF417
     if _PDF417_AVAILABLE:
         try:
             svg_str = generate_pdf417_svg(data_bytes, columns=columns_param, security_level=security_level_param, scale=scale_param, ratio=ratio_param, color=color_param)
@@ -666,35 +645,25 @@ if generate:
             components.html(svg_html, height=220, scrolling=True)
         except Exception as e:
             st.error("Erreur génération PDF417 : " + str(e))
-            st.info("Vérifiez le module pdf417gen dans le dossier vendorisé.")
     else:
-        st.warning("pdf417gen non disponible. Vendorisez le module si vous voulez afficher PDF417.")
+        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché.")
 
-    cols = st.columns(2)
-    with cols[0]:
-        if _PDF417_AVAILABLE:
-            try:
-                svg_bytes = svg_str.encode("utf-8")
-                st.download_button("Télécharger PDF417 (SVG)", data=svg_bytes, file_name="pdf417.svg", mime="image/svg+xml")
-            except Exception:
-                pass
-    with cols[1]:
-        pdf_bytes = create_pdf_bytes({
-            "Nom": ln_val,
-            "Prénom": fn_val,
-            "Sexe": st.session_state.get("sex_input"),
-            "DOB": st.session_state["dob_input"].strftime("%m/%d/%Y"),
-            "Adresse": f"{address1_val} {address2_val}".strip(),
-            "Ville": city_val,
-            "État": state_val,
-            "Code postal": postal_val,
-            "Field Office": office_choice,
-            "DD": dd,
-            "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"),
-            "EXP": exp.strftime("%m/%d/%Y"),
-            "Classe": cls_disp,
-            "Restrictions": rstr_disp,
-            "Endorsements": endorse_disp,
-            "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
-        }, photo_bytes=photo_bytes)
-        st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
+    pdf_bytes = create_pdf_bytes({
+        "Nom": ln_val,
+        "Prénom": fn_val,
+        "Sexe": st.session_state.get("sex_input"),
+        "DOB": st.session_state["dob_input"].strftime("%m/%d/%Y"),
+        "Adresse": f"{address1_val} {address2_val}".strip(),
+        "Ville": city_val,
+        "État": state_val,
+        "Code postal": postal_val,
+        "Field Office": office_choice,
+        "DD": dd,
+        "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"),
+        "EXP": exp.strftime("%m/%d/%Y"),
+        "Classe": cls_disp,
+        "Restrictions": rstr_disp,
+        "Endorsements": endorse_disp,
+        "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
+    }, photo_bytes=photo_bytes)
+    st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
