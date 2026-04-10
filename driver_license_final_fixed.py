@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Générateur de permis CA (Streamlit)
-# Version corrigée : lookup ZIP <-> city <-> field office, boutons "Appliquer", debug visible.
+# Version complète : menus déroulants recherchables pour ZIP / Ville / Field Office,
+# synchronisation bidirectionnelle et génération AAMVA + PDF417.
 # Remplace entièrement le fichier précédent par celui-ci.
+#
+# Requirements (ajouter dans requirements.txt si nécessaire):
+# streamlit, requests, reportlab, pdf417gen (optionnel si vendorisé)
 
 import streamlit as st
 import datetime
@@ -13,7 +17,7 @@ import base64
 import requests
 import re
 import streamlit.components.v1 as components
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 # PDF generation
 from reportlab.lib.pagesizes import letter
@@ -24,22 +28,27 @@ st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
 # Petite "base de données" ZIP -> city/state/office
-ZIP_DB = {
+# Étends ZIP_DB avec ton fichier complet si nécessaire.
+ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": "Baie de San Francisco — Corte Madera (525)"},
     "95818": {"city": "Sacramento", "state": "CA", "office": "Sacramento / Nord — Sacramento (Broadway) (500)"},
     "94102": {"city": "San Francisco", "state": "CA", "office": "Baie de San Francisco — San Francisco (503)"},
     "94015": {"city": "Daly City", "state": "CA", "office": "Baie de San Francisco — Daly City (599)"},
 }
 
-# Reverse indices
-CITY_TO_ZIPS: Dict[str, list] = {}
-OFFICE_TO_ZIPS: Dict[str, list] = {}
-for z, info in ZIP_DB.items():
-    city_u = info["city"].upper()
-    CITY_TO_ZIPS.setdefault(city_u, []).append(z)
-    office = info.get("office")
-    if office:
-        OFFICE_TO_ZIPS.setdefault(office, []).append(z)
+# Build reverse indices for quick lookup
+def build_indices(zip_db: Dict[str, Dict[str, str]]):
+    city_to_zips: Dict[str, List[str]] = {}
+    office_to_zips: Dict[str, List[str]] = {}
+    for z, info in zip_db.items():
+        city_u = info["city"].upper()
+        city_to_zips.setdefault(city_u, []).append(z)
+        office = info.get("office")
+        if office:
+            office_to_zips.setdefault(office, []).append(z)
+    return city_to_zips, office_to_zips
+
+CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
 
 # -------------------------
 # Images par défaut (M / F)
@@ -48,7 +57,8 @@ IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/exte
 
 # -------------------------
 # CSS (simple)
-st.markdown("""
+st.markdown(
+    """
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
 html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
@@ -63,7 +73,9 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 .badge { background:white; color:#1e3a8a; padding:2px 6px; border-radius:6px; font-weight:700; }
 .debug { font-size:12px; background:#f6f6f6; padding:8px; border-radius:6px; margin-top:12px; color:#111; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # -------------------------
 # Sidebar PDF417 params
@@ -77,77 +89,78 @@ st.sidebar.markdown("Si pdf417gen n'est pas complet, l'app affichera un message 
 
 # -------------------------
 # Offices (liste complète)
-offices = {
-    "Baie de San Francisco — Corte Madera (525)": 525,
-    "Baie de San Francisco — Daly City (599)": 599,
-    "Baie de San Francisco — El Cerrito (585)": 585,
-    "Baie de San Francisco — Fremont (643)": 643,
-    "Baie de San Francisco — Hayward (521)": 521,
-    "Baie de San Francisco — Los Gatos (641)": 641,
-    "Baie de San Francisco — Novato (647)": 647,
-    "Baie de San Francisco — Oakland (Claremont) (501)": 501,
-    "Baie de San Francisco — Oakland (Coliseum) (604)": 604,
-    "Baie de San Francisco — Pittsburg (651)": 651,
-    "Baie de San Francisco — Pleasanton (639)": 639,
-    "Baie de San Francisco — Redwood City (542)": 542,
-    "Baie de San Francisco — San Francisco (503)": 503,
-    "Baie de San Francisco — San Jose (Alma) (516)": 516,
-    "Baie de San Francisco — San Jose (Driver License Center) (607)": 607,
-    "Baie de San Francisco — San Mateo (594)": 594,
-    "Baie de San Francisco — Santa Clara (632)": 632,
-    "Baie de San Francisco — Vallejo (538)": 538,
-    "Grand Los Angeles — Arleta (628)": 628,
-    "Grand Los Angeles — Bellflower (610)": 610,
-    "Grand Los Angeles — Culver City (514)": 514,
-    "Grand Los Angeles — Glendale (540)": 540,
-    "Grand Los Angeles — Hollywood (633)": 633,
-    "Grand Los Angeles — Inglewood (544)": 544,
-    "Grand Los Angeles — Long Beach (507)": 507,
-    "Grand Los Angeles — Los Angeles (Hope St) (502)": 502,
-    "Grand Los Angeles — Montebello (531)": 531,
-    "Grand Los Angeles — Pasadena (510)": 510,
-    "Grand Los Angeles — Santa Monica (548)": 548,
-    "Grand Los Angeles — Torrance (592)": 592,
-    "Grand Los Angeles — West Covina (591)": 591,
-    "Orange County / Sud — Costa Mesa (627)": 627,
-    "Orange County / Sud — Fullerton (547)": 547,
-    "Orange County / Sud — Laguna Hills (642)": 642,
-    "Orange County / Sud — Santa Ana (529)": 529,
-    "Orange County / Sud — San Clemente (652)": 652,
-    "Orange County / Sud — Westminster (623)": 623,
-    "San Diego & Environs — Chula Vista (609)": 609,
-    "San Diego & Environs — El Cajon (549)": 549,
-    "San Diego & Environs — Oceanside (593)": 593,
-    "San Diego & Environs — San Diego (Clairemont) (618)": 618,
-    "San Diego & Environs — San Diego (Normal St) (504)": 504,
-    "San Diego & Environs — San Marcos (637)": 637,
-    "San Diego & Environs — San Ysidro (649)": 649,
-    "Sacramento / Nord — Auburn (533)": 533,
-    "Sacramento / Nord — Chico (534)": 534,
-    "Sacramento / Nord — Eureka (522)": 522,
-    "Sacramento / Nord — Redding (550)": 550,
-    "Sacramento / Nord — Roseville (635)": 635,
-    "Sacramento / Nord — Sacramento (Broadway) (500)": 500,
-    "Sacramento / Nord — Sacramento (South) (603)": 603,
-    "Sacramento / Nord — Woodland (535)": 535,
-    "Vallée Centrale — Bakersfield (511)": 511,
-    "Vallée Centrale — Fresno (505)": 505,
-    "Vallée Centrale — Lodi (595)": 595,
-    "Vallée Centrale — Modesto (536)": 536,
-    "Vallée Centrale — Stockton (517)": 517,
-    "Vallée Centrale — Visalia (519)": 519
-}
+OFFICE_LIST = [
+    "Baie de San Francisco — Corte Madera (525)",
+    "Baie de San Francisco — Daly City (599)",
+    "Baie de San Francisco — El Cerrito (585)",
+    "Baie de San Francisco — Fremont (643)",
+    "Baie de San Francisco — Hayward (521)",
+    "Baie de San Francisco — Los Gatos (641)",
+    "Baie de San Francisco — Novato (647)",
+    "Baie de San Francisco — Oakland (Claremont) (501)",
+    "Baie de San Francisco — Oakland (Coliseum) (604)",
+    "Baie de San Francisco — Pittsburg (651)",
+    "Baie de San Francisco — Pleasanton (639)",
+    "Baie de San Francisco — Redwood City (542)",
+    "Baie de San Francisco — San Francisco (503)",
+    "Baie de San Francisco — San Jose (Alma) (516)",
+    "Baie de San Francisco — San Jose (Driver License Center) (607)",
+    "Baie de San Francisco — San Mateo (594)",
+    "Baie de San Francisco — Santa Clara (632)",
+    "Baie de San Francisco — Vallejo (538)",
+    "Grand Los Angeles — Arleta (628)",
+    "Grand Los Angeles — Bellflower (610)",
+    "Grand Los Angeles — Culver City (514)",
+    "Grand Los Angeles — Glendale (540)",
+    "Grand Los Angeles — Hollywood (633)",
+    "Grand Los Angeles — Inglewood (544)",
+    "Grand Los Angeles — Long Beach (507)",
+    "Grand Los Angeles — Los Angeles (Hope St) (502)",
+    "Grand Los Angeles — Montebello (531)",
+    "Grand Los Angeles — Pasadena (510)",
+    "Grand Los Angeles — Santa Monica (548)",
+    "Grand Los Angeles — Torrance (592)",
+    "Grand Los Angeles — West Covina (591)",
+    "Orange County / Sud — Costa Mesa (627)",
+    "Orange County / Sud — Fullerton (547)",
+    "Orange County / Sud — Laguna Hills (642)",
+    "Orange County / Sud — Santa Ana (529)",
+    "Orange County / Sud — San Clemente (652)",
+    "Orange County / Sud — Westminster (623)",
+    "San Diego & Environs — Chula Vista (609)",
+    "San Diego & Environs — El Cajon (549)",
+    "San Diego & Environs — Oceanside (593)",
+    "San Diego & Environs — San Diego (Clairemont) (618)",
+    "San Diego & Environs — San Diego (Normal St) (504)",
+    "San Diego & Environs — San Marcos (637)",
+    "San Diego & Environs — San Ysidro (649)",
+    "Sacramento / Nord — Auburn (533)",
+    "Sacramento / Nord — Chico (534)",
+    "Sacramento / Nord — Eureka (522)",
+    "Sacramento / Nord — Redding (550)",
+    "Sacramento / Nord — Roseville (635)",
+    "Sacramento / Nord — Sacramento (Broadway) (500)",
+    "Sacramento / Nord — Sacramento (South) (603)",
+    "Sacramento / Nord — Woodland (535)",
+    "Vallée Centrale — Bakersfield (511)",
+    "Vallée Centrale — Fresno (505)",
+    "Vallée Centrale — Lodi (595)",
+    "Vallée Centrale — Modesto (536)",
+    "Vallée Centrale — Stockton (517)",
+    "Vallée Centrale — Visalia (519)",
+]
 
 # -------------------------
-# Initialisation session_state sûre
+# Session state defaults (safe init)
 defaults = {
     "ln_input": "HARMS",
     "fn_input": "ROSA",
     "address1_input": "2570 24TH STREET",
     "address2_input": "",
-    "postal_code_input": "94925",
-    "city_input": "Corte Madera",
-    "state_input": "CA",
+    "zip_select": "94925",
+    "city_select": ZIP_DB.get("94925", {}).get("city", "Corte Madera"),
+    "state_input": ZIP_DB.get("94925", {}).get("state", "CA"),
+    "office_select": ZIP_DB.get("94925", {}).get("office", OFFICE_LIST[0]),
     "sex_input": "M",
     "dob_input": datetime.date(1990, 1, 1),
     "h1_input": 5,
@@ -159,14 +172,13 @@ defaults = {
     "rstr_input": "NONE",
     "endorse_input": "NONE",
     "iss_input": datetime.date.today(),
-    "office_choice": list(offices.keys())[0],
 }
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
 # -------------------------
-# Fonctions utilitaires
+# Utility functions
 def seed(*x):
     parts = []
     for item in x:
@@ -191,56 +203,38 @@ def next_sequence(r):
     return str(r.randint(10, 99))
 
 # -------------------------
-# Lookup functions (utilisées par les boutons)
-def apply_postal_code_lookup():
-    pc = st.session_state.get("postal_code_input", "").strip()
-    pc_digits = re.sub(r"\D", "", pc)[:10]
-    if pc_digits in ZIP_DB:
-        info = ZIP_DB[pc_digits]
-        st.session_state["city_input"] = info.get("city", st.session_state.get("city_input"))
-        st.session_state["state_input"] = info.get("state", st.session_state.get("state_input"))
-        office_name = info.get("office")
-        if office_name and office_name in offices:
-            st.session_state["office_choice"] = office_name
-        st.success(f"Lookup ZIP {pc_digits} → {info['city']}, {info['state']}")
-    else:
-        st.warning(f"Code postal {pc_digits} non trouvé dans la base locale.")
+# Synchronization callbacks for selectboxes
+def update_from_zip():
+    z = st.session_state["zip_select"]
+    info = ZIP_DB.get(z)
+    if info:
+        st.session_state["city_select"] = info["city"]
+        st.session_state["state_input"] = info["state"]
+        st.session_state["office_select"] = info["office"]
 
-def apply_city_lookup():
-    city_val = st.session_state.get("city_input", "").strip().upper()
-    if not city_val:
-        st.warning("Ville vide.")
-        return
-    zips = CITY_TO_ZIPS.get(city_val)
+def update_from_city():
+    city = st.session_state["city_select"].strip().upper()
+    # find first matching zip
+    zips = CITY_TO_ZIPS.get(city)
     if zips:
         chosen = zips[0]
+        st.session_state["zip_select"] = chosen
         info = ZIP_DB[chosen]
-        st.session_state["postal_code_input"] = chosen
-        st.session_state["state_input"] = info.get("state", st.session_state.get("state_input"))
-        if info.get("office") in offices:
-            st.session_state["office_choice"] = info.get("office")
-        st.success(f"Lookup Ville {city_val} → ZIP {chosen}")
-    else:
-        st.warning(f"Ville '{city_val}' non trouvée dans la base locale.")
+        st.session_state["state_input"] = info["state"]
+        st.session_state["office_select"] = info["office"]
 
-def apply_office_lookup():
-    office_val = st.session_state.get("office_choice", "")
-    if not office_val:
-        st.warning("Field Office vide.")
-        return
-    zips = OFFICE_TO_ZIPS.get(office_val)
+def update_from_office():
+    office = st.session_state["office_select"]
+    zips = OFFICE_TO_ZIPS.get(office)
     if zips:
         chosen = zips[0]
+        st.session_state["zip_select"] = chosen
         info = ZIP_DB[chosen]
-        st.session_state["postal_code_input"] = chosen
-        st.session_state["city_input"] = info.get("city", st.session_state.get("city_input"))
-        st.session_state["state_input"] = info.get("state", st.session_state.get("state_input"))
-        st.success(f"Lookup Office → ZIP {chosen}, Ville {info.get('city')}")
-    else:
-        st.info("Aucune correspondance ZIP connue pour ce bureau dans la base locale.")
+        st.session_state["city_select"] = info["city"]
+        st.session_state["state_input"] = info["state"]
 
 # -------------------------
-# Parser AAMVA minimal (pour debug)
+# Parser AAMVA minimal (for debug)
 AAMVA_MAP = {
     "DCS": "last_name", "DAC": "first_name", "DCT": "full_name_trunc",
     "DBB": "date_of_birth", "DBA": "expiration_date", "DBD": "issue_date",
@@ -369,11 +363,14 @@ fn = st.text_input("Prénom", st.session_state["fn_input"], key="fn_input")
 address1 = st.text_input("Adresse (ligne 1)", st.session_state["address1_input"], key="address1_input")
 address2 = st.text_input("Adresse (ligne 2)", st.session_state["address2_input"], key="address2_input")
 
-postal_col, city_col = st.columns([2, 3])
-with postal_col:
-    postal_code = st.text_input("Code postal", st.session_state["postal_code_input"], key="postal_code_input")
-with city_col:
-    city = st.text_input("Ville", st.session_state["city_input"], key="city_input")
+# Selectable, searchable lists
+zip_options = sorted(ZIP_DB.keys())
+city_options = sorted({info["city"] for info in ZIP_DB.values()})
+office_options = sorted({info["office"] for info in ZIP_DB.values()})
+
+zip_select = st.selectbox("Code postal", zip_options, index=zip_options.index(st.session_state["zip_select"]) if st.session_state["zip_select"] in zip_options else 0, key="zip_select", on_change=update_from_zip)
+city_select = st.selectbox("Ville", city_options, index=city_options.index(st.session_state["city_select"]) if st.session_state["city_select"] in city_options else 0, key="city_select", on_change=update_from_city)
+office_select = st.selectbox("Field Office", office_options + [o for o in OFFICE_LIST if o not in office_options], index=(office_options + [o for o in OFFICE_LIST if o not in office_options]).index(st.session_state["office_select"]) if st.session_state["office_select"] in (office_options + [o for o in OFFICE_LIST if o not in office_options]) else 0, key="office_select", on_change=update_from_office)
 
 state = st.text_input("État (abbrev.)", st.session_state["state_input"], key="state_input")
 sex = st.selectbox("Sexe", ["M", "F"], index=0 if st.session_state["sex_input"] == "M" else 1, key="sex_input")
@@ -392,23 +389,6 @@ rstr = st.text_input("Restrictions", st.session_state["rstr_input"], key="rstr_i
 endorse = st.text_input("Endorsements", st.session_state["endorse_input"], key="endorse_input")
 iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_input")
 
-office_list = list(offices.keys())
-if st.session_state.get("office_choice") not in office_list:
-    st.session_state["office_choice"] = office_list[0]
-office_choice = st.selectbox("Field Office", office_list, index=office_list.index(st.session_state["office_choice"]), key="office_choice")
-
-# Buttons to apply lookups (explicit, reliable)
-c1, c2, c3 = st.columns(3)
-with c1:
-    if st.button("Appliquer code postal"):
-        apply_postal_code_lookup()
-with c2:
-    if st.button("Appliquer ville"):
-        apply_city_lookup()
-with c3:
-    if st.button("Appliquer bureau"):
-        apply_office_lookup()
-
 generate = st.button("Générer la carte")
 
 # Debug panel (visible)
@@ -417,8 +397,8 @@ st.code({k: st.session_state[k] for k in sorted(st.session_state.keys())}, langu
 
 # -------------------------
 # VALIDATIONS et génération
-def validate_inputs():
-    errors = []
+def validate_inputs() -> List[str]:
+    errors: List[str] = []
     if not st.session_state.get("ln_input", "").strip():
         errors.append("Nom de famille requis.")
     if not st.session_state.get("fn_input", "").strip():
@@ -433,11 +413,11 @@ def validate_inputs():
         errors.append("Taille hors plage attendue.")
     if not st.session_state.get("address1_input", "").strip():
         errors.append("Adresse (ligne 1) requise.")
-    if not st.session_state.get("city_input", "").strip():
+    if not st.session_state.get("city_select", "").strip():
         errors.append("Ville requise.")
     if not st.session_state.get("state_input", "").strip():
         errors.append("État requis.")
-    if not st.session_state.get("postal_code_input", "").strip():
+    if not st.session_state.get("zip_select", "").strip():
         errors.append("Code postal requis.")
     return errors
 
@@ -461,9 +441,9 @@ if generate:
     fn_val = st.session_state["fn_input"]
     address1_val = st.session_state["address1_input"]
     address2_val = st.session_state["address2_input"]
-    city_val = st.session_state["city_input"]
+    city_val = st.session_state["city_select"]
     state_val = st.session_state["state_input"]
-    postal_val = re.sub(r"\D", "", st.session_state["postal_code_input"])[:10]
+    postal_val = st.session_state["zip_select"]
 
     r = random.Random(seed(ln_val, fn_val, st.session_state["dob_input"]))
     dl = rletter(r, ln_val[0] if ln_val else "") + rdigits(r, 7)
@@ -478,7 +458,12 @@ if generate:
             last_day = (datetime.date(exp_year, st.session_state["dob_input"].month % 12 + 1, 1) - datetime.timedelta(days=1)).day
             exp = datetime.date(exp_year, st.session_state["dob_input"].month, min(st.session_state["dob_input"].day, last_day))
 
-    office_code = offices[st.session_state["office_choice"]]
+    # Field office chosen from selectbox
+    office_choice = st.session_state["office_select"]
+    # office_code fallback: try to find numeric code in parentheses
+    m = re.search(r"\((\d{3})\)", office_choice)
+    office_code = int(m.group(1)) if m else 0
+
     seq = next_sequence(r).zfill(2)
     dd = f"{st.session_state['iss_input'].strftime('%m/%d/%Y')}{office_code}/{seq}FD/{st.session_state['iss_input'].year%100}"
 
@@ -500,7 +485,7 @@ if generate:
         "DAH": address2_val.upper() if address2_val else None,
         "DAI": city_val.upper(),
         "DAJ": state_val.upper(),
-        "DAK": postal_val,
+        "DAK": re.sub(r"\D", "", postal_val)[:10],
         "DCF": dd,
         "DAU": f"{int(st.session_state.get('h1_input', 0))}{int(st.session_state.get('h2_input', 0))}",
         "DAY": eyes_disp,
@@ -523,33 +508,29 @@ if generate:
     else:
         photo_html = f"<div class='photo'><img src='{photo_src}' alt='photo par défaut'/></div>"
 
-    html = f"""
-    <div class="card">
-        <div class="header">
-            <div>CALIFORNIA USA DRIVER LICENSE</div>
-            <div class="badge">{dl}</div>
-        </div>
-        <div class="body">
-            {photo_html}
-            <div class="info">
-                <div class="label">Nom</div><div class="value">{ln_val}</div>
-                <div class="label">Prénom</div><div class="value">{fn_val}</div>
-                <div class="label">Sexe</div><div class="value">{st.session_state.get('sex_input')}</div>
-                <div class="label">DOB</div><div class="value">{st.session_state['dob_input'].strftime('%m/%d/%Y')}</div>
-                <div class="label">Adresse</div><div class="value">{address1_val} {address2_val}</div>
-                <div class="label">Ville / État / Code postal</div><div class="value">{city_val} / {state_val} / {postal_val}</div>
-                <div class="label">Field Office</div><div class="value">{st.session_state['office_choice']}</div>
-                <div class="label">DD</div><div class="value">{dd}</div>
-                <div class="label">ISS</div><div class="value">{st.session_state['iss_input'].strftime('%m/%d/%Y')}</div>
-                <div class="label">EXP</div><div class="value">{exp.strftime('%m/%d/%Y')}</div>
-                <div class="label">Classe</div><div class="value">{cls_disp}</div>
-                <div class="label">Restrictions</div><div class="value">{rstr_disp}</div>
-                <div class="label">Endorsements</div><div class="value">{endorse_disp}</div>
-                <div class="label">Yeux / Cheveux / Taille / Poids</div><div class="value">{eyes_disp} / {hair_disp} / {height_str} / {w} lb</div>
-            </div>
-        </div>
-    </div>
-    """
+    html = (
+        "<div class='card'>"
+        "<div class='header'><div>CALIFORNIA USA DRIVER LICENSE</div>"
+        f"<div class='badge'>{dl}</div></div>"
+        "<div class='body'>"
+        f"{photo_html}"
+        "<div class='info'>"
+        "<div class='label'>Nom</div><div class='value'>" + ln_val + "</div>"
+        "<div class='label'>Prénom</div><div class='value'>" + fn_val + "</div>"
+        "<div class='label'>Sexe</div><div class='value'>" + st.session_state.get("sex_input") + "</div>"
+        "<div class='label'>DOB</div><div class='value'>" + st.session_state["dob_input"].strftime("%m/%d/%Y") + "</div>"
+        "<div class='label'>Adresse</div><div class='value'>" + f"{address1_val} {address2_val}" + "</div>"
+        "<div class='label'>Ville / État / Code postal</div><div class='value'>" + f"{city_val} / {state_val} / {postal_val}" + "</div>"
+        "<div class='label'>Field Office</div><div class='value'>" + office_choice + "</div>"
+        "<div class='label'>DD</div><div class='value'>" + dd + "</div>"
+        "<div class='label'>ISS</div><div class='value'>" + st.session_state['iss_input'].strftime("%m/%d/%Y") + "</div>"
+        "<div class='label'>EXP</div><div class='value'>" + exp.strftime("%m/%d/%Y") + "</div>"
+        "<div class='label'>Classe</div><div class='value'>" + cls_disp + "</div>"
+        "<div class='label'>Restrictions</div><div class='value'>" + rstr_disp + "</div>"
+        "<div class='label'>Endorsements</div><div class='value'>" + endorse_disp + "</div>"
+        "<div class='label'>Yeux / Cheveux / Taille / Poids</div><div class='value'>" + f"{eyes_disp} / {hair_disp} / {height_str} / {w} lb" + "</div>"
+        "</div></div></div>"
+    )
     st.markdown(html, unsafe_allow_html=True)
 
     st.subheader("Payload AAMVA (brut)")
@@ -562,7 +543,14 @@ if generate:
     svg_str = None
     if _PDF417_AVAILABLE:
         try:
-            svg_str = generate_pdf417_svg(data_bytes, columns=columns_param, security_level=security_level_param, scale=scale_param, ratio=ratio_param, color=color_param)
+            svg_str = generate_pdf417_svg(
+                data_bytes,
+                columns=columns_param,
+                security_level=security_level_param,
+                scale=scale_param,
+                ratio=ratio_param,
+                color=color_param,
+            )
             svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
             components.html(svg_html, height=220, scrolling=True)
         except Exception as e:
@@ -577,22 +565,25 @@ if generate:
             svg_bytes = svg_str.encode("utf-8")
             st.download_button("Télécharger PDF417 (SVG)", data=svg_bytes, file_name="pdf417.svg", mime="image/svg+xml")
     with cols[1]:
-        pdf_bytes = create_pdf_bytes({
-            "Nom": ln_val,
-            "Prénom": fn_val,
-            "Sexe": st.session_state.get("sex_input"),
-            "DOB": st.session_state["dob_input"].strftime("%m/%d/%Y"),
-            "Adresse": f"{address1_val} {address2_val}".strip(),
-            "Ville": city_val,
-            "État": state_val,
-            "Code postal": postal_val,
-            "Field Office": st.session_state["office_choice"],
-            "DD": dd,
-            "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"),
-            "EXP": exp.strftime("%m/%d/%Y"),
-            "Classe": cls_disp,
-            "Restrictions": rstr_disp,
-            "Endorsements": endorse_disp,
-            "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
-        }, photo_bytes=photo_bytes)
+        pdf_bytes = create_pdf_bytes(
+            {
+                "Nom": ln_val,
+                "Prénom": fn_val,
+                "Sexe": st.session_state.get("sex_input"),
+                "DOB": st.session_state["dob_input"].strftime("%m/%d/%Y"),
+                "Adresse": f"{address1_val} {address2_val}".strip(),
+                "Ville": city_val,
+                "État": state_val,
+                "Code postal": postal_val,
+                "Field Office": office_choice,
+                "DD": dd,
+                "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"),
+                "EXP": exp.strftime("%m/%d/%Y"),
+                "Classe": cls_disp,
+                "Restrictions": rstr_disp,
+                "Endorsements": endorse_disp,
+                "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb",
+            },
+            photo_bytes=photo_bytes,
+        )
         st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
