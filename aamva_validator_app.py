@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # aamva_validator_app.py
 # Streamlit app — Validateur et générateur d'exemples AAMVA / PDF417
-# But: vérifier header, séparateurs, dates, encodage, champs obligatoires et donner recommandations.
+# Ajout : détection automatique des erreurs courantes et génération d'une version corrigée.
 #
 # Usage: streamlit run aamva_validator_app.py
 
@@ -16,28 +16,12 @@ st.set_page_config(page_title="AAMVA Validator & Example", layout="centered")
 # Utilitaires de validation
 GS = "\x1E"  # Group Separator (AAMVA uses 0x1E between data elements)
 REQUIRED_TAGS = [
-    "DAQ",  # Driver License / ID Number
-    "DCS",  # Family Name
-    "DAC",  # Given Name
-    "DBB",  # DOB MMDDYYYY
-    "DBA",  # Expiration MMDDYYYY
-    "DBD",  # Issue Date MMDDYYYY
-    "DAG",  # Address 1
-    "DAI",  # City
-    "DAJ",  # State
-    "DAK",  # Postal code
-    "DCF",  # Document discriminator (often present)
+    "DAQ", "DCS", "DAC", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF"
 ]
-
 DATE_TAGS = ["DBB", "DBA", "DBD"]
 
 
 def has_valid_header(payload: str) -> Tuple[bool, str]:
-    """
-    Vérifie la présence d'un header AAMVA correct.
-    Exemples d'en-tête valides : '@\\r\\nANSI 636014080102DL' ou '@\\n\\rANSI 636014080102DL'
-    On vérifie la présence de 'ANSI' et 'DL' et d'un code AAMVA (6360...).
-    """
     if not payload:
         return False, "Payload vide."
     head = payload[:200].upper()
@@ -52,8 +36,8 @@ def uses_group_separator(payload: str) -> Tuple[bool, str]:
     if GS in payload:
         return True, "Séparateur de groupe (0x1E) présent."
     if "\\u001e" in payload or "\\x1E" in payload:
-        return False, "Séparateur trouvé sous forme d'échappement (\\u001e). Remplacer par le caractère 0x1E réel."
-    return False, "Séparateur de groupe (0x1E) absent. Les parseurs AAMVA exigent 0x1E entre champs."
+        return False, "Séparateur trouvé sous forme d'échappement (\\u001e)."
+    return False, "Séparateur de groupe (0x1E) absent."
 
 
 def ends_with_cr(payload: str) -> Tuple[bool, str]:
@@ -85,9 +69,7 @@ def check_date_format(value: str) -> bool:
     if not re.fullmatch(r"\d{8}", value):
         return False
     try:
-        mm = int(value[0:2])
-        dd = int(value[2:4])
-        yyyy = int(value[4:8])
+        mm = int(value[0:2]); dd = int(value[2:4]); yyyy = int(value[4:8])
         datetime.date(yyyy, mm, dd)
         return True
     except Exception:
@@ -141,37 +123,21 @@ def svg_basic_checks(svg_text: str) -> List[str]:
 
 
 def validate_aamva_payload(payload: str) -> Dict[str, List[str]]:
-    errors = []
-    warnings = []
-    infos = []
-
+    errors = []; warnings = []; infos = []
     if not payload or not payload.strip():
-        errors.append("Payload vide.")
-        return {"errors": errors, "warnings": warnings, "infos": infos}
+        errors.append("Payload vide."); return {"errors": errors, "warnings": warnings, "infos": infos}
 
     ok, msg = has_valid_header(payload)
-    if not ok:
-        errors.append(msg)
-    else:
-        infos.append(msg)
+    (infos if ok else errors).append(msg)
 
     ok_gs, msg_gs = uses_group_separator(payload)
-    if not ok_gs:
-        errors.append(msg_gs)
-    else:
-        infos.append(msg_gs)
+    (infos if ok_gs else errors).append(msg_gs)
 
     ok_end, msg_end = ends_with_cr(payload)
-    if not ok_end:
-        warnings.append(msg_end)
-    else:
-        infos.append(msg_end)
+    (infos if ok_end else warnings).append(msg_end)
 
     ok_len, msg_len = minimal_length_check(payload)
-    if not ok_len:
-        warnings.append(msg_len)
-    else:
-        infos.append(msg_len)
+    (infos if ok_len else warnings).append(msg_len)
 
     ok_tags, missing = check_required_tags(payload)
     if not ok_tags:
@@ -186,10 +152,7 @@ def validate_aamva_payload(payload: str) -> Dict[str, List[str]]:
         infos.append("Formats de date OK (MMDDYYYY).")
 
     ok_ascii, ascii_msg = check_ascii(payload)
-    if not ok_ascii:
-        warnings.append(ascii_msg)
-    else:
-        infos.append(ascii_msg)
+    (infos if ok_ascii else warnings).append(ascii_msg)
 
     tags = find_tags(payload)
     infos.append("Tags détectés (extrait) : " + ", ".join(tags[:20]) + ("..." if len(tags) > 20 else ""))
@@ -202,6 +165,65 @@ def validate_aamva_payload(payload: str) -> Dict[str, List[str]]:
     if "\\u001e" in payload or "\\x1E" in payload:
         errors.append("Séparateur trouvé sous forme d'échappement (\\u001e ou \\x1E). Remplacer par le caractère 0x1E réel.")
     return {"errors": errors, "warnings": warnings, "infos": infos}
+
+
+# -------------------------
+# Auto-correction utilities
+def replace_escaped_separators(payload: str) -> str:
+    # Remplace les séquences littérales par le caractère GS réel
+    payload = payload.replace("\\u001e", GS).replace("\\x1E", GS)
+    return payload
+
+
+def ensure_trailing_cr(payload: str) -> str:
+    # Ajoute CR final si absent
+    if not (payload.endswith("\r") or payload.endswith("\r\n") or payload.endswith("\n\r")):
+        return payload + "\r"
+    return payload
+
+
+def normalize_whitespace_around_tags(payload: str) -> str:
+    # Supprime espaces superflus entre tag et valeur (ex: "DAQ H407" -> "DAQH407")
+    # Mais attention : on ne veut pas supprimer les espaces dans les valeurs d'adresse.
+    # On ne touche que aux cas où un tag est suivi d'un espace puis d'un mot sans autre séparateur.
+    def repl(m):
+        tag = m.group(1)
+        val = m.group(2)
+        return f"{tag}{val}"
+    return re.sub(r"([A-Z]{3})\s+([^\x1E\r\n]+)", repl, payload)
+
+
+def auto_correct_payload(payload: str) -> Tuple[str, List[str]]:
+    """
+    Applique des corrections sûres et retourne (corrected_payload, list_of_applied_corrections)
+    Corrections appliquées :
+      - remplacement des séquences échappées \u001e / \x1E par le caractère GS (0x1E)
+      - ajout d'un CR final si manquant
+      - normalisation légère des espaces après tags (prudente)
+    """
+    corrections = []
+    p = payload
+
+    # 1) Remplacer séquences échappées
+    if "\\u001e" in p or "\\x1E" in p:
+        p = replace_escaped_separators(p)
+        corrections.append("Remplacement des séquences échappées '\\u001e' / '\\x1E' par le caractère 0x1E.")
+
+    # 2) Normaliser espaces après tags (prudence)
+    # On n'applique cette correction que si on détecte des patterns tag + espace + token (et pas d'adresse multi-mots juste après)
+    # Exemple sûr : "DAQ H40759" -> "DAQH40759"
+    if re.search(r"[A-Z]{3}\s+[A-Z0-9\-]{1,20}(\x1E|$)", p):
+        p2 = normalize_whitespace_around_tags(p)
+        if p2 != p:
+            p = p2
+            corrections.append("Suppression d'espaces superflus entre tags et valeurs (ex: 'DAQ H407' -> 'DAQH407').")
+
+    # 3) Ajouter CR final si absent
+    if not (p.endswith("\r") or p.endswith("\r\n") or p.endswith("\n\r")):
+        p = ensure_trailing_cr(p)
+        corrections.append("Ajout d'un CR final '\\r'.")
+
+    return p, corrections
 
 
 # -------------------------
@@ -220,21 +242,10 @@ def build_aamva_tags(fields: Dict[str, str]) -> str:
 
 def example_payload() -> str:
     fields = {
-        "DAQ": "H40759",
-        "DCS": "HARMS",
-        "DAC": "ROSA",
-        "DAD": "MARIE",
-        "DBB": "01011990",
-        "DBA": "01012031",
-        "DBD": "04102026",
-        "DAG": "2570 24TH STREET",
-        "DAI": "OAKLAND",
-        "DAJ": "CA",
-        "DAK": "94601",
-        "DCF": "1234567890",
-        "DAU": "510",
-        "DAY": "BRN",
-        "DAZ": "BRN",
+        "DAQ": "H40759", "DCS": "HARMS", "DAC": "ROSA", "DAD": "MARIE",
+        "DBB": "01011990", "DBA": "01012031", "DBD": "04102026",
+        "DAG": "2570 24TH STREET", "DAI": "OAKLAND", "DAJ": "CA", "DAK": "94601",
+        "DCF": "1234567890", "DAU": "510", "DAY": "BRN", "DAZ": "BRN",
     }
     return build_aamva_tags(fields)
 
@@ -254,7 +265,6 @@ if "payload_input" not in st.session_state:
 
 col1, col2 = st.columns([3, 1])
 with col1:
-    # Lier le text_area à st.session_state["payload_input"]
     st.text_area(
         "Payload AAMVA (brut)",
         height=220,
@@ -264,7 +274,6 @@ with col1:
     )
 with col2:
     if st.button("Générer un exemple"):
-        # Mettre à jour la valeur liée au widget via session_state
         st.session_state["payload_input"] = example_payload()
 
 if not st.session_state["payload_input"]:
@@ -277,6 +286,7 @@ else:
         warnings = results["warnings"]
         infos = results["infos"]
 
+        # Affichage des résultats
         if errors:
             st.error(f"Erreurs détectées ({len(errors)}) :")
             for e in errors:
@@ -293,6 +303,41 @@ else:
             st.info("Informations :")
             for i in infos:
                 st.write("- " + i)
+
+        # Proposer une correction automatique si des problèmes simples sont détectés
+        # (séparateur échappé, fin de record manquante, espaces superflus)
+        needs_correction = False
+        correction_reasons = []
+        if any("Séparateur trouvé sous forme d'échappement" in e for e in errors):
+            needs_correction = True
+            correction_reasons.append("séparateur échappé")
+        if any("Fin de record manquante" in w for w in warnings):
+            needs_correction = True
+            correction_reasons.append("fin de record manquante")
+        # also check for tag-space patterns
+        if re.search(r"[A-Z]{3}\s+[A-Z0-9\-]{1,20}(\x1E|$)", payload_input):
+            needs_correction = True
+            correction_reasons.append("espaces superflus après tags")
+
+        if needs_correction:
+            st.markdown("### Version corrigée proposée")
+            corrected, applied = auto_correct_payload(payload_input)
+            if applied:
+                st.markdown("Corrections appliquées :")
+                for a in applied:
+                    st.write("- " + a)
+            else:
+                st.write("- Aucune correction automatique applicable.")
+
+            # Afficher la version corrigée dans une zone éditable pour que l'utilisateur puisse la copier ou l'appliquer
+            st.text_area("Payload corrigé (modifiable)", value=corrected, height=220, key="corrected_payload")
+
+            # Bouton pour appliquer la correction dans la zone principale
+            if st.button("Appliquer la correction au payload principal"):
+                st.session_state["payload_input"] = st.session_state.get("corrected_payload", corrected)
+                st.success("Correction appliquée. Le champ principal a été mis à jour.")
+        else:
+            st.info("Aucune correction automatique nécessaire pour les problèmes détectés.")
 
         st.markdown("### Suggestions automatiques pour corriger les pièges fréquents")
         suggs = []
