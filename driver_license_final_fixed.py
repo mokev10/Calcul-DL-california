@@ -3,11 +3,11 @@
 # Streamlit app — Générateur de permis CA
 # Intègre ZIP_DB depuis GitHub et un dictionnaire field_offices intégré.
 # Ajoute trois options de téléchargement du code-barres PDF417 : SVG, PNG, GIF.
-# Rasterisation SVG->PNG/GIF réalisée en Python en analysant les <rect> du SVG (Pillow required).
+# Ajoute prévisualisation PNG/GIF et prise en charge simple des <path> (M/L/Z) pour rasterisation.
 #
 # Requirements:
 # pip install streamlit requests reportlab pdf417gen pillow
-# If pdf417gen is not available, PDF417 won't be generated; SVG download still works.
+# Si pdf417gen absent, le SVG ne sera pas généré automatiquement mais le reste reste fonctionnel.
 
 import streamlit as st
 import datetime
@@ -18,7 +18,7 @@ import base64
 import requests
 import re
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 import streamlit.components.v1 as components
 
@@ -29,7 +29,7 @@ from reportlab.lib.utils import ImageReader
 
 # Pillow for rasterization
 try:
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageOps
     _PIL_AVAILABLE = True
 except Exception:
     _PIL_AVAILABLE = False
@@ -303,19 +303,19 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
         return str(svg_tree)
 
 # -------------------------
-# Rasterization: parse <rect> elements and draw with Pillow
-def parse_svg_rects(svg_text: str) -> Tuple[Optional[Tuple[int,int]], List[Tuple[int,int,int,int,str]]]:
+# Rasterization helpers: parse <rect> and simple <path> (M/L/Z)
+def parse_svg_shapes(svg_text: str) -> Tuple[Optional[Tuple[int,int]], List[Dict[str,Any]]]:
     """
-    Parse SVG and return (canvas_size (w,h) or None, list of rects).
-    Each rect: (x, y, width, height, fill_color)
-    Works for simple SVGs composed of <rect> elements (as produced by pdf417gen).
+    Retourne (canvas_size, shapes)
+    shapes: list d'objets {type:'rect'|'path', coords:..., fill:...}
     """
+    shapes: List[Dict[str,Any]] = []
     try:
         root = ET.fromstring(svg_text)
     except Exception:
         return None, []
 
-    # Determine width/height from attributes or viewBox
+    # canvas size
     width = root.get('width')
     height = root.get('height')
     viewBox = root.get('viewBox') or root.get('viewbox')
@@ -337,28 +337,84 @@ def parse_svg_rects(svg_text: str) -> Tuple[Optional[Tuple[int,int]], List[Tuple
             except Exception:
                 canvas_size = None
 
-    rects = []
-    # find all rect elements in any namespace
+    # find rects
     for rect in root.findall('.//{http://www.w3.org/2000/svg}rect') + root.findall('.//rect'):
         try:
-            x = int(float(rect.get('x') or 0))
-            y = int(float(rect.get('y') or 0))
-            w = int(float(rect.get('width') or 0))
-            h = int(float(rect.get('height') or 0))
+            x = float(rect.get('x') or 0)
+            y = float(rect.get('y') or 0)
+            w = float(rect.get('width') or 0)
+            h = float(rect.get('height') or 0)
             fill = rect.get('fill') or rect.get('style') or '#000'
-            # if style contains fill: extract
             if 'fill:' in fill and ';' in fill:
                 m = re.search(r'fill:\s*([^;]+)', fill)
                 if m:
                     fill = m.group(1).strip()
-            rects.append((x, y, w, h, fill))
+            shapes.append({'type':'rect','x':x,'y':y,'w':w,'h':h,'fill':fill})
         except Exception:
             continue
-    return canvas_size, rects
+
+    # find simple paths (only absolute M/L/Z supported)
+    for path in root.findall('.//{http://www.w3.org/2000/svg}path') + root.findall('.//path'):
+        d = path.get('d') or ''
+        fill = path.get('fill') or path.get('style') or '#000'
+        if 'fill:' in fill and ';' in fill:
+            m = re.search(r'fill:\s*([^;]+)', fill)
+            if m:
+                fill = m.group(1).strip()
+        pts = parse_path_d_simple(d)
+        if pts:
+            shapes.append({'type':'path','points':pts,'fill':fill})
+    return canvas_size, shapes
+
+def parse_path_d_simple(d: str) -> Optional[List[Tuple[float,float]]]:
+    """
+    Parse a simple path 'd' string supporting absolute commands:
+    M x y L x y L x y ... Z
+    Returns list of points (x,y) or None if unsupported.
+    """
+    if not d or not re.search(r'[MLZmlz]', d):
+        return None
+    # Normalize: remove commas, ensure spaces between commands and numbers
+    s = d.replace(',', ' ')
+    # Tokenize commands and numbers
+    tokens = re.findall(r'[MLZmlz]|-?\d+\.?\d*', s)
+    pts: List[Tuple[float,float]] = []
+    i = 0
+    cur_cmd = None
+    while i < len(tokens):
+        t = tokens[i]
+        if re.fullmatch(r'[MLZmlz]', t):
+            cur_cmd = t
+            i += 1
+            continue
+        # if number encountered without explicit command, assume repeat of last command
+        if cur_cmd is None:
+            return None
+        if cur_cmd.upper() == 'Z':
+            # close path, nothing to read
+            i += 0
+            cur_cmd = None
+            continue
+        # expect pairs of numbers for M or L
+        try:
+            x = float(t)
+            y = float(tokens[i+1])
+            pts.append((x,y))
+            i += 2
+            # if command was 'm' or 'l' (relative), we do not support relative here
+            if cur_cmd.islower():
+                # unsupported relative commands in this simple parser
+                return None
+        except Exception:
+            return None
+    if not pts:
+        return None
+    return pts
 
 def color_to_rgba(color_str: str) -> Tuple[int,int,int,int]:
-    # Accept #RRGGBB or rgb(...) or color names (basic)
     s = (color_str or "").strip()
+    if not s:
+        return (0,0,0,255)
     if s.startswith('#'):
         s = s.lstrip('#')
         if len(s) == 3:
@@ -371,7 +427,6 @@ def color_to_rgba(color_str: str) -> Tuple[int,int,int,int]:
     m = re.match(r'rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)', s)
     if m:
         return (int(m.group(1)), int(m.group(2)), int(m.group(3)), 255)
-    # basic named colors
     named = {
         'black': (0,0,0,255),
         'white': (255,255,255,255),
@@ -381,23 +436,31 @@ def color_to_rgba(color_str: str) -> Tuple[int,int,int,int]:
     }
     return named.get(s.lower(), (0,0,0,255))
 
-def rasterize_rects_to_png_bytes(svg_text: str, scale: int = 3, bg=(255,255,255,255)) -> bytes:
+def rasterize_shapes_to_png_bytes(svg_text: str, scale: int = 3, bg=(255,255,255,255)) -> bytes:
     """
-    Rasterize SVG composed of rects into PNG bytes using Pillow.
-    scale: integer scale factor to enlarge the output for crispness.
+    Rasterize shapes (rects + simple paths) into PNG bytes using Pillow.
+    scale: integer scale factor.
     """
     if not _PIL_AVAILABLE:
         raise RuntimeError("Pillow (PIL) non disponible dans l'environnement.")
 
-    canvas_size, rects = parse_svg_rects(svg_text)
-    if not rects:
-        raise RuntimeError("Aucun élément <rect> trouvé dans le SVG. Rasterisation non supportée pour ce SVG.")
+    canvas_size, shapes = parse_svg_shapes(svg_text)
+    if not shapes:
+        raise RuntimeError("Aucun élément pris en charge (<rect> ou <path> simple) trouvé dans le SVG.")
 
-    # If canvas_size unknown, compute bounding box from rects
+    # compute canvas if missing
     if not canvas_size:
-        max_x = max((x + w) for (x,y,w,h,_) in rects)
-        max_y = max((y + h) for (x,y,w,h,_) in rects)
-        canvas_size = (max_x, max_y)
+        max_x = 0
+        max_y = 0
+        for s in shapes:
+            if s['type'] == 'rect':
+                max_x = max(max_x, s['x'] + s['w'])
+                max_y = max(max_y, s['y'] + s['h'])
+            elif s['type'] == 'path':
+                for (px,py) in s['points']:
+                    max_x = max(max_x, px)
+                    max_y = max(max_y, py)
+        canvas_size = (int(max_x), int(max_y))
 
     w0, h0 = canvas_size
     w = max(1, int(w0 * scale))
@@ -405,20 +468,30 @@ def rasterize_rects_to_png_bytes(svg_text: str, scale: int = 3, bg=(255,255,255,
     img = Image.new("RGBA", (w, h), bg)
     draw = ImageDraw.Draw(img)
 
-    for (x, y, rw, rh, fill) in rects:
-        rgba = color_to_rgba(fill)
-        x1 = int(x * scale)
-        y1 = int(y * scale)
-        x2 = int((x + rw) * scale)
-        y2 = int((y + rh) * scale)
-        draw.rectangle([x1, y1, x2, y2], fill=rgba)
-
+    for s in shapes:
+        if s['type'] == 'rect':
+            x1 = int(s['x'] * scale)
+            y1 = int(s['y'] * scale)
+            x2 = int((s['x'] + s['w']) * scale)
+            y2 = int((s['y'] + s['h']) * scale)
+            rgba = color_to_rgba(s.get('fill'))
+            draw.rectangle([x1, y1, x2, y2], fill=rgba)
+        elif s['type'] == 'path':
+            pts = [(int(px*scale), int(py*scale)) for (px,py) in s['points']]
+            rgba = color_to_rgba(s.get('fill'))
+            # draw polygon (closed)
+            try:
+                draw.polygon(pts, fill=rgba)
+            except Exception:
+                # fallback: draw lines
+                for i in range(len(pts)-1):
+                    draw.line([pts[i], pts[i+1]], fill=rgba)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
 
 # -------------------------
-# UI: clean interface
+# UI: clean interface (styles)
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -432,6 +505,8 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 .label { opacity:0.75; font-size:10px; }
 .value { font-weight:700; margin-bottom:4px; }
 .badge { background:white; color:#1e3a8a; padding:2px 6px; border-radius:6px; font-weight:700; }
+.preview-img { max-width:320px; max-height:220px; border:1px solid #e6eef8; background:white; padding:6px; border-radius:6px; }
+.small { font-size:12px; color:#475569; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -442,6 +517,11 @@ security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), ind
 scale_param = st.sidebar.slider("Échelle (SVG generator)", 1, 6, 3)
 ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
 color_param = st.sidebar.color_picker("Couleur du code", "#000000")
+
+# Raster preview scale selector
+st.sidebar.markdown("**Rasterisation (aperçu PNG/GIF)**")
+raster_scale_ui = st.sidebar.selectbox("Scale raster (entier)", [1,2,3,4,5], index=2)
+gif_delay_ui = st.sidebar.number_input("GIF delay (ms)", min_value=50, max_value=2000, value=200, step=50)
 
 # -------------------------
 # Session defaults
@@ -770,7 +850,7 @@ if generate:
     st.subheader("Payload AAMVA (brut)")
     st.code(aamva, language="text")
 
-    # Generate PDF417 and provide downloads (SVG, PNG, GIF)
+    # Generate PDF417 and provide downloads (SVG, PNG, GIF) + previews
     if _PDF417_AVAILABLE:
         try:
             svg_str = generate_pdf417_svg(
@@ -803,20 +883,23 @@ if generate:
                     mime="image/svg+xml"
                 )
 
-            # Try rasterization to PNG and GIF using Pillow-only method
+            # Rasterize to PNG/GIF using Pillow-based parser (rect + simple path)
             png_bytes = None
             gif_bytes = None
             raster_error = None
             if _PIL_AVAILABLE:
                 try:
-                    # choose scale for rasterization (integer)
-                    raster_scale = max(1, int(scale_param))
-                    png_bytes = rasterize_rects_to_png_bytes(svg_str, scale=raster_scale)
-                    # create GIF from PNG (single frame)
+                    raster_scale = max(1, int(raster_scale_ui))
+                    png_bytes = rasterize_shapes_to_png_bytes(svg_str, scale=raster_scale)
+                    # preview PNG
+                    st.image(png_bytes, caption="Aperçu PNG", use_column_width=False, width=320)
+                    # create GIF (single frame) from PNG
                     img = Image.open(io.BytesIO(png_bytes)).convert("P", palette=Image.ADAPTIVE)
                     gif_buf = io.BytesIO()
-                    img.save(gif_buf, format="GIF")
+                    img.save(gif_buf, format="GIF", save_all=True, loop=0, duration=int(gif_delay_ui))
                     gif_bytes = gif_buf.getvalue()
+                    # preview GIF
+                    st.image(gif_bytes, caption="Aperçu GIF", use_column_width=False, width=320)
                 except Exception as ex:
                     raster_error = str(ex)
                     png_bytes = None
@@ -834,7 +917,6 @@ if generate:
                     )
                 else:
                     st.button("PNG non disponible")
-
             with cols[2]:
                 if gif_bytes:
                     st.download_button(
@@ -854,7 +936,8 @@ if generate:
         except Exception as e:
             st.error("Erreur génération PDF417 : " + str(e))
     else:
-        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché ni téléchargeable. Le SVG ne pourra pas être généré automatiquement.")
+        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché ni téléchargeable automatiquement.")
+        st.info("Tu peux coller un SVG manuellement dans la zone d'édition si tu veux tester la rasterisation.")
 
     pdf_bytes = create_pdf_bytes({
         "Nom": ln_val,
