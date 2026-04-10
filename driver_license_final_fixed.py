@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # driver_license_final.py
 # Générateur de permis CA (Streamlit)
-# Version : intègre ZIP_DB depuis GitHub (raw), parse et synchronise les selectboxes.
-# Interface nettoyée : suppression du panneau debug et de l'affichage source dans la sidebar.
-#
+# Version : intègre automatiquement ZIP_DB depuis GitHub et FIELD_OFFICE (PDF) pour remplir la colonne office.
 # Remplace entièrement ton ancien fichier par celui-ci.
-# Requirements:
-# pip install streamlit requests reportlab
-# pdf417gen is optional (vendorisez si nécessaire)
+#
+# Requirements recommandés :
+# pip install streamlit requests reportlab pdfplumber
+# pdf417gen est optionnel (vendorisez si nécessaire)
 
 import streamlit as st
 import datetime
@@ -17,10 +16,10 @@ import io
 import base64
 import requests
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import streamlit.components.v1 as components
 
-# PDF generation (reportlab)
+# ReportLab pour export PDF
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
@@ -28,11 +27,12 @@ from reportlab.lib.utils import ImageReader
 st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
-# CONFIG: GitHub raw URL of ZIP_DB.txt (change if needed)
+# CONFIG : URLs raw GitHub (modifier si besoin)
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
+GITHUB_RAW_FIELD_OFFICE_PDF = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/FIELD_OFFICE.pdf"
 
 # -------------------------
-# Utility functions
+# Utilitaires
 def seed(*x):
     parts = []
     for item in x:
@@ -58,28 +58,33 @@ def next_sequence(r):
     return str(r.randint(10, 99))
 
 # -------------------------
-# Try to fetch ZIP_DB.txt from GitHub raw
-def fetch_github_zipdb(url: str) -> Optional[str]:
+# Récupération depuis GitHub
+def fetch_text_url(url: str, timeout: int = 10) -> Optional[str]:
     try:
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, timeout=timeout)
         resp.raise_for_status()
         return resp.text
     except Exception:
         return None
 
+def fetch_binary_url(url: str, timeout: int = 10) -> Optional[bytes]:
+    try:
+        resp = requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+        return resp.content
+    except Exception:
+        return None
+
 # -------------------------
-# Parse text dump (Output.txt / ZIP_DB.txt) into ZIP_DB mapping
+# Parsing ZIP_DB.txt (heuristique)
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     db: Dict[str, Dict[str, str]] = {}
     if not text:
         return db
-
-    # Normalize and remove HTML tags if present
     t = text.replace("\r", "\n")
     t = re.sub(r"<\/?t(?:able|r|d|h)[^>]*>", "\n", t, flags=re.IGNORECASE)
     t = re.sub(r"&nbsp;|\t", " ", t)
     lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
-
     i = 0
     while i < len(lines):
         ln = lines[i]
@@ -89,13 +94,11 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
             city = ""
             state = "CA"
             office = ""
-
             after = ln[m.end():].strip(" ,:-")
             if after and re.search(r"[A-Za-z]", after):
                 city_candidate = re.split(r"[,\-–:]", after)[0].strip()
                 if city_candidate:
                     city = city_candidate.title()
-
             if not city and i + 1 < len(lines):
                 next_ln = lines[i + 1]
                 if not re.search(r"\b9[0-6]\d{3}\b", next_ln) and re.search(r"[A-Za-z]", next_ln):
@@ -106,18 +109,15 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
                             state = maybe_state
                         elif "CA" in maybe_state:
                             state = "CA"
-
             if not city and i - 1 >= 0:
                 prev_ln = lines[i - 1]
                 if not re.search(r"\b9[0-6]\d{3}\b", prev_ln) and re.search(r"[A-Za-z]", prev_ln):
                     city = re.split(r"[,\-–:]", prev_ln)[0].strip().title()
-
             db[z] = {"city": city, "state": state, "office": office}
             i += 1
             continue
         i += 1
-
-    # Additional pass: detect sequences Zip / City / State on consecutive lines
+    # pass supplémentaire : séquences Zip/City/State
     for j in range(len(lines) - 2):
         a, b, c = lines[j], lines[j + 1], lines[j + 2]
         if re.fullmatch(r"\d{5}", a) and re.search(r"[A-Za-z]", b) and re.search(r"\bCA\b|\b[A-Z]{2}\b", c):
@@ -125,8 +125,7 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
             city = b.title()
             state = "CA" if "CA" in c else c.strip()
             db[z] = {"city": city, "state": state, "office": db.get(z, {}).get("office", "")}
-
-    # Normalize keys to 5-digit strings
+    # normaliser clés
     normalized: Dict[str, Dict[str, str]] = {}
     for z, info in db.items():
         zc = re.sub(r"\D", "", z)[:5]
@@ -139,22 +138,125 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     return normalized
 
 # -------------------------
-# Default minimal ZIP_DB (fallback)
+# Parsing FIELD_OFFICE.pdf -> mapping city -> office string (Region — City (ID))
+# Utilise pdfplumber si disponible, sinon tente heuristique sur bytes->texte
+def parse_field_office_pdf_bytes(pdf_bytes: bytes) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    if not pdf_bytes:
+        return mapping
+    # essayer pdfplumber si installé
+    try:
+        import pdfplumber
+        text_all = ""
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                text_all += page_text + "\n"
+    except Exception:
+        # fallback : décoder bytes en texte (peut être brouillé)
+        try:
+            text_all = pdf_bytes.decode("utf-8", errors="replace")
+        except Exception:
+            text_all = ""
+    # nettoyer HTML/table tags éventuels
+    t = text_all.replace("\r", "\n")
+    t = re.sub(r"<\/?t(?:able|r|d|h)[^>]*>", "\n", t, flags=re.IGNORECASE)
+    lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
+    # heuristique : on cherche des blocs "Région" suivi de lignes "Ville / Secteur" + "Code ID"
+    region = ""
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        # détecter un titre de région (ex: "Baie de San Francisco", "Grand Los Angeles", "Orange County / Sud", "Vallée Centrale")
+        if re.search(r"Baie de San Francisco|Grand Los Angeles|Orange County|Vallée Centrale|Central Valley|San Francisco Bay|Los Angeles", ln, re.IGNORECASE):
+            region = ln.strip()
+            i += 1
+            continue
+        # détecter pattern: City  (maybe)  ID  OR City \n ID
+        # cas 1: ligne contient "City   ID"
+        m_inline = re.match(r"^([A-Za-z' .\-&()]+)\s+(\d{2,3})$", ln)
+        if m_inline:
+            city = m_inline.group(1).strip().title()
+            code = m_inline.group(2).strip()
+            office_label = f"{region} — {city} ({code})" if region else f"{city} ({code})"
+            mapping[city.upper()] = office_label
+            i += 1
+            continue
+        # cas 2: ligne = City, ligne suivante = ID
+        if i + 1 < len(lines) and re.fullmatch(r"\d{2,3}", lines[i + 1]):
+            city = ln.strip().title()
+            code = lines[i + 1].strip()
+            office_label = f"{region} — {city} ({code})" if region else f"{city} ({code})"
+            mapping[city.upper()] = office_label
+            i += 2
+            continue
+        # cas 3: ligne contient "City" and next token contains code in same line separated by tabs/commas
+        m_split = re.match(r"^([A-Za-z' .\-&()]+)[,\t]+\s*(\d{2,3})$", ln)
+        if m_split:
+            city = m_split.group(1).strip().title()
+            code = m_split.group(2).strip()
+            office_label = f"{region} — {city} ({code})" if region else f"{city} ({code})"
+            mapping[city.upper()] = office_label
+            i += 1
+            continue
+        # cas 4: ligne contient "City  /  Code" with slashes
+        m_slash = re.match(r"^([A-Za-z' .\-&()]+)\s*/\s*(\d{2,3})$", ln)
+        if m_slash:
+            city = m_slash.group(1).strip().title()
+            code = m_slash.group(2).strip()
+            office_label = f"{region} — {city} ({code})" if region else f"{city} ({code})"
+            mapping[city.upper()] = office_label
+            i += 1
+            continue
+        i += 1
+    return mapping
+
+# -------------------------
+# Base minimale fallback (si fetch échoue)
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": "Baie de San Francisco — Corte Madera (525)"},
-    "95818": {"city": "Sacramento", "state": "CA", "office": "Sacramento / Nord — Sacramento (Broadway) (500)"},
+    "95818": {"city": "Sacramento", "state": "CA", "office": "Sacramento (500)"},
     "94102": {"city": "San Francisco", "state": "CA", "office": "Baie de San Francisco — San Francisco (503)"},
     "94015": {"city": "Daly City", "state": "CA", "office": "Baie de San Francisco — Daly City (599)"},
 }
 
-# Attempt to fetch and parse GitHub ZIP_DB.txt
-fetched_text = fetch_github_zipdb(GITHUB_RAW_ZIPDB)
-if fetched_text:
-    parsed = parse_zipdb_text(fetched_text)
-    if parsed:
-        ZIP_DB.update(parsed)
+# -------------------------
+# Charger ZIP_DB.txt depuis GitHub
+fetched_zip_text = fetch_text_url(GITHUB_RAW_ZIPDB)
+if fetched_zip_text:
+    parsed_zip = parse_zipdb_text(fetched_zip_text)
+    if parsed_zip:
+        # merge parsed (parsed prend la priorité)
+        ZIP_DB.update(parsed_zip)
 
-# Build reverse indices
+# Charger FIELD_OFFICE.pdf depuis GitHub et construire mapping city->office
+fetched_field_bytes = fetch_binary_url(GITHUB_RAW_FIELD_OFFICE_PDF)
+FIELD_OFFICE_MAP: Dict[str, str] = {}
+if fetched_field_bytes:
+    try:
+        FIELD_OFFICE_MAP = parse_field_office_pdf_bytes(fetched_field_bytes)
+    except Exception:
+        FIELD_OFFICE_MAP = {}
+
+# Si on a mapping de bureaux, appliquer aux ZIP_DB (si city correspond)
+if FIELD_OFFICE_MAP:
+    for z, info in list(ZIP_DB.items()):
+        city = (info.get("city") or "").strip().upper()
+        if city and city in FIELD_OFFICE_MAP:
+            ZIP_DB[z]["office"] = FIELD_OFFICE_MAP[city]
+        else:
+            # tentative de correspondance approximative : comparer sans accents et en enlevant espaces/points
+            def normalize(s: str) -> str:
+                s2 = s.upper()
+                s2 = re.sub(r"[^\w]", "", s2)
+                return s2
+            norm_city = normalize(info.get("city", ""))
+            for fc, office_label in FIELD_OFFICE_MAP.items():
+                if normalize(fc) == norm_city:
+                    ZIP_DB[z]["office"] = office_label
+                    break
+
+# Construire indices inverses
 def build_indices(zip_db: Dict[str, Dict[str, str]]):
     city_to_zips: Dict[str, List[str]] = {}
     office_to_zips: Dict[str, List[str]] = {}
@@ -170,32 +272,31 @@ def build_indices(zip_db: Dict[str, Dict[str, str]]):
 CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
 
 # -------------------------
-# CSS + fonts (kept)
+# CSS minimal (garder propre)
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
 html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
-.card { width: 450px; border-radius: 14px; padding: 16px; background: linear-gradient(135deg,#1e3a8a,#2563eb); color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15); margin: auto; }
-.header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:14px; margin-bottom:10px; }
+.card { width: 480px; border-radius: 12px; padding: 14px; background: linear-gradient(135deg,#1e3a8a,#2563eb); color: white; box-shadow: 0 8px 24px rgba(0,0,0,0.12); margin: auto; }
+.header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:14px; margin-bottom:8px; }
 .body { display:flex; gap:12px; }
-.photo { width:90px; height:110px; background:#e5e7eb; border-radius:8px; overflow:hidden; }
+.photo { width:86px; height:106px; background:#e5e7eb; border-radius:8px; overflow:hidden; }
 .photo img { width:100%; height:100%; object-fit:cover; display:block; }
 .info { flex:1; font-size:12px; }
-.label { opacity:0.7; font-size:10px; }
+.label { opacity:0.75; font-size:10px; }
 .value { font-weight:700; margin-bottom:4px; }
 .badge { background:white; color:#1e3a8a; padding:2px 6px; border-radius:6px; font-weight:700; }
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------
-# Sidebar: PDF417 params only (no source display)
+# Sidebar : paramètres PDF417 uniquement (pas d'affichage source)
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2)
 scale_param = st.sidebar.slider("Échelle", 1, 6, 3)
 ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
 color_param = st.sidebar.color_picker("Couleur du code", "#000000")
-st.sidebar.markdown("Si pdf417gen n'est pas vendorisé, l'app affichera un message d'avertissement.")
 
 # -------------------------
 # PDF417 import attempt
@@ -224,18 +325,10 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
         return str(svg_tree)
 
 # -------------------------
-# AAMVA helpers
-def build_aamva_tags(fields: Dict[str,str]) -> str:
-    header = "@\n\rANSI 636014080102DL"
-    parts = [header]
-    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAH","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
-        val = fields.get(tag)
-        if val:
-            parts.append(f"{tag}{val}")
-    return "\u001e\r".join(parts) + "\r"
+# Formulaire principal
+st.title("Générateur officiel de permis CA")
 
-# -------------------------
-# Session state defaults
+# Defaults session_state
 defaults = {
     "ln_input": "HARMS",
     "fn_input": "ROSA",
@@ -261,8 +354,7 @@ for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# -------------------------
-# Synchronization callbacks
+# Synchronisation callbacks
 def update_from_zip():
     z = st.session_state.get("zip_select", "").strip()
     z_digits = re.sub(r"\D", "", z)
@@ -311,16 +403,12 @@ def update_from_office():
     else:
         st.info("Aucune correspondance ZIP connue pour ce bureau dans la base locale.")
 
-# -------------------------
-# FORMULAIRE (widgets)
-st.title("Générateur officiel de permis CA")
-
+# Widgets
 ln = st.text_input("Nom de famille", st.session_state["ln_input"], key="ln_input")
 fn = st.text_input("Prénom", st.session_state["fn_input"], key="fn_input")
 address1 = st.text_input("Adresse (ligne 1)", st.session_state["address1_input"], key="address1_input")
 address2 = st.text_input("Adresse (ligne 2)", st.session_state["address2_input"], key="address2_input")
 
-# Build options from current ZIP_DB
 zip_options = sorted(ZIP_DB.keys())
 city_options = sorted({info["city"] for info in ZIP_DB.values() if info.get("city")})
 office_options = sorted({info["office"] for info in ZIP_DB.values() if info.get("office")})
@@ -343,10 +431,9 @@ with col_city:
         on_change=update_from_city
     )
 
-# Field office selectbox: include any known offices (may be empty strings filtered out)
 office_all = sorted([o for o in office_options if o])
 if not office_all:
-    office_all = [""]  # keep selectbox happy
+    office_all = [""]
 office_select = st.selectbox(
     "Field Office",
     options=office_all,
@@ -375,9 +462,9 @@ iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_
 generate = st.button("Générer la carte")
 
 # -------------------------
-# VALIDATIONS et génération
-def validate_inputs():
-    errors = []
+# Validation & génération
+def validate_inputs() -> List[str]:
+    errors: List[str] = []
     if not st.session_state.get("ln_input", "").strip():
         errors.append("Nom de famille requis.")
     if not st.session_state.get("fn_input", "").strip():
@@ -408,6 +495,50 @@ def validate_inputs():
             errors.append("Code postal invalide.")
     return errors
 
+def build_aamva_tags(fields: Dict[str,str]) -> str:
+    header = "@\n\rANSI 636014080102DL"
+    parts = [header]
+    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAH","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
+        val = fields.get(tag)
+        if val:
+            parts.append(f"{tag}{val}")
+    return "\u001e\r".join(parts) + "\r"
+
+def fetch_image_bytes(url: str) -> Optional[bytes]:
+    try:
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        return resp.content
+    except Exception:
+        return None
+
+def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    x = 72
+    y = height - 72
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
+    y -= 24
+    c.setFont("Helvetica", 11)
+    for k, v in fields.items():
+        c.drawString(x, y, f"{k}: {v}")
+        y -= 16
+        if y < 72:
+            c.showPage()
+            y = height - 72
+    if photo_bytes:
+        try:
+            img = ImageReader(io.BytesIO(photo_bytes))
+            c.drawImage(img, width - 72 - 90, height - 72 - 110, width=90, height=110)
+        except Exception:
+            pass
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.read()
+
 if generate:
     errs = validate_inputs()
     if errs:
@@ -437,7 +568,7 @@ if generate:
             exp = datetime.date(exp_year, st.session_state["dob_input"].month, min(st.session_state["dob_input"].day, last_day))
 
     office_choice = st.session_state.get("office_select", "")
-    m = re.search(r"\((\d{3})\)", office_choice or "")
+    m = re.search(r"\((\d{2,3})\)", office_choice or "")
     office_code = int(m.group(1)) if m else 0
 
     seq = next_sequence(r).zfill(2)
@@ -471,19 +602,10 @@ if generate:
     aamva = build_aamva_tags(fields)
     data_bytes = aamva.encode("utf-8")
 
-    # photo default
+    # photo par défaut
     IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
     IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
     photo_src = IMAGE_M_URL if st.session_state.get("sex_input") == "M" else IMAGE_F_URL
-
-    def fetch_image_bytes(url: str) -> Optional[bytes]:
-        try:
-            resp = requests.get(url, timeout=5)
-            resp.raise_for_status()
-            return resp.content
-        except Exception:
-            return None
-
     photo_bytes = fetch_image_bytes(photo_src)
 
     if photo_bytes:
@@ -536,7 +658,7 @@ if generate:
             return result
         st.json(parse_payload(aamva))
 
-    # PDF417 display if available
+    # PDF417
     if _PDF417_AVAILABLE:
         try:
             svg_str = generate_pdf417_svg(data_bytes, columns=columns_param, security_level=security_level_param, scale=scale_param, ratio=ratio_param, color=color_param)
@@ -546,7 +668,7 @@ if generate:
             st.error("Erreur génération PDF417 : " + str(e))
             st.info("Vérifiez le module pdf417gen dans le dossier vendorisé.")
     else:
-        st.warning("pdf417gen non disponible. Vendorisez le module ou complétez pdf417gen/__init__.py pour exposer encode et render_svg.")
+        st.warning("pdf417gen non disponible. Vendorisez le module si vous voulez afficher PDF417.")
 
     cols = st.columns(2)
     with cols[0]:
@@ -557,33 +679,6 @@ if generate:
             except Exception:
                 pass
     with cols[1]:
-        def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
-            buffer = io.BytesIO()
-            c = canvas.Canvas(buffer, pagesize=letter)
-            width, height = letter
-            x = 72
-            y = height - 72
-            c.setFont("Helvetica-Bold", 14)
-            c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
-            y -= 24
-            c.setFont("Helvetica", 11)
-            for k, v in fields.items():
-                c.drawString(x, y, f"{k}: {v}")
-                y -= 16
-                if y < 72:
-                    c.showPage()
-                    y = height - 72
-            if photo_bytes:
-                try:
-                    img = ImageReader(io.BytesIO(photo_bytes))
-                    c.drawImage(img, width - 72 - 90, height - 72 - 110, width=90, height=110)
-                except Exception:
-                    pass
-            c.showPage()
-            c.save()
-            buffer.seek(0)
-            return buffer.read()
-
         pdf_bytes = create_pdf_bytes({
             "Nom": ln_val,
             "Prénom": fn_val,
