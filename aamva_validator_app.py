@@ -8,7 +8,6 @@
 import streamlit as st
 import re
 import datetime
-import io
 from typing import List, Tuple, Dict, Optional, Any
 
 st.set_page_config(page_title="AAMVA Validator & Example", layout="centered")
@@ -36,7 +35,7 @@ DATE_TAGS = ["DBB", "DBA", "DBD"]
 def has_valid_header(payload: str) -> Tuple[bool, str]:
     """
     Vérifie la présence d'un header AAMVA correct.
-    Exemples d'en-tête valides : '@\r\nANSI 636014080102DL' ou '@\n\rANSI 636014080102DL'
+    Exemples d'en-tête valides : '@\\r\\nANSI 636014080102DL' ou '@\\n\\rANSI 636014080102DL'
     On vérifie la présence de 'ANSI' et 'DL' et d'un code AAMVA (6360...).
     """
     if not payload:
@@ -249,20 +248,30 @@ st.markdown(
     "Le validateur vérifie header, séparateurs (0x1E), formats de date, encodage et signale les erreurs courantes."
 )
 
+# Initialise la clé session si elle n'existe pas
+if "payload_input" not in st.session_state:
+    st.session_state["payload_input"] = ""
+
 col1, col2 = st.columns([3, 1])
 with col1:
-    payload_input = st.text_area("Payload AAMVA (brut)", height=220, value="", placeholder="Colle le payload AAMVA ici (commence par @ et ANSI ... DL).")
+    # Lier le text_area à st.session_state["payload_input"]
+    st.text_area(
+        "Payload AAMVA (brut)",
+        height=220,
+        value=st.session_state["payload_input"],
+        placeholder="Colle le payload AAMVA ici (commence par @ et ANSI ... DL).",
+        key="payload_input"
+    )
 with col2:
     if st.button("Générer un exemple"):
-        # Remplacer le contenu du champ par l'exemple sans utiliser experimental_set_query_params
-        payload_input = example_payload()
-        # Afficher l'exemple dans la zone de texte en réaffichant la page
-        st.experimental_rerun()
+        # Mettre à jour la valeur liée au widget via session_state
+        st.session_state["payload_input"] = example_payload()
 
-if not payload_input:
+if not st.session_state["payload_input"]:
     st.info("Aucun payload collé. Clique sur 'Générer un exemple' pour insérer un payload de test.")
 else:
     if st.button("Valider le payload"):
+        payload_input = st.session_state["payload_input"]
         results = validate_aamva_payload(payload_input)
         errors = results["errors"]
         warnings = results["warnings"]
