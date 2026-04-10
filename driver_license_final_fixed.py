@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # driver_license_final.py
 # Générateur de permis CA (Streamlit)
-# Version : intègre automatiquement ZIP_DB depuis GitHub (raw), parse et synchronise les selectboxes.
-# Remplace entièrement ton ancien fichier par celui-ci.
+# Version : intègre ZIP_DB depuis GitHub (raw), parse et synchronise les selectboxes.
+# Interface nettoyée : suppression du panneau debug et de l'affichage source dans la sidebar.
 #
+# Remplace entièrement ton ancien fichier par celui-ci.
 # Requirements:
 # pip install streamlit requests reportlab
 # pdf417gen is optional (vendorisez si nécessaire)
@@ -69,12 +70,6 @@ def fetch_github_zipdb(url: str) -> Optional[str]:
 # -------------------------
 # Parse text dump (Output.txt / ZIP_DB.txt) into ZIP_DB mapping
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
-    """
-    Heuristics:
-    - Many dumps have repeating blocks: ZipCode \n City \n State [Salesmen]
-    - We'll scan lines and whenever we find a 5-digit zip (9xxxx) we try to read next lines for city and state.
-    - If the file contains HTML table tags, we strip them first.
-    """
     db: Dict[str, Dict[str, str]] = {}
     if not text:
         return db
@@ -88,29 +83,23 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     i = 0
     while i < len(lines):
         ln = lines[i]
-        # If line is exactly a 5-digit zip (or contains one), capture it
         m = re.search(r"\b(9[0-6]\d{3})\b", ln)
         if m:
             z = m.group(1)
             city = ""
             state = "CA"
-            office = ""  # office mapping not present in ZIP_DB.txt; left empty
+            office = ""
 
-            # Try same line after zip for city
             after = ln[m.end():].strip(" ,:-")
             if after and re.search(r"[A-Za-z]", after):
-                # take first chunk as city
                 city_candidate = re.split(r"[,\-–:]", after)[0].strip()
                 if city_candidate:
                     city = city_candidate.title()
 
-            # If no city found, try next line
             if not city and i + 1 < len(lines):
                 next_ln = lines[i + 1]
-                # If next line looks like a city (letters) and not another zip
                 if not re.search(r"\b9[0-6]\d{3}\b", next_ln) and re.search(r"[A-Za-z]", next_ln):
                     city = re.split(r"[,\-–:]", next_ln)[0].strip().title()
-                    # try to detect state on following line
                     if i + 2 < len(lines):
                         maybe_state = lines[i + 2]
                         if re.fullmatch(r"[A-Z]{2}", maybe_state):
@@ -118,7 +107,6 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
                         elif "CA" in maybe_state:
                             state = "CA"
 
-            # If still no city, try previous line
             if not city and i - 1 >= 0:
                 prev_ln = lines[i - 1]
                 if not re.search(r"\b9[0-6]\d{3}\b", prev_ln) and re.search(r"[A-Za-z]", prev_ln):
@@ -164,13 +152,7 @@ fetched_text = fetch_github_zipdb(GITHUB_RAW_ZIPDB)
 if fetched_text:
     parsed = parse_zipdb_text(fetched_text)
     if parsed:
-        # Merge parsed entries into ZIP_DB (parsed takes precedence)
         ZIP_DB.update(parsed)
-        fetched_ok = True
-    else:
-        fetched_ok = False
-else:
-    fetched_ok = False
 
 # Build reverse indices
 def build_indices(zip_db: Dict[str, Dict[str, str]]):
@@ -188,7 +170,7 @@ def build_indices(zip_db: Dict[str, Dict[str, str]]):
 CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
 
 # -------------------------
-# CSS + fonts
+# CSS + fonts (kept)
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -202,19 +184,11 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 .label { opacity:0.7; font-size:10px; }
 .value { font-weight:700; margin-bottom:4px; }
 .badge { background:white; color:#1e3a8a; padding:2px 6px; border-radius:6px; font-weight:700; }
-.debug { font-size:12px; background:#f6f6f6; padding:8px; border-radius:6px; margin-top:12px; color:#111; white-space:pre-wrap; }
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------
-# Sidebar: show fetch status and PDF417 params
-st.sidebar.header("Source ZIP_DB")
-if fetched_ok:
-    st.sidebar.success("ZIP_DB chargé depuis GitHub.")
-else:
-    st.sidebar.warning("Impossible de charger ZIP_DB depuis GitHub. Utilisation d'une base minimale embarquée.")
-st.sidebar.write(f"Source: {GITHUB_RAW_ZIPDB}")
-
+# Sidebar: PDF417 params only (no source display)
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2)
@@ -250,50 +224,15 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
         return str(svg_tree)
 
 # -------------------------
-# Small helpers for parsing AAMVA (debug)
-AAMVA_MAP = {
-    "DCS": "last_name", "DAC": "first_name", "DCT": "full_name_trunc",
-    "DBB": "date_of_birth", "DBA": "expiration_date", "DBD": "issue_date",
-    "DAQ": "id_number", "DAG": "address1", "DAH": "address2",
-    "DAI": "city", "DAJ": "state", "DAK": "postal_code",
-    "DCF": "document_discriminator", "DAU": "height", "DAY": "eye_color", "DAZ": "hair_color",
-}
-
-def mmddyyyy_to_iso(s: str) -> Optional[str]:
-    s = s.strip()
-    if not re.fullmatch(r"\d{6,8}", s):
-        return None
-    try:
-        return datetime.datetime.strptime(s, "%m%d%Y").date().isoformat()
-    except Exception:
-        return None
-
-def parse_payload(payload: str) -> Dict[str, Optional[str]]:
-    s = payload.replace("\r\n", "\n").replace("\r", "\n")
-    s = s.lstrip("\n\r @\u001e")
-    lines = [ln for ln in s.split("\n") if ln.strip() != ""]
-    result = {"raw_lines": lines}
-    token_re = re.compile(r"^([A-Z]{3})(.*)$")
-    for ln in lines:
-        m = token_re.match(ln)
-        if m:
-            code = m.group(1)
-            value = m.group(2).strip()
-            key = AAMVA_MAP.get(code)
-            if key:
-                if key in ("date_of_birth", "expiration_date", "issue_date"):
-                    iso = mmddyyyy_to_iso(value)
-                    result[key] = iso or value
-                else:
-                    result[key] = value
-            else:
-                result[f"raw_{code}"] = value
-        else:
-            if ln.startswith("ANSI") or ln.startswith("AAMVA"):
-                result["header"] = ln.strip()
-            else:
-                result.setdefault("other_lines", []).append(ln.strip())
-    return result
+# AAMVA helpers
+def build_aamva_tags(fields: Dict[str,str]) -> str:
+    header = "@\n\rANSI 636014080102DL"
+    parts = [header]
+    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAH","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
+        val = fields.get(tag)
+        if val:
+            parts.append(f"{tag}{val}")
+    return "\u001e\r".join(parts) + "\r"
 
 # -------------------------
 # Session state defaults
@@ -435,11 +374,6 @@ iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_
 
 generate = st.button("Générer la carte")
 
-# Debug panel (visible)
-st.markdown("### Debug session_state (pour diagnostic)")
-st.code({k: st.session_state[k] for k in sorted(st.session_state.keys())}, language="json")
-st.markdown(f"**Entrées ZIP_DB** : {len(ZIP_DB)} (source GitHub: {'OK' if fetched_ok else 'fallback'})")
-
 # -------------------------
 # VALIDATIONS et génération
 def validate_inputs():
@@ -464,7 +398,6 @@ def validate_inputs():
         errors.append("État requis.")
     if not st.session_state.get("zip_select", "").strip():
         errors.append("Code postal requis.")
-    # Validate zip numeric range if not in DB
     z = re.sub(r"\D", "", st.session_state.get("zip_select", ""))
     if z and z not in ZIP_DB:
         try:
@@ -474,50 +407,6 @@ def validate_inputs():
         except Exception:
             errors.append("Code postal invalide.")
     return errors
-
-def build_aamva_tags(fields: Dict[str,str]) -> str:
-    header = "@\n\rANSI 636014080102DL"
-    parts = [header]
-    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAH","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
-        val = fields.get(tag)
-        if val:
-            parts.append(f"{tag}{val}")
-    return "\u001e\r".join(parts) + "\r"
-
-def fetch_image_bytes(url: str) -> Optional[bytes]:
-    try:
-        resp = requests.get(url, timeout=5)
-        resp.raise_for_status()
-        return resp.content
-    except Exception:
-        return None
-
-def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
-    x = 72
-    y = height - 72
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
-    y -= 24
-    c.setFont("Helvetica", 11)
-    for k, v in fields.items():
-        c.drawString(x, y, f"{k}: {v}")
-        y -= 16
-        if y < 72:
-            c.showPage()
-            y = height - 72
-    if photo_bytes:
-        try:
-            img = ImageReader(io.BytesIO(photo_bytes))
-            c.drawImage(img, width - 72 - 90, height - 72 - 110, width=90, height=110)
-        except Exception:
-            pass
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer.read()
 
 if generate:
     errs = validate_inputs()
@@ -586,6 +475,15 @@ if generate:
     IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
     IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
     photo_src = IMAGE_M_URL if st.session_state.get("sex_input") == "M" else IMAGE_F_URL
+
+    def fetch_image_bytes(url: str) -> Optional[bytes]:
+        try:
+            resp = requests.get(url, timeout=5)
+            resp.raise_for_status()
+            return resp.content
+        except Exception:
+            return None
+
     photo_bytes = fetch_image_bytes(photo_src)
 
     if photo_bytes:
@@ -626,8 +524,17 @@ if generate:
     st.code(aamva, language="text")
 
     if st.button("Afficher AAMVA JSON parsé"):
-        parsed = parse_payload(aamva)
-        st.json(parsed)
+        def parse_payload(payload: str) -> Dict[str,str]:
+            s = payload.replace("\r\n","\n").replace("\r","\n")
+            s = s.lstrip("\n\r @\u001e")
+            lines = [ln for ln in s.split("\n") if ln.strip()]
+            result = {}
+            for ln in lines:
+                m = re.match(r"^([A-Z]{3})(.*)$", ln)
+                if m:
+                    result[m.group(1)] = m.group(2).strip()
+            return result
+        st.json(parse_payload(aamva))
 
     # PDF417 display if available
     if _PDF417_AVAILABLE:
@@ -650,6 +557,33 @@ if generate:
             except Exception:
                 pass
     with cols[1]:
+        def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
+            buffer = io.BytesIO()
+            c = canvas.Canvas(buffer, pagesize=letter)
+            width, height = letter
+            x = 72
+            y = height - 72
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
+            y -= 24
+            c.setFont("Helvetica", 11)
+            for k, v in fields.items():
+                c.drawString(x, y, f"{k}: {v}")
+                y -= 16
+                if y < 72:
+                    c.showPage()
+                    y = height - 72
+            if photo_bytes:
+                try:
+                    img = ImageReader(io.BytesIO(photo_bytes))
+                    c.drawImage(img, width - 72 - 90, height - 72 - 110, width=90, height=110)
+                except Exception:
+                    pass
+            c.showPage()
+            c.save()
+            buffer.seek(0)
+            return buffer.read()
+
         pdf_bytes = create_pdf_bytes({
             "Nom": ln_val,
             "Prénom": fn_val,
