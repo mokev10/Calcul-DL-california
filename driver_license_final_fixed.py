@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Générateur de permis CA (Streamlit)
-# Version avec boutons "Appliquer" pour lookup ZIP <-> city <-> field office et debug visible.
+# Version corrigée : lookup ZIP <-> city <-> field office, boutons "Appliquer", debug visible.
+# Remplace entièrement le fichier précédent par celui-ci.
 
 import streamlit as st
-import datetime, random, hashlib, io, base64, requests, re
+import datetime
+import random
+import hashlib
+import io
+import base64
+import requests
+import re
 import streamlit.components.v1 as components
 from typing import Dict, Optional
 
@@ -40,7 +47,7 @@ IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/exte
 IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
 
 # -------------------------
-# CSS (inchangé)
+# CSS (simple)
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -62,7 +69,7 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 # Sidebar PDF417 params
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
-security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0,9)), index=2)
+security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2)
 scale_param = st.sidebar.slider("Échelle", 1, 6, 3)
 ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
 color_param = st.sidebar.color_picker("Couleur du code", "#000000")
@@ -134,14 +141,25 @@ offices = {
 # -------------------------
 # Initialisation session_state sûre
 defaults = {
-    "ln_input": "HARMS", "fn_input": "ROSA",
-    "address1_input": "2570 24TH STREET", "address2_input": "",
-    "postal_code_input": "94925", "city_input": "Corte Madera", "state_input": "CA",
-    "sex_input": "M", "dob_input": datetime.date(1990,1,1),
-    "h1_input": 5, "h2_input": 10, "w_input": 160,
-    "eyes_input": "BRN", "hair_input": "BRN",
-    "cls_input": "C", "rstr_input": "NONE", "endorse_input": "NONE",
-    "iss_input": datetime.date.today(), "office_choice": list(offices.keys())[0]
+    "ln_input": "HARMS",
+    "fn_input": "ROSA",
+    "address1_input": "2570 24TH STREET",
+    "address2_input": "",
+    "postal_code_input": "94925",
+    "city_input": "Corte Madera",
+    "state_input": "CA",
+    "sex_input": "M",
+    "dob_input": datetime.date(1990, 1, 1),
+    "h1_input": 5,
+    "h2_input": 10,
+    "w_input": 160,
+    "eyes_input": "BRN",
+    "hair_input": "BRN",
+    "cls_input": "C",
+    "rstr_input": "NONE",
+    "endorse_input": "NONE",
+    "iss_input": datetime.date.today(),
+    "office_choice": list(offices.keys())[0],
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -156,9 +174,9 @@ def seed(*x):
             parts.append(item.isoformat())
         else:
             parts.append(str(item))
-    return int(hashlib.md5("|".join(parts).encode()).hexdigest()[:8],16)
+    return int(hashlib.md5("|".join(parts).encode()).hexdigest()[:8], 16)
 
-def rdigits(r,n):
+def rdigits(r, n):
     return "".join(r.choice("0123456789") for _ in range(n))
 
 def rletter(r, initial):
@@ -170,7 +188,7 @@ def rletter(r, initial):
     return r.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 def next_sequence(r):
-    return str(r.randint(10,99))
+    return str(r.randint(10, 99))
 
 # -------------------------
 # Lookup functions (utilisées par les boutons)
@@ -224,12 +242,13 @@ def apply_office_lookup():
 # -------------------------
 # Parser AAMVA minimal (pour debug)
 AAMVA_MAP = {
-    "DCS":"last_name","DAC":"first_name","DCT":"full_name_trunc",
-    "DBB":"date_of_birth","DBA":"expiration_date","DBD":"issue_date",
-    "DAQ":"id_number","DAG":"address1","DAH":"address2","DAI":"city",
-    "DAJ":"state","DAK":"postal_code","DCF":"document_discriminator",
-    "DAU":"height","DAY":"eye_color","DAZ":"hair_color"
+    "DCS": "last_name", "DAC": "first_name", "DCT": "full_name_trunc",
+    "DBB": "date_of_birth", "DBA": "expiration_date", "DBD": "issue_date",
+    "DAQ": "id_number", "DAG": "address1", "DAH": "address2",
+    "DAI": "city", "DAJ": "state", "DAK": "postal_code",
+    "DCF": "document_discriminator", "DAU": "height", "DAY": "eye_color", "DAZ": "hair_color",
 }
+
 def mmddyyyy_to_iso(s: str) -> Optional[str]:
     s = s.strip()
     if not re.fullmatch(r"\d{6,8}", s):
@@ -252,12 +271,14 @@ def parse_payload(payload: str) -> Dict[str, Optional[str]]:
     for ln in lines:
         m = token_re.match(ln)
         if m:
-            code = m.group(1); value = m.group(2).strip()
+            code = m.group(1)
+            value = m.group(2).strip()
             key = AAMVA_MAP.get(code)
             if key:
-                if key in ("date_of_birth","expiration_date","issue_date"):
-                    iso = mmddyyyy_to_iso(value); result[key] = iso or value
-                elif key in ("first_name","last_name"):
+                if key in ("date_of_birth", "expiration_date", "issue_date"):
+                    iso = mmddyyyy_to_iso(value)
+                    result[key] = iso or value
+                elif key in ("first_name", "last_name"):
                     result[key] = normalize_name(value)
                 else:
                     result[key] = value
@@ -288,7 +309,7 @@ except Exception:
     except Exception:
         _PDF417_AVAILABLE = False
 
-def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
+def generate_pdf417_svg(data_bytes: bytes, columns: int, security_level: int, scale: int, ratio: int, color: str) -> str:
     if not _PDF417_AVAILABLE:
         raise RuntimeError("Module pdf417gen non disponible.")
     codes = encode(data_bytes, columns=columns, security_level=security_level, force_binary=False)
@@ -304,27 +325,40 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
 # Image fetch
 def fetch_image_bytes(url: str) -> Optional[bytes]:
     try:
-        resp = requests.get(url, timeout=5); resp.raise_for_status(); return resp.content
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        return resp.content
     except Exception:
         return None
 
 # -------------------------
 # PDF creation
-def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
-    buffer = io.BytesIO(); c = canvas.Canvas(buffer, pagesize=letter); width, height = letter
-    x = 72; y = height - 72
-    c.setFont("Helvetica-Bold", 14); c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE"); y -= 24
+def create_pdf_bytes(fields: Dict[str, str], photo_bytes: bytes = None) -> bytes:
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    x = 72
+    y = height - 72
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
+    y -= 24
     c.setFont("Helvetica", 11)
     for k, v in fields.items():
-        c.drawString(x, y, f"{k}: {v}"); y -= 16
-        if y < 72: c.showPage(); y = height - 72
+        c.drawString(x, y, f"{k}: {v}")
+        y -= 16
+        if y < 72:
+            c.showPage()
+            y = height - 72
     if photo_bytes:
         try:
             img = ImageReader(io.BytesIO(photo_bytes))
             c.drawImage(img, width - 72 - 90, height - 72 - 110, width=90, height=110)
         except Exception:
             pass
-    c.showPage(); c.save(); buffer.seek(0); return buffer.read()
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.read()
 
 # -------------------------
 # FORMULAIRE (widgets)
@@ -335,22 +369,22 @@ fn = st.text_input("Prénom", st.session_state["fn_input"], key="fn_input")
 address1 = st.text_input("Adresse (ligne 1)", st.session_state["address1_input"], key="address1_input")
 address2 = st.text_input("Adresse (ligne 2)", st.session_state["address2_input"], key="address2_input")
 
-postal_col, city_col = st.columns([2,3])
+postal_col, city_col = st.columns([2, 3])
 with postal_col:
     postal_code = st.text_input("Code postal", st.session_state["postal_code_input"], key="postal_code_input")
 with city_col:
     city = st.text_input("Ville", st.session_state["city_input"], key="city_input")
 
 state = st.text_input("État (abbrev.)", st.session_state["state_input"], key="state_input")
-sex = st.selectbox("Sexe", ["M","F"], index=0 if st.session_state["sex_input"]=="M" else 1, key="sex_input")
+sex = st.selectbox("Sexe", ["M", "F"], index=0 if st.session_state["sex_input"] == "M" else 1, key="sex_input")
 dob = st.date_input("Date de naissance", st.session_state["dob_input"], key="dob_input")
 
 col1, col2 = st.columns(2)
 with col1:
-    h1 = st.number_input("Pieds",0,8,st.session_state["h1_input"], key="h1_input")
-    w = st.number_input("Poids (lb)",30,500,st.session_state["w_input"], key="w_input")
+    h1 = st.number_input("Pieds", 0, 8, st.session_state["h1_input"], key="h1_input")
+    w = st.number_input("Poids (lb)", 30, 500, st.session_state["w_input"], key="w_input")
 with col2:
-    h2 = st.number_input("Pouces",0,11,st.session_state["h2_input"], key="h2_input")
+    h2 = st.number_input("Pouces", 0, 11, st.session_state["h2_input"], key="h2_input")
     eyes = st.text_input("Yeux", st.session_state["eyes_input"], key="eyes_input")
 hair = st.text_input("Cheveux", st.session_state["hair_input"], key="hair_input")
 cls = st.text_input("Classe", st.session_state["cls_input"], key="cls_input")
@@ -382,69 +416,57 @@ st.markdown("### Debug session_state")
 st.code({k: st.session_state[k] for k in sorted(st.session_state.keys())}, language="json")
 
 # -------------------------
-# VALIDATIONS et génération (inchangées)
+# VALIDATIONS et génération
 def validate_inputs():
     errors = []
-    if not st.session_state.get("ln_input", "").strip(): errors.append("Nom de famille requis.")
-    if not st.session_state.get("fn_input", "").strip(): errors.append("Prénom requis.")
-    if st.session_state.get("dob_input") > datetime.date.today(): errors.append("Date de naissance ne peut pas être dans le futur.")
-    if st.session_state.get("iss_input") > datetime.date.today(): errors.append("Date d'émission ne peut pas être dans le futur.")
-    if st.session_state.get("w_input", 0) < 30 or st.session_state.get("w_input", 0) > 500: errors.append("Poids hors plage attendue.")
-    if st.session_state.get("h1_input", 0) < 0 or st.session_state.get("h1_input", 0) > 8 or st.session_state.get("h2_input", 0) < 0 or st.session_state.get("h2_input", 0) > 11: errors.append("Taille hors plage attendue.")
-    if not st.session_state.get("address1_input", "").strip(): errors.append("Adresse (ligne 1) requise.")
-    if not st.session_state.get("city_input", "").strip(): errors.append("Ville requise.")
-    if not st.session_state.get("state_input", "").strip(): errors.append("État requis.")
-    if not st.session_state.get("postal_code_input", "").strip(): errors.append("Code postal requis.")
+    if not st.session_state.get("ln_input", "").strip():
+        errors.append("Nom de famille requis.")
+    if not st.session_state.get("fn_input", "").strip():
+        errors.append("Prénom requis.")
+    if st.session_state.get("dob_input") > datetime.date.today():
+        errors.append("Date de naissance ne peut pas être dans le futur.")
+    if st.session_state.get("iss_input") > datetime.date.today():
+        errors.append("Date d'émission ne peut pas être dans le futur.")
+    if st.session_state.get("w_input", 0) < 30 or st.session_state.get("w_input", 0) > 500:
+        errors.append("Poids hors plage attendue.")
+    if st.session_state.get("h1_input", 0) < 0 or st.session_state.get("h1_input", 0) > 8 or st.session_state.get("h2_input", 0) < 0 or st.session_state.get("h2_input", 0) > 11:
+        errors.append("Taille hors plage attendue.")
+    if not st.session_state.get("address1_input", "").strip():
+        errors.append("Adresse (ligne 1) requise.")
+    if not st.session_state.get("city_input", "").strip():
+        errors.append("Ville requise.")
+    if not st.session_state.get("state_input", "").strip():
+        errors.append("État requis.")
+    if not st.session_state.get("postal_code_input", "").strip():
+        errors.append("Code postal requis.")
     return errors
 
-def build_aamva_tags(fields: Dict[str,str]) -> str:
+def build_aamva_tags(fields: Dict[str, str]) -> str:
     header = "@\n\rANSI 636014080102DL"
     parts = [header]
-    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAH","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
+    for tag in ("DCS", "DAC", "DBB", "DBA", "DBD", "DAQ", "DAG", "DAH", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"):
         val = fields.get(tag)
         if val:
             parts.append(f"{tag}{val}")
     return "\u001e\r".join(parts) + "\r"
 
-# Attempt to import pdf417gen
-_PDF417_AVAILABLE = False
-try:
-    from pdf417gen import encode, render_svg
-    _PDF417_AVAILABLE = True
-except Exception:
-    try:
-        import pdf417gen
-        from pdf417gen import encode, render_svg
-        _PDF417_AVAILABLE = True
-    except Exception:
-        _PDF417_AVAILABLE = False
-
-def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
-    if not _PDF417_AVAILABLE:
-        raise RuntimeError("Module pdf417gen non disponible.")
-    codes = encode(data_bytes, columns=columns, security_level=security_level, force_binary=False)
-    svg_tree = render_svg(codes, scale=scale, ratio=ratio, color=color)
-    try:
-        import xml.etree.ElementTree as ET
-        svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
-        return svg_bytes.decode("utf-8")
-    except Exception:
-        return str(svg_tree)
-
-# Generation flow
 if generate:
     errs = validate_inputs()
     if errs:
-        for e in errs: st.error(e)
+        for e in errs:
+            st.error(e)
         st.stop()
 
-    ln_val = st.session_state["ln_input"]; fn_val = st.session_state["fn_input"]
-    address1_val = st.session_state["address1_input"]; address2_val = st.session_state["address2_input"]
-    city_val = st.session_state["city_input"]; state_val = st.session_state["state_input"]
+    ln_val = st.session_state["ln_input"]
+    fn_val = st.session_state["fn_input"]
+    address1_val = st.session_state["address1_input"]
+    address2_val = st.session_state["address2_input"]
+    city_val = st.session_state["city_input"]
+    state_val = st.session_state["state_input"]
     postal_val = re.sub(r"\D", "", st.session_state["postal_code_input"])[:10]
 
-    r = random.Random(seed(ln_val,fn_val,st.session_state["dob_input"]))
-    dl = rletter(r, ln_val[0] if ln_val else "") + rdigits(r,7)
+    r = random.Random(seed(ln_val, fn_val, st.session_state["dob_input"]))
+    dl = rletter(r, ln_val[0] if ln_val else "") + rdigits(r, 7)
 
     exp_year = st.session_state["iss_input"].year + 5
     try:
@@ -465,17 +487,24 @@ if generate:
     cls_disp = (st.session_state.get("cls_input") or "").upper()
     rstr_disp = (st.session_state.get("rstr_input") or "").upper()
     endorse_disp = (st.session_state.get("endorse_input") or "").upper()
-    height_str = f"{int(st.session_state.get('h1_input',0))}'{int(st.session_state.get('h2_input',0))}\""
+    height_str = f"{int(st.session_state.get('h1_input', 0))}'{int(st.session_state.get('h2_input', 0))}\""
 
     fields = {
-        "DCS": ln_val.upper(), "DAC": fn_val.upper(),
+        "DCS": ln_val.upper(),
+        "DAC": fn_val.upper(),
         "DBB": st.session_state["dob_input"].strftime("%m%d%Y"),
-        "DBA": exp.strftime("%m%d%Y"), "DBD": st.session_state["iss_input"].strftime("%m%d%Y"),
-        "DAQ": dl, "DAG": address1_val.upper(),
+        "DBA": exp.strftime("%m%d%Y"),
+        "DBD": st.session_state["iss_input"].strftime("%m%d%Y"),
+        "DAQ": dl,
+        "DAG": address1_val.upper(),
         "DAH": address2_val.upper() if address2_val else None,
-        "DAI": city_val.upper(), "DAJ": state_val.upper(), "DAK": postal_val,
-        "DCF": dd, "DAU": f"{int(st.session_state.get('h1_input',0))}{int(st.session_state.get('h2_input',0))}",
-        "DAY": eyes_disp, "DAZ": hair_disp
+        "DAI": city_val.upper(),
+        "DAJ": state_val.upper(),
+        "DAK": postal_val,
+        "DCF": dd,
+        "DAU": f"{int(st.session_state.get('h1_input', 0))}{int(st.session_state.get('h2_input', 0))}",
+        "DAY": eyes_disp,
+        "DAZ": hair_disp,
     }
     fields = {k: v for k, v in fields.items() if v is not None}
     aamva = build_aamva_tags(fields)
@@ -488,15 +517,20 @@ if generate:
     if photo_bytes:
         b64 = base64.b64encode(photo_bytes).decode("utf-8")
         mime = "image/png"
-        if photo_bytes[:3] == b'\xff\xd8\xff': mime = "image/jpeg"
+        if photo_bytes[:3] == b'\xff\xd8\xff':
+            mime = "image/jpeg"
         photo_html = f"<div class='photo'><img src='data:{mime};base64,{b64}' alt='photo'/></div>"
     else:
         photo_html = f"<div class='photo'><img src='{photo_src}' alt='photo par défaut'/></div>"
 
-    html = f\"\"\"
+    html = f"""
     <div class="card">
-        <div class="header"><div>CALIFORNIA USA DRIVER LICENSE</div><div class="badge">{dl}</div></div>
-        <div class="body">{photo_html}
+        <div class="header">
+            <div>CALIFORNIA USA DRIVER LICENSE</div>
+            <div class="badge">{dl}</div>
+        </div>
+        <div class="body">
+            {photo_html}
             <div class="info">
                 <div class="label">Nom</div><div class="value">{ln_val}</div>
                 <div class="label">Prénom</div><div class="value">{fn_val}</div>
@@ -515,7 +549,7 @@ if generate:
             </div>
         </div>
     </div>
-    \"\"\"
+    """
     st.markdown(html, unsafe_allow_html=True)
 
     st.subheader("Payload AAMVA (brut)")
@@ -532,7 +566,8 @@ if generate:
             svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
             components.html(svg_html, height=220, scrolling=True)
         except Exception as e:
-            st.error("Erreur génération PDF417 : " + str(e)); st.info("Vérifiez le module pdf417gen dans le dossier vendorisé.")
+            st.error("Erreur génération PDF417 : " + str(e))
+            st.info("Vérifiez le module pdf417gen dans le dossier vendorisé.")
     else:
         st.warning("pdf417gen non disponible. Vendorisez le module ou complétez pdf417gen/__init__.py pour exposer encode et render_svg.")
 
@@ -543,12 +578,21 @@ if generate:
             st.download_button("Télécharger PDF417 (SVG)", data=svg_bytes, file_name="pdf417.svg", mime="image/svg+xml")
     with cols[1]:
         pdf_bytes = create_pdf_bytes({
-            "Nom": ln_val, "Prénom": fn_val, "Sexe": st.session_state.get("sex_input"),
+            "Nom": ln_val,
+            "Prénom": fn_val,
+            "Sexe": st.session_state.get("sex_input"),
             "DOB": st.session_state["dob_input"].strftime("%m/%d/%Y"),
-            "Adresse": f"{address1_val} {address2_val}".strip(), "Ville": city_val, "État": state_val, "Code postal": postal_val,
-            "Field Office": st.session_state["office_choice"], "DD": dd,
-            "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"), "EXP": exp.strftime("%m/%d/%Y"),
-            "Classe": cls_disp, "Restrictions": rstr_disp, "Endorsements": endorse_disp,
+            "Adresse": f"{address1_val} {address2_val}".strip(),
+            "Ville": city_val,
+            "État": state_val,
+            "Code postal": postal_val,
+            "Field Office": st.session_state["office_choice"],
+            "DD": dd,
+            "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"),
+            "EXP": exp.strftime("%m/%d/%Y"),
+            "Classe": cls_disp,
+            "Restrictions": rstr_disp,
+            "Endorsements": endorse_disp,
             "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
         }, photo_bytes=photo_bytes)
         st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
