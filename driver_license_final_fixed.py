@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-# driver_license_final_fixed.py
+# driver_license_final.py
 # Générateur de permis CA (Streamlit)
-# Version : intégration automatique du texte (Output.txt) pour remplir ZIP_DB
-# Remplace entièrement le fichier précédent par celui-ci.
+# Version : intègre automatiquement ZIP_DB depuis GitHub (raw), parse et synchronise les selectboxes.
+# Remplace entièrement ton ancien fichier par celui-ci.
+#
+# Requirements:
+# pip install streamlit requests reportlab
+# pdf417gen is optional (vendorisez si nécessaire)
 
 import streamlit as st
 import datetime
@@ -12,33 +16,22 @@ import io
 import base64
 import requests
 import re
-import csv
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, List, Optional
+import streamlit.components.v1 as components
 
-# Optional PDF parsing libs are not required here because user provided text.
-# PDF417 attempt import (optional)
-_PDF417_AVAILABLE = False
-try:
-    from pdf417gen import encode, render_svg
-    _PDF417_AVAILABLE = True
-except Exception:
-    try:
-        import pdf417gen
-        from pdf417gen import encode, render_svg
-        _PDF417_AVAILABLE = True
-    except Exception:
-        _PDF417_AVAILABLE = False
-
-# ReportLab for PDF export
+# PDF generation (reportlab)
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Permis CA - ZIP Auto Import", layout="centered")
+st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
-# Utilities
+# CONFIG: GitHub raw URL of ZIP_DB.txt (change if needed)
+GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
+
+# -------------------------
+# Utility functions
 def seed(*x):
     parts = []
     for item in x:
@@ -64,7 +57,101 @@ def next_sequence(r):
     return str(r.randint(10, 99))
 
 # -------------------------
-# Minimal default ZIP_DB (kept small until import)
+# Try to fetch ZIP_DB.txt from GitHub raw
+def fetch_github_zipdb(url: str) -> Optional[str]:
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.text
+    except Exception:
+        return None
+
+# -------------------------
+# Parse text dump (Output.txt / ZIP_DB.txt) into ZIP_DB mapping
+def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
+    """
+    Heuristics:
+    - Many dumps have repeating blocks: ZipCode \n City \n State [Salesmen]
+    - We'll scan lines and whenever we find a 5-digit zip (9xxxx) we try to read next lines for city and state.
+    - If the file contains HTML table tags, we strip them first.
+    """
+    db: Dict[str, Dict[str, str]] = {}
+    if not text:
+        return db
+
+    # Normalize and remove HTML tags if present
+    t = text.replace("\r", "\n")
+    t = re.sub(r"<\/?t(?:able|r|d|h)[^>]*>", "\n", t, flags=re.IGNORECASE)
+    t = re.sub(r"&nbsp;|\t", " ", t)
+    lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
+
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        # If line is exactly a 5-digit zip (or contains one), capture it
+        m = re.search(r"\b(9[0-6]\d{3})\b", ln)
+        if m:
+            z = m.group(1)
+            city = ""
+            state = "CA"
+            office = ""  # office mapping not present in ZIP_DB.txt; left empty
+
+            # Try same line after zip for city
+            after = ln[m.end():].strip(" ,:-")
+            if after and re.search(r"[A-Za-z]", after):
+                # take first chunk as city
+                city_candidate = re.split(r"[,\-–:]", after)[0].strip()
+                if city_candidate:
+                    city = city_candidate.title()
+
+            # If no city found, try next line
+            if not city and i + 1 < len(lines):
+                next_ln = lines[i + 1]
+                # If next line looks like a city (letters) and not another zip
+                if not re.search(r"\b9[0-6]\d{3}\b", next_ln) and re.search(r"[A-Za-z]", next_ln):
+                    city = re.split(r"[,\-–:]", next_ln)[0].strip().title()
+                    # try to detect state on following line
+                    if i + 2 < len(lines):
+                        maybe_state = lines[i + 2]
+                        if re.fullmatch(r"[A-Z]{2}", maybe_state):
+                            state = maybe_state
+                        elif "CA" in maybe_state:
+                            state = "CA"
+
+            # If still no city, try previous line
+            if not city and i - 1 >= 0:
+                prev_ln = lines[i - 1]
+                if not re.search(r"\b9[0-6]\d{3}\b", prev_ln) and re.search(r"[A-Za-z]", prev_ln):
+                    city = re.split(r"[,\-–:]", prev_ln)[0].strip().title()
+
+            db[z] = {"city": city, "state": state, "office": office}
+            i += 1
+            continue
+        i += 1
+
+    # Additional pass: detect sequences Zip / City / State on consecutive lines
+    for j in range(len(lines) - 2):
+        a, b, c = lines[j], lines[j + 1], lines[j + 2]
+        if re.fullmatch(r"\d{5}", a) and re.search(r"[A-Za-z]", b) and re.search(r"\bCA\b|\b[A-Z]{2}\b", c):
+            z = a
+            city = b.title()
+            state = "CA" if "CA" in c else c.strip()
+            db[z] = {"city": city, "state": state, "office": db.get(z, {}).get("office", "")}
+
+    # Normalize keys to 5-digit strings
+    normalized: Dict[str, Dict[str, str]] = {}
+    for z, info in db.items():
+        zc = re.sub(r"\D", "", z)[:5]
+        if len(zc) == 5:
+            normalized[zc] = {
+                "city": (info.get("city") or "").strip(),
+                "state": (info.get("state") or "CA").strip(),
+                "office": (info.get("office") or "").strip()
+            }
+    return normalized
+
+# -------------------------
+# Default minimal ZIP_DB (fallback)
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": "Baie de San Francisco — Corte Madera (525)"},
     "95818": {"city": "Sacramento", "state": "CA", "office": "Sacramento / Nord — Sacramento (Broadway) (500)"},
@@ -72,6 +159,20 @@ ZIP_DB: Dict[str, Dict[str, str]] = {
     "94015": {"city": "Daly City", "state": "CA", "office": "Baie de San Francisco — Daly City (599)"},
 }
 
+# Attempt to fetch and parse GitHub ZIP_DB.txt
+fetched_text = fetch_github_zipdb(GITHUB_RAW_ZIPDB)
+if fetched_text:
+    parsed = parse_zipdb_text(fetched_text)
+    if parsed:
+        # Merge parsed entries into ZIP_DB (parsed takes precedence)
+        ZIP_DB.update(parsed)
+        fetched_ok = True
+    else:
+        fetched_ok = False
+else:
+    fetched_ok = False
+
+# Build reverse indices
 def build_indices(zip_db: Dict[str, Dict[str, str]]):
     city_to_zips: Dict[str, List[str]] = {}
     office_to_zips: Dict[str, List[str]] = {}
@@ -87,7 +188,7 @@ def build_indices(zip_db: Dict[str, Dict[str, str]]):
 CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
 
 # -------------------------
-# CSS
+# CSS + fonts
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -106,191 +207,122 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 """, unsafe_allow_html=True)
 
 # -------------------------
-# Parsing logic for the provided text (Output.txt style)
-def parse_text_to_zip_entries(text: str) -> Dict[str, Dict[str, str]]:
-    """
-    Robust heuristics to extract zipcode, city, state, (optional office) from a raw text dump.
-    Returns a dict mapping zipcode -> {city, state, office}
-    """
-    entries: Dict[str, Dict[str, str]] = {}
+# Sidebar: show fetch status and PDF417 params
+st.sidebar.header("Source ZIP_DB")
+if fetched_ok:
+    st.sidebar.success("ZIP_DB chargé depuis GitHub.")
+else:
+    st.sidebar.warning("Impossible de charger ZIP_DB depuis GitHub. Utilisation d'une base minimale embarquée.")
+st.sidebar.write(f"Source: {GITHUB_RAW_ZIPDB}")
 
-    # Normalize whitespace and replace HTML table tags if present
-    t = text.replace("\r", "\n")
-    t = re.sub(r"<\/?table>|<\/?tr>|<\/?td>|<\/?th>", "\n", t, flags=re.IGNORECASE)
-    t = re.sub(r"&nbsp;|\t", " ", t)
-    lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
+st.sidebar.header("Paramètres PDF417 (optionnel)")
+columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
+security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2)
+scale_param = st.sidebar.slider("Échelle", 1, 6, 3)
+ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
+color_param = st.sidebar.color_picker("Couleur du code", "#000000")
+st.sidebar.markdown("Si pdf417gen n'est pas vendorisé, l'app affichera un message d'avertissement.")
 
-    # Strategy A: lines that contain a 5-digit zip and a city on same or adjacent lines
-    i = 0
-    while i < len(lines):
-        ln = lines[i]
-        # find 5-digit zip anywhere in the line
-        m = re.search(r"\b(9[0-6]\d{3})\b", ln)
+# -------------------------
+# PDF417 import attempt
+_PDF417_AVAILABLE = False
+try:
+    from pdf417gen import encode, render_svg
+    _PDF417_AVAILABLE = True
+except Exception:
+    try:
+        import pdf417gen
+        from pdf417gen import encode, render_svg
+        _PDF417_AVAILABLE = True
+    except Exception:
+        _PDF417_AVAILABLE = False
+
+def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
+    if not _PDF417_AVAILABLE:
+        raise RuntimeError("Module pdf417gen non disponible.")
+    codes = encode(data_bytes, columns=columns, security_level=security_level, force_binary=False)
+    svg_tree = render_svg(codes, scale=scale, ratio=ratio, color=color)
+    try:
+        import xml.etree.ElementTree as ET
+        svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
+        return svg_bytes.decode("utf-8")
+    except Exception:
+        return str(svg_tree)
+
+# -------------------------
+# Small helpers for parsing AAMVA (debug)
+AAMVA_MAP = {
+    "DCS": "last_name", "DAC": "first_name", "DCT": "full_name_trunc",
+    "DBB": "date_of_birth", "DBA": "expiration_date", "DBD": "issue_date",
+    "DAQ": "id_number", "DAG": "address1", "DAH": "address2",
+    "DAI": "city", "DAJ": "state", "DAK": "postal_code",
+    "DCF": "document_discriminator", "DAU": "height", "DAY": "eye_color", "DAZ": "hair_color",
+}
+
+def mmddyyyy_to_iso(s: str) -> Optional[str]:
+    s = s.strip()
+    if not re.fullmatch(r"\d{6,8}", s):
+        return None
+    try:
+        return datetime.datetime.strptime(s, "%m%d%Y").date().isoformat()
+    except Exception:
+        return None
+
+def parse_payload(payload: str) -> Dict[str, Optional[str]]:
+    s = payload.replace("\r\n", "\n").replace("\r", "\n")
+    s = s.lstrip("\n\r @\u001e")
+    lines = [ln for ln in s.split("\n") if ln.strip() != ""]
+    result = {"raw_lines": lines}
+    token_re = re.compile(r"^([A-Z]{3})(.*)$")
+    for ln in lines:
+        m = token_re.match(ln)
         if m:
-            z = m.group(1)
-            # attempt to find city on same line after zip
-            after = ln[m.end():].strip(" ,:-")
-            city = ""
-            state = "CA"
-            office = ""
-            if after:
-                # if after contains letters, take first chunk as city
-                city_candidate = re.split(r"[,\t\-–:]", after)[0].strip()
-                if re.search(r"[A-Za-z]", city_candidate):
-                    city = city_candidate.title()
-            # else try next line(s) for city/state
-            if not city and i + 1 < len(lines):
-                next_ln = lines[i+1]
-                # if next line looks like a city (letters) and not another zip
-                if not re.search(r"\b9[0-6]\d{3}\b", next_ln) and re.search(r"[A-Za-z]", next_ln):
-                    city = re.split(r"[,\t\-–:]", next_ln)[0].strip().title()
-                    # if next line contains state or office, try to capture
-                    # check following line for state or office
-                    if i + 2 < len(lines):
-                        maybe_state = lines[i+2]
-                        if re.search(r"\bCA\b", maybe_state):
-                            state = "CA"
-                        elif re.search(r"\b[A-Z]{2}\b", maybe_state):
-                            state = re.search(r"\b([A-Z]{2})\b", maybe_state).group(1)
-            # fallback: if city still empty, try previous line
-            if not city and i - 1 >= 0:
-                prev_ln = lines[i-1]
-                if not re.search(r"\b9[0-6]\d{3}\b", prev_ln) and re.search(r"[A-Za-z]", prev_ln):
-                    city = re.split(r"[,\t\-–:]", prev_ln)[0].strip().title()
-            entries[z] = {"city": city, "state": state, "office": office}
-            i += 1
-            continue
-        i += 1
-
-    # Strategy B: detect table-like sequences "ZipCode City State" repeated
-    # Try to find sequences of three tokens where first is zip, second is city, third is state
-    for idx in range(len(lines)-2):
-        a, b, c = lines[idx], lines[idx+1], lines[idx+2]
-        if re.fullmatch(r"\d{5}", a) and re.fullmatch(r"[A-Za-z][A-Za-z '\-\.&]+", b) and re.fullmatch(r"[A-Z]{2}", c):
-            z = a
-            city = b.title()
-            state = c
-            entries[z] = {"city": city, "state": state, "office": entries.get(z, {}).get("office", "")}
-
-    # Strategy C: look for patterns like "City  CA  94925" or "City CA 94925"
-    # We'll search for 5-digit zips and look backwards for a city token
-    for idx, ln in enumerate(lines):
-        for m in re.finditer(r"\b(9[0-6]\d{3})\b", ln):
-            z = m.group(1)
-            if z in entries and entries[z].get("city"):
-                continue
-            # try to extract city from same line before zip
-            before = ln[:m.start()].strip(" ,:-")
-            city = ""
-            if before:
-                # take last comma-separated chunk
-                city_candidate = re.split(r"[,\t\-–:]", before)[-1].strip()
-                if re.search(r"[A-Za-z]", city_candidate):
-                    city = city_candidate.title()
-            # if still empty, try previous line
-            if not city and idx > 0:
-                prev = lines[idx-1]
-                if not re.search(r"\b9[0-6]\d{3}\b", prev) and re.search(r"[A-Za-z]", prev):
-                    city = re.split(r"[,\t\-–:]", prev)[0].strip().title()
-            if not city:
-                city = entries.get(z, {}).get("city", "")
-            entries[z] = {"city": city, "state": entries.get(z, {}).get("state", "CA"), "office": entries.get(z, {}).get("office", "")}
-
-    # Strategy D: clean up empty city names by grouping zips by nearby known cities
-    # If many zips have empty city but share contiguous blocks, leave empty (user can refine)
-    # Final normalization: ensure zip keys are 5-digit strings
-    normalized: Dict[str, Dict[str, str]] = {}
-    for z, info in entries.items():
-        zc = re.sub(r"\D", "", z)[:5]
-        if len(zc) == 5:
-            normalized[zc] = {
-                "city": (info.get("city") or "").strip(),
-                "state": (info.get("state") or "CA").strip(),
-                "office": (info.get("office") or "").strip()
-            }
-    return normalized
-
-# -------------------------
-# UI: allow user to paste text or upload the text file (Output.txt)
-st.title("Importer automatiquement la base ZIP depuis ton texte (Output.txt)")
-
-st.markdown(
-    "Colle le contenu du fichier texte (Output.txt) ou téléverse le fichier texte. "
-    "Le script va parser automatiquement les Zip / City / State et remplir la base."
-)
-
-col1, col2 = st.columns(2)
-with col1:
-    uploaded_txt = st.file_uploader("Téléverser Output.txt (texte)", type=["txt"])
-with col2:
-    pasted = st.text_area("Ou coller le texte ici", height=200)
-
-if st.button("Parser et intégrer le texte"):
-    raw = ""
-    if uploaded_txt is not None:
-        try:
-            raw = uploaded_txt.read().decode("utf-8", errors="replace")
-        except Exception:
-            raw = uploaded_txt.read().decode("latin-1", errors="replace")
-    elif pasted and pasted.strip():
-        raw = pasted
-    else:
-        st.error("Aucun texte fourni. Colle le contenu ou téléverse le fichier Output.txt.")
-        st.stop()
-
-    parsed = parse_text_to_zip_entries(raw)
-    if not parsed:
-        st.warning("Aucune entrée ZIP détectée par l'heuristique. Le texte peut avoir un format particulier.")
-    else:
-        # Merge parsed into ZIP_DB (prefer existing non-empty values)
-        added = 0
-        updated = 0
-        for z, info in parsed.items():
-            if z in ZIP_DB:
-                # update missing fields only
-                changed = False
-                for k in ("city", "state", "office"):
-                    if info.get(k) and not ZIP_DB[z].get(k):
-                        ZIP_DB[z][k] = info[k]
-                        changed = True
-                if changed:
-                    updated += 1
+            code = m.group(1)
+            value = m.group(2).strip()
+            key = AAMVA_MAP.get(code)
+            if key:
+                if key in ("date_of_birth", "expiration_date", "issue_date"):
+                    iso = mmddyyyy_to_iso(value)
+                    result[key] = iso or value
+                else:
+                    result[key] = value
             else:
-                ZIP_DB[z] = {"city": info.get("city",""), "state": info.get("state","CA"), "office": info.get("office","")}
-                added += 1
-        # rebuild indices
-        CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
-        st.success(f"Import terminé — ajoutés: {added}, mis à jour: {updated}, total base: {len(ZIP_DB)}")
+                result[f"raw_{code}"] = value
+        else:
+            if ln.startswith("ANSI") or ln.startswith("AAMVA"):
+                result["header"] = ln.strip()
+            else:
+                result.setdefault("other_lines", []).append(ln.strip())
+    return result
 
 # -------------------------
-# Allow quick automatic mapping: if user enters a zip, auto-select city/office
-st.markdown("---")
-st.title("Générateur officiel de permis CA (avec ZIP auto)")
+# Session state defaults
+defaults = {
+    "ln_input": "HARMS",
+    "fn_input": "ROSA",
+    "address1_input": "2570 24TH STREET",
+    "address2_input": "",
+    "zip_select": next(iter(ZIP_DB.keys())) if ZIP_DB else "90001",
+    "city_select": ZIP_DB.get(next(iter(ZIP_DB.keys())), {}).get("city", "") if ZIP_DB else "",
+    "state_input": ZIP_DB.get(next(iter(ZIP_DB.keys())), {}).get("state", "CA") if ZIP_DB else "CA",
+    "office_select": ZIP_DB.get(next(iter(ZIP_DB.keys())), {}).get("office", "") if ZIP_DB else "",
+    "sex_input": "M",
+    "dob_input": datetime.date(1990, 1, 1),
+    "h1_input": 5,
+    "h2_input": 10,
+    "w_input": 160,
+    "eyes_input": "BRN",
+    "hair_input": "BRN",
+    "cls_input": "C",
+    "rstr_input": "NONE",
+    "endorse_input": "NONE",
+    "iss_input": datetime.date.today(),
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-# Ensure session_state defaults
-if "ln_input" not in st.session_state:
-    st.session_state.update({
-        "ln_input": "HARMS",
-        "fn_input": "ROSA",
-        "address1_input": "2570 24TH STREET",
-        "address2_input": "",
-        "zip_select": next(iter(ZIP_DB.keys())) if ZIP_DB else "90001",
-        "city_select": ZIP_DB.get(next(iter(ZIP_DB.keys())), {}).get("city", "") if ZIP_DB else "",
-        "state_input": ZIP_DB.get(next(iter(ZIP_DB.keys())), {}).get("state", "CA") if ZIP_DB else "CA",
-        "office_select": ZIP_DB.get(next(iter(ZIP_DB.keys())), {}).get("office", "") if ZIP_DB else "",
-        "sex_input": "M",
-        "dob_input": datetime.date(1990, 1, 1),
-        "h1_input": 5,
-        "h2_input": 10,
-        "w_input": 160,
-        "eyes_input": "BRN",
-        "hair_input": "BRN",
-        "cls_input": "C",
-        "rstr_input": "NONE",
-        "endorse_input": "NONE",
-        "iss_input": datetime.date.today(),
-    })
-
+# -------------------------
 # Synchronization callbacks
 def update_from_zip():
     z = st.session_state.get("zip_select", "").strip()
@@ -340,16 +372,19 @@ def update_from_office():
     else:
         st.info("Aucune correspondance ZIP connue pour ce bureau dans la base locale.")
 
-# Form fields
+# -------------------------
+# FORMULAIRE (widgets)
+st.title("Générateur officiel de permis CA")
+
 ln = st.text_input("Nom de famille", st.session_state["ln_input"], key="ln_input")
 fn = st.text_input("Prénom", st.session_state["fn_input"], key="fn_input")
 address1 = st.text_input("Adresse (ligne 1)", st.session_state["address1_input"], key="address1_input")
 address2 = st.text_input("Adresse (ligne 2)", st.session_state["address2_input"], key="address2_input")
 
-# Build options from ZIP_DB (refresh each render)
+# Build options from current ZIP_DB
 zip_options = sorted(ZIP_DB.keys())
-city_options = sorted({info.get("city") for info in ZIP_DB.values() if info.get("city")})
-office_options = sorted({info.get("office") for info in ZIP_DB.values() if info.get("office")})
+city_options = sorted({info["city"] for info in ZIP_DB.values() if info.get("city")})
+office_options = sorted({info["office"] for info in ZIP_DB.values() if info.get("office")})
 
 col_zip, col_city = st.columns([2,3])
 with col_zip:
@@ -369,7 +404,10 @@ with col_city:
         on_change=update_from_city
     )
 
-office_all = sorted(set(office_options))
+# Field office selectbox: include any known offices (may be empty strings filtered out)
+office_all = sorted([o for o in office_options if o])
+if not office_all:
+    office_all = [""]  # keep selectbox happy
 office_select = st.selectbox(
     "Field Office",
     options=office_all,
@@ -397,18 +435,15 @@ iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_
 
 generate = st.button("Générer la carte")
 
-# Debug panel
-st.markdown("### Debug (aperçu de la base et session_state)")
-st.write(f"Entrées ZIP_DB : {len(ZIP_DB)}")
-if st.checkbox("Afficher quelques entrées ZIP_DB"):
-    sample = dict(list(ZIP_DB.items())[:200])
-    st.json(sample)
-st.code({k: st.session_state.get(k) for k in sorted(st.session_state.keys())}, language="json")
+# Debug panel (visible)
+st.markdown("### Debug session_state (pour diagnostic)")
+st.code({k: st.session_state[k] for k in sorted(st.session_state.keys())}, language="json")
+st.markdown(f"**Entrées ZIP_DB** : {len(ZIP_DB)} (source GitHub: {'OK' if fetched_ok else 'fallback'})")
 
 # -------------------------
-# Validation and generation (AAMVA + PDF)
-def validate_inputs() -> List[str]:
-    errors: List[str] = []
+# VALIDATIONS et génération
+def validate_inputs():
+    errors = []
     if not st.session_state.get("ln_input", "").strip():
         errors.append("Nom de famille requis.")
     if not st.session_state.get("fn_input", "").strip():
@@ -440,7 +475,7 @@ def validate_inputs() -> List[str]:
             errors.append("Code postal invalide.")
     return errors
 
-def build_aamva_tags(fields: Dict[str, str]) -> str:
+def build_aamva_tags(fields: Dict[str,str]) -> str:
     header = "@\n\rANSI 636014080102DL"
     parts = [header]
     for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAH","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
@@ -591,47 +626,46 @@ if generate:
     st.code(aamva, language="text")
 
     if st.button("Afficher AAMVA JSON parsé"):
-        # minimal parser for debug
-        def parse_payload(payload: str) -> Dict[str,str]:
-            s = payload.replace("\r\n","\n").replace("\r","\n")
-            s = s.lstrip("\n\r @\u001e")
-            lines = [ln for ln in s.split("\n") if ln.strip()]
-            result = {}
-            for ln in lines:
-                m = re.match(r"^([A-Z]{3})(.*)$", ln)
-                if m:
-                    result[m.group(1)] = m.group(2).strip()
-            return result
-        st.json(parse_payload(aamva))
+        parsed = parse_payload(aamva)
+        st.json(parsed)
 
     # PDF417 display if available
     if _PDF417_AVAILABLE:
         try:
-            svg_str = encode(data_bytes, columns=6, security_level=2, force_binary=False)
-            # render_svg returns an ElementTree; use helper if available
-            svg_html = "<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>PDF417</div>"
+            svg_str = generate_pdf417_svg(data_bytes, columns=columns_param, security_level=security_level_param, scale=scale_param, ratio=ratio_param, color=color_param)
+            svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
             components.html(svg_html, height=220, scrolling=True)
         except Exception as e:
             st.error("Erreur génération PDF417 : " + str(e))
+            st.info("Vérifiez le module pdf417gen dans le dossier vendorisé.")
     else:
-        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché.")
+        st.warning("pdf417gen non disponible. Vendorisez le module ou complétez pdf417gen/__init__.py pour exposer encode et render_svg.")
 
-    pdf_bytes = create_pdf_bytes({
-        "Nom": ln_val,
-        "Prénom": fn_val,
-        "Sexe": st.session_state.get("sex_input"),
-        "DOB": st.session_state["dob_input"].strftime("%m/%d/%Y"),
-        "Adresse": f"{address1_val} {address2_val}".strip(),
-        "Ville": city_val,
-        "État": state_val,
-        "Code postal": postal_val,
-        "Field Office": office_choice,
-        "DD": dd,
-        "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"),
-        "EXP": exp.strftime("%m/%d/%Y"),
-        "Classe": cls_disp,
-        "Restrictions": rstr_disp,
-        "Endorsements": endorse_disp,
-        "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
-    }, photo_bytes=photo_bytes)
-    st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
+    cols = st.columns(2)
+    with cols[0]:
+        if _PDF417_AVAILABLE:
+            try:
+                svg_bytes = svg_str.encode("utf-8")
+                st.download_button("Télécharger PDF417 (SVG)", data=svg_bytes, file_name="pdf417.svg", mime="image/svg+xml")
+            except Exception:
+                pass
+    with cols[1]:
+        pdf_bytes = create_pdf_bytes({
+            "Nom": ln_val,
+            "Prénom": fn_val,
+            "Sexe": st.session_state.get("sex_input"),
+            "DOB": st.session_state["dob_input"].strftime("%m/%d/%Y"),
+            "Adresse": f"{address1_val} {address2_val}".strip(),
+            "Ville": city_val,
+            "État": state_val,
+            "Code postal": postal_val,
+            "Field Office": office_choice,
+            "DD": dd,
+            "ISS": st.session_state["iss_input"].strftime("%m/%d/%Y"),
+            "EXP": exp.strftime("%m/%d/%Y"),
+            "Classe": cls_disp,
+            "Restrictions": rstr_disp,
+            "Endorsements": endorse_disp,
+            "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
+        }, photo_bytes=photo_bytes)
+        st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
