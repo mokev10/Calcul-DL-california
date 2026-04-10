@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Streamlit app — Générateur de permis CA
-# Intègre ZIP_DB depuis GitHub et mappe les Field Offices via le dict fourni (pas de parsing PDF).
-# Remplace entièrement ton ancien fichier par celui-ci.
+# Intègre ZIP_DB depuis GitHub and a built-in field_offices dict (no PDF parsing).
+# Replace your existing file entirely with this one.
 #
 # Requirements:
 # pip install streamlit requests reportlab
-# pdf417gen is optional (vendorisez si nécessaire)
+# pdf417gen is optional (vendorize if needed)
 
 import streamlit as st
 import datetime
@@ -19,7 +19,7 @@ import re
 from typing import Dict, List, Optional
 import streamlit.components.v1 as components
 
-# ReportLab pour export PDF
+# ReportLab for PDF export
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
@@ -31,7 +31,7 @@ st.set_page_config(page_title="Permis CA", layout="centered")
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
 
 # -------------------------
-# Field offices dict (user-provided)
+# Field offices dict (user-provided) — integrated directly
 field_offices = {
     "Baie de San Francisco": {
         "Corte Madera": 525,
@@ -229,11 +229,11 @@ if fetched_text:
     if parsed:
         ZIP_DB.update(parsed)
 
-# Apply FIELD_OFFICE_MAP to ZIP_DB where city matches
+# -------------------------
+# Apply FIELD_OFFICE_MAP to ZIP_DB where city matches (approximate normalization)
 def normalize_key(s: str) -> str:
     return re.sub(r"[^\w]", "", (s or "").upper())
 
-# Build normalized mapping for approximate matching
 norm_field_map = {normalize_key(k): v for k, v in FIELD_OFFICE_MAP.items()}
 
 for z, info in ZIP_DB.items():
@@ -243,13 +243,18 @@ for z, info in ZIP_DB.items():
         if key in norm_field_map:
             ZIP_DB[z]["office"] = norm_field_map[key]
         else:
-            # try partial match: remove parenthesis content and try again
+            # try removing parenthesis content and try again
             city_simple = re.sub(r"\(.*?\)", "", city).strip()
             key2 = normalize_key(city_simple)
             if key2 in norm_field_map:
                 ZIP_DB[z]["office"] = norm_field_map[key2]
             else:
-                ZIP_DB[z]["office"] = ""  # leave empty if no match
+                # special-case: if city is "Los Angeles" assign Hope St office by default
+                if city.upper() == "LOS ANGELES":
+                    hope_label = FIELD_OFFICE_MAP.get("LOS ANGELES (HOPE ST)") or "Grand Los Angeles — Los Angeles (Hope St) (502)"
+                    ZIP_DB[z]["office"] = hope_label
+                else:
+                    ZIP_DB[z]["office"] = ZIP_DB[z].get("office", "")
 
 # -------------------------
 # Build indices
@@ -289,7 +294,7 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
         return str(svg_tree)
 
 # -------------------------
-# UI: minimal, clean interface (no debug panels)
+# UI: clean interface
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -402,7 +407,13 @@ address2 = st.text_input("Adresse (ligne 2)", st.session_state["address2_input"]
 
 zip_options = sorted(ZIP_DB.keys())
 city_options = sorted({info["city"] for info in ZIP_DB.values() if info.get("city")})
-office_options = sorted({info["office"] for info in ZIP_DB.values() if info.get("office")})
+
+# Build office options as union of ZIP_DB offices and all defined field offices
+office_options_from_db = sorted({info["office"] for info in ZIP_DB.values() if info.get("office")})
+field_office_labels = sorted(set(FIELD_OFFICE_MAP.values()))
+office_all = sorted(set(office_options_from_db) | set(field_office_labels))
+if not office_all:
+    office_all = [""]
 
 col_zip, col_city = st.columns([2,3])
 with col_zip:
@@ -422,9 +433,6 @@ with col_city:
         on_change=update_from_city
     )
 
-office_all = sorted([o for o in office_options if o])
-if not office_all:
-    office_all = [""]
 office_select = st.selectbox(
     "Field Office",
     options=office_all,
