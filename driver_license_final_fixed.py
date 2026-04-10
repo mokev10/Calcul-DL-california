@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Streamlit app — Générateur de permis CA
-# Intègre ZIP_DB depuis GitHub and a built-in field_offices dict (no PDF parsing).
-# Replace your existing file entirely with this one.
+# Intègre ZIP_DB depuis GitHub et un dictionnaire field_offices intégré.
+# Ajoute trois options de téléchargement du code-barres PDF417 : SVG, PNG, GIF.
 #
 # Requirements:
-# pip install streamlit requests reportlab
-# pdf417gen is optional (vendorize if needed)
+# pip install streamlit requests reportlab pdf417gen cairosvg pillow
 
 import streamlit as st
 import datetime
@@ -646,15 +645,84 @@ if generate:
     st.subheader("Payload AAMVA (brut)")
     st.code(aamva, language="text")
 
+    # Generate PDF417 and provide downloads (SVG, PNG, GIF)
     if _PDF417_AVAILABLE:
         try:
-            svg_str = generate_pdf417_svg(data_bytes, columns=columns_param, security_level=security_level_param, scale=scale_param, ratio=ratio_param, color=color_param)
+            # Generate SVG
+            svg_str = generate_pdf417_svg(
+                data_bytes,
+                columns=columns_param,
+                security_level=security_level_param,
+                scale=scale_param,
+                ratio=ratio_param,
+                color=color_param
+            )
+
+            # Clean SVG to reduce rendering artifacts
+            svg_str = svg_str.replace('<svg ', '<svg shape-rendering="crispEdges" vector-effect="non-scaling-stroke" style="image-rendering:pixelated; image-rendering:-moz-crisp-edges;" ')
+            svg_str = re.sub(r'\sstroke="[^"]+"', '', svg_str)
+            svg_str = re.sub(r'\sstroke-width="[^"]+"', '', svg_str)
+            # Ensure integer width/height if present
+            svg_str = re.sub(r'width="([\d\.]+)"', lambda m: f'width="{int(float(m.group(1)))}"', svg_str)
+            svg_str = re.sub(r'height="([\d\.]+)"', lambda m: f'height="{int(float(m.group(1)))}"', svg_str)
+
+            # Display SVG
             svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
-            components.html(svg_html, height=220, scrolling=True)
+            components.html(svg_html, height=260, scrolling=True)
+
+            # Prepare downloads: SVG, PNG (rasterized), GIF (from PNG)
+            png_bytes = None
+            gif_bytes = None
+            try:
+                import cairosvg
+                from PIL import Image
+                # Rasterize SVG to PNG at a higher scale to avoid artifacts
+                png_bytes = cairosvg.svg2png(bytestring=svg_str.encode("utf-8"), scale=4)
+                # Convert PNG bytes to GIF bytes
+                img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+                # If GIF needs palette, convert to P mode
+                gif_buf = io.BytesIO()
+                img.convert("P", palette=Image.ADAPTIVE).save(gif_buf, format="GIF")
+                gif_bytes = gif_buf.getvalue()
+            except Exception:
+                # If rasterization fails, leave png_bytes/gif_bytes as None
+                png_bytes = None
+                gif_bytes = None
+
+            # Download buttons (SVG always available, PNG/GIF if generated)
+            cols = st.columns(3)
+            with cols[0]:
+                st.download_button(
+                    "Télécharger PDF417 (SVG)",
+                    data=svg_str.encode("utf-8"),
+                    file_name="pdf417.svg",
+                    mime="image/svg+xml"
+                )
+            with cols[1]:
+                if png_bytes:
+                    st.download_button(
+                        "Télécharger PDF417 (PNG)",
+                        data=png_bytes,
+                        file_name="pdf417.png",
+                        mime="image/png"
+                    )
+                else:
+                    st.button("PNG non disponible")
+            with cols[2]:
+                if gif_bytes:
+                    st.download_button(
+                        "Télécharger PDF417 (GIF)",
+                        data=gif_bytes,
+                        file_name="pdf417.gif",
+                        mime="image/gif"
+                    )
+                else:
+                    st.button("GIF non disponible")
+
         except Exception as e:
             st.error("Erreur génération PDF417 : " + str(e))
     else:
-        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché.")
+        st.info("pdf417gen non disponible. Le PDF417 ne sera pas affiché ni téléchargeable.")
 
     pdf_bytes = create_pdf_bytes({
         "Nom": ln_val,
@@ -675,5 +743,3 @@ if generate:
         "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
     }, photo_bytes=photo_bytes)
     st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
-
-
