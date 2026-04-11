@@ -3,10 +3,10 @@
 # Streamlit app — Générateur de permis CA
 # Intègre ZIP_DB depuis GitHub et un dictionnaire field_offices intégré.
 # Ajoute prévisualisation et téléchargements PDF417 (SVG/PNG/GIF) avec sections rétractables (UI/UX).
+# Option UI/UX : afficher / masquer les codes-barres (PDF417) via un toggle et contrôles dans l'interface.
 #
-# Requirements:
+# Requirements (optionnel pour fonctionnalités avancées):
 # pip install streamlit requests reportlab pdf417gen pillow
-# Si pdf417gen absent, le SVG ne sera pas généré automatiquement mais le reste reste fonctionnel.
 
 import streamlit as st
 import datetime
@@ -28,7 +28,7 @@ try:
 except Exception:
     _AAMVA_UTILS_AVAILABLE = False
 
-# ReportLab for PDF export
+# ReportLab for PDF export (optional)
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -37,14 +37,22 @@ try:
 except Exception:
     _REPORTLAB_AVAILABLE = False
 
-# Pillow for rasterization
+# Pillow for rasterization (optional)
 try:
     from PIL import Image, ImageDraw, ImageOps
     _PIL_AVAILABLE = True
 except Exception:
     _PIL_AVAILABLE = False
 
-st.set_page_config(page_title="Permis CA", layout="centered")
+# pdf417gen (optional)
+_PDF417_AVAILABLE = False
+try:
+    from pdf417gen import encode, render_svg
+    _PDF417_AVAILABLE = True
+except Exception:
+    _PDF417_AVAILABLE = False
+
+st.set_page_config(page_title="Permis CA", layout="wide")
 
 # -------------------------
 # Configuration: GitHub raw URL for ZIP_DB.txt
@@ -294,13 +302,6 @@ CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
 
 # -------------------------
 # PDF417 optional import
-_PDF417_AVAILABLE = False
-try:
-    from pdf417gen import encode, render_svg
-    _PDF417_AVAILABLE = True
-except Exception:
-    _PDF417_AVAILABLE = False
-
 def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
     if not _PDF417_AVAILABLE:
         raise RuntimeError("Module pdf417gen non disponible.")
@@ -512,6 +513,13 @@ enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)"
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement. Place aamva_utils.py pour activer.")
 
+# UI/UX: Toggle to show/hide barcode area
+st.sidebar.markdown("---")
+show_barcodes_default = True
+if "show_barcodes" not in st.session_state:
+    st.session_state["show_barcodes"] = show_barcodes_default
+show_barcodes = st.sidebar.checkbox("Afficher les codes-barres (PDF417)", value=st.session_state["show_barcodes"], key="show_barcodes")
+
 # -------------------------
 # Session defaults
 defaults = {
@@ -688,13 +696,14 @@ def validate_inputs() -> List[str]:
     return errors
 
 def build_aamva_tags(fields: Dict[str,str]) -> str:
-    header = "@\n\rANSI 636014080102DL"
+    header = "@\r\nANSI 636014080102DL"
     parts = [header]
-    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAH","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
+    order = ["DAQ","DCS","DAC","DBB","DBA","DBD","DAG","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"]
+    for tag in order:
         val = fields.get(tag)
         if val:
             parts.append(f"{tag}{val}")
-    return "\u001e\r".join(parts) + "\r"
+    return GS.join(parts) + "\r"
 
 def fetch_image_bytes(url: str) -> Optional[bytes]:
     try:
@@ -705,31 +714,25 @@ def fetch_image_bytes(url: str) -> Optional[bytes]:
         return None
 
 def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
+    if not _REPORTLAB_AVAILABLE:
+        raise RuntimeError("reportlab non disponible.")
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
-    x = 72
-    y = height - 72
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
-    y -= 24
+    x = 72; y = height - 72
+    c.setFont("Helvetica-Bold", 14); c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE"); y -= 24
     c.setFont("Helvetica", 11)
     for k, v in fields.items():
-        c.drawString(x, y, f"{k}: {v}")
-        y -= 16
+        c.drawString(x, y, f"{k}: {v}"); y -= 16
         if y < 72:
-            c.showPage()
-            y = height - 72
+            c.showPage(); y = height - 72
     if photo_bytes:
         try:
             img = ImageReader(io.BytesIO(photo_bytes))
             c.drawImage(img, width - 72 - 90, height - 72 - 110, width=90, height=110)
         except Exception:
             pass
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer.read()
+    c.showPage(); c.save(); buffer.seek(0); return buffer.read()
 
 # -------------------------
 # Generate card and outputs
@@ -794,13 +797,6 @@ if generate:
     }
     fields = {k:v for k,v in fields.items() if v is not None}
     aamva = build_aamva_tags(fields)
-    data_bytes = aamva.encode("utf-8")
-
-    # photo default
-    IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
-    IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
-    photo_src = IMAGE_M_URL if st.session_state.get("sex_input") == "M" else IMAGE_F_URL
-    photo_bytes = fetch_image_bytes(photo_src)
 
     # Persist payload in session (original)
     st.session_state["aamva_payload_original"] = aamva
@@ -854,40 +850,50 @@ if generate:
         else:
             st.info("Validation non disponible : aamva_utils.py introuvable. Place aamva_utils.py pour activer la validation.")
 
-    # --- PDF417 generation and rasterization
-    st.subheader("PDF417")
-    if _PDF417_AVAILABLE:
-        try:
-            codes = encode(payload_to_use.encode("utf-8"), columns=columns_param, security_level=security_level_param, force_binary=False)
-            svg_tree = render_svg(codes, scale=scale_param, ratio=ratio_param, color=color_param)
+    # --- PDF417 generation and rasterization (show/hide controlled by sidebar toggle)
+    if st.session_state.get("show_barcodes", True):
+        st.subheader("PDF417")
+        if _PDF417_AVAILABLE:
             try:
-                svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
-                svg_str = svg_bytes.decode("utf-8")
-            except Exception:
-                svg_str = str(svg_tree)
-            svg_str = svg_str.replace('<svg ', '<svg shape-rendering="crispEdges" vector-effect="non-scaling-stroke" ')
-            components.html(f"<div style='background:#fff;padding:8px;border-radius:6px'>{svg_str}</div>", height=260, scrolling=True)
-            st.download_button("Télécharger PDF417 (SVG)", data=svg_str.encode("utf-8"), file_name="pdf417.svg", mime="image/svg+xml")
-            if _PIL_AVAILABLE:
+                codes = encode(payload_to_use.encode("utf-8"), columns=columns_param, security_level=security_level_param, force_binary=False)
+                svg_tree = render_svg(codes, scale=scale_param, ratio=ratio_param, color=color_param)
                 try:
-                    png_bytes = rasterize_shapes_to_png_bytes(svg_str, scale=max(1,int(raster_scale_ui)))
-                    st.image(png_bytes, caption="Aperçu PNG", width=320)
-                    st.download_button("Télécharger PDF417 (PNG)", data=png_bytes, file_name="pdf417.png", mime="image/png")
-                    # GIF mono-frame
-                    img = Image.open(io.BytesIO(png_bytes)).convert("P", palette=Image.ADAPTIVE)
-                    gif_buf = io.BytesIO(); img.save(gif_buf, format="GIF", save_all=True, loop=0, duration=int(gif_delay_ui))
-                    gif_bytes = gif_buf.getvalue()
-                    st.image(gif_bytes, caption="Aperçu GIF", width=320)
-                    st.download_button("Télécharger PDF417 (GIF)", data=gif_bytes, file_name="pdf417.gif", mime="image/gif")
-                except Exception as ex:
-                    st.error("Erreur lors de la rasterisation PNG/GIF : " + str(ex))
-            else:
-                st.info("Pillow non installé : PNG/GIF non disponibles ici.")
-        except Exception as e:
-            st.error("Erreur génération PDF417 (pdf417gen) : " + str(e))
-            st.info("Si pdf417gen n'est pas installé, tu peux coller le payload dans l'outil de validation séparé ou utiliser la page HTML/JS fournie pour rasteriser côté navigateur.")
+                    svg_bytes = ET.tostring(svg_tree.getroot(), encoding="utf-8", method="xml")
+                    svg_str = svg_bytes.decode("utf-8")
+                except Exception:
+                    svg_str = str(svg_tree)
+                svg_str = svg_str.replace('<svg ', '<svg shape-rendering="crispEdges" vector-effect="non-scaling-stroke" ')
+                with st.expander("Aperçu PDF417 (SVG)", expanded=True):
+                    components.html(f"<div style='background:#fff;padding:8px;border-radius:6px'>{svg_str}</div>", height=260, scrolling=True)
+                    st.download_button("Télécharger PDF417 (SVG)", data=svg_str.encode("utf-8"), file_name="pdf417.svg", mime="image/svg+xml")
+                if _PIL_AVAILABLE:
+                    try:
+                        png_bytes = rasterize_shapes_to_png_bytes(svg_str, scale=max(1,int(raster_scale_ui)))
+                        with st.expander("Aperçu PNG / GIF", expanded=False):
+                            st.image(png_bytes, caption="Aperçu PNG", width=320)
+                            st.download_button("Télécharger PDF417 (PNG)", data=png_bytes, file_name="pdf417.png", mime="image/png")
+                            # GIF mono-frame
+                            img = Image.open(io.BytesIO(png_bytes)).convert("P", palette=Image.ADAPTIVE)
+                            gif_buf = io.BytesIO(); img.save(gif_buf, format="GIF", save_all=True, loop=0, duration=int(gif_delay_ui))
+                            gif_bytes = gif_buf.getvalue()
+                            st.image(gif_bytes, caption="Aperçu GIF", width=320)
+                            st.download_button("Télécharger PDF417 (GIF)", data=gif_bytes, file_name="pdf417.gif", mime="image/gif")
+                    except Exception as ex:
+                        st.error("Erreur lors de la rasterisation PNG/GIF : " + str(ex))
+                else:
+                    st.info("Pillow non installé : PNG/GIF non disponibles ici.")
+            except Exception as e:
+                st.error("Erreur génération PDF417 (pdf417gen) : " + str(e))
+                st.info("Si pdf417gen n'est pas installé, tu peux coller le payload dans l'outil de validation séparé ou utiliser la page HTML/JS fournie pour rasteriser côté navigateur.")
+        else:
+            st.info("pdf417gen non disponible : SVG PDF417 non généré automatiquement. Tu peux coller le payload dans l'outil de validation séparé ou installer pdf417gen pour génération automatique.")
     else:
-        st.info("pdf417gen non disponible : SVG PDF417 non généré automatiquement. Tu peux coller le payload dans l'outil de validation séparé ou installer pdf417gen pour génération automatique.")
+        # Barcodes hidden: show a compact notice and a quick action to reveal
+        with st.expander("Codes-barres masqués (cliquer pour afficher)"):
+            st.write("Les codes-barres PDF417 sont actuellement masqués. Active la case 'Afficher les codes-barres (PDF417)' dans la barre latérale pour les voir.")
+            if st.button("Afficher maintenant"):
+                st.session_state["show_barcodes"] = True
+                st.experimental_rerun()
 
     # --- Générer PDF final (carte) et proposer téléchargement
     if _REPORTLAB_AVAILABLE:
