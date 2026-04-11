@@ -2,14 +2,12 @@
 # driver_license_final_fixed.py
 # Version complète prête à coller
 # - Préserve l'UI/UX initiale (menus déroulants, photo par défaut selon Sexe)
-# - Optionnel : validation AAMVA via aamva_utils.py (si présent)
-# - Option UI : afficher/masquer les codes-barres PDF417
-#
-# Requirements (optionnel pour fonctionnalités avancées):
-# pip install streamlit requests reportlab pdf417gen pillow
+# - Intègre aamva_utils.py de façon optionnelle (validation + auto-correction)
+# - Toggle pour afficher/masquer les codes-barres PDF417
+# - Flux : générer -> (optionnel) valider -> proposer correction -> appliquer -> régénérer
 
 import streamlit as st
-import datetime, random, hashlib, io, base64, requests
+import datetime, random, hashlib, io, base64, requests, re
 import streamlit.components.v1 as components
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -23,7 +21,7 @@ except Exception:
     ImageReader = None
     _REPORTLAB_AVAILABLE = False
 
-# Pillow for rasterization (optional)
+# Pillow optional
 try:
     from PIL import Image, ImageDraw, ImageOps
     _PIL_AVAILABLE = True
@@ -32,7 +30,7 @@ except Exception:
     ImageDraw = None
     _PIL_AVAILABLE = False
 
-# pdf417gen (optional)
+# pdf417gen optional
 _PDF417_AVAILABLE = False
 try:
     from pdf417gen import encode, render_svg
@@ -40,20 +38,15 @@ try:
 except Exception:
     _PDF417_AVAILABLE = False
 
-st.set_page_config(page_title="Permis CA", layout="centered")
-
-# -------------------------
-# Optional import of aamva_utils (validation + auto-correction)
-# If absent, validation remains disabled but app keeps full UI.
+# Optional aamva_utils
 try:
-    from aamva_utils import validate_aamva_payload, auto_correct_payload, example_payload, GS as AAMVA_GS
+    from aamva_utils import validate_aamva_payload, auto_correct_payload, example_payload, GS
     _AAMVA_UTILS_AVAILABLE = True
 except Exception:
     _AAMVA_UTILS_AVAILABLE = False
-    AAMVA_GS = None
+    GS = "\x1E"
 
-# Fallback GS
-GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
+st.set_page_config(page_title="Permis CA", layout="centered")
 
 # -------------------------
 # Images par défaut (M / F)
@@ -67,67 +60,21 @@ IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/exte
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
-html, body, [class*="css"]  {
-    font-family: 'Inter', sans-serif;
-}
-.card {
-    width: 450px;
-    border-radius: 14px;
-    padding: 16px;
-    background: linear-gradient(135deg,#1e3a8a,#2563eb);
-    color: white;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-    margin: auto;
-}
-.header {
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    font-weight:700;
-    font-size:14px;
-    margin-bottom:10px;
-}
-.body {
-    display:flex;
-    gap:12px;
-}
-.photo {
-    width:90px;
-    height:110px;
-    background:#e5e7eb;
-    border-radius:8px;
-    overflow:hidden;
-}
-.photo img {
-    width:100%;
-    height:100%;
-    object-fit:cover;
-    display:block;
-}
-.info {
-    flex:1;
-    font-size:12px;
-}
-.label {
-    opacity:0.7;
-    font-size:10px;
-}
-.value {
-    font-weight:700;
-    margin-bottom:4px;
-}
-.badge {
-    background:white;
-    color:#1e3a8a;
-    padding:2px 6px;
-    border-radius:6px;
-    font-weight:700;
-}
+html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
+.card { width: 450px; border-radius: 14px; padding: 16px; background: linear-gradient(135deg,#1e3a8a,#2563eb); color: white; box-shadow: 0 10px 30px rgba(0,0,0,0.15); margin: auto; }
+.header { display:flex; justify-content:space-between; align-items:center; font-weight:700; font-size:14px; margin-bottom:10px; }
+.body { display:flex; gap:12px; }
+.photo { width:90px; height:110px; background:#e5e7eb; border-radius:8px; overflow:hidden; }
+.photo img { width:100%; height:100%; object-fit:cover; display:block; }
+.info { flex:1; font-size:12px; }
+.label { opacity:0.7; font-size:10px; }
+.value { font-weight:700; margin-bottom:4px; }
+.badge { background:white; color:#1e3a8a; padding:2px 6px; border-radius:6px; font-weight:700; }
 </style>
 """, unsafe_allow_html=True)
 
 # -------------------------
-# Sidebar: paramètres PDF417 (optionnel)
+# Sidebar controls
 # -------------------------
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
@@ -137,38 +84,27 @@ ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
 color_param = st.sidebar.color_picker("Couleur du code", "#000000")
 st.sidebar.markdown("Si pdf417gen n'est pas complet, l'app affichera un message d'avertissement.")
 
-# Health check (debug) — optionnel
+st.sidebar.markdown("---")
 if st.sidebar.checkbox("Activer health check (debug)"):
     st.sidebar.markdown("### Health Check pdf417gen")
     try:
         import pdf417gen
         from pdf417gen import encode, render_svg
         st.sidebar.success("Import pdf417gen OK")
-        st.sidebar.write("pdf417gen path:", getattr(pdf417gen, "__file__", "n/a"))
-        try:
-            codes = encode(b"TEST", columns=3, security_level=2, force_binary=False)
-            st.sidebar.write("encode() OK, type:", type(codes).__name__)
-        except Exception as e:
-            st.sidebar.warning("encode() raised: " + str(e))
-        st.sidebar.write("render_svg callable:", callable(render_svg))
     except Exception as exc:
         st.sidebar.error("Import pdf417gen failed: " + str(exc))
-        st.sidebar.info("Vérifie que pdf417gen/ est à la racine et contient __init__.py")
     st.stop()
 
-# -------------------------
-# UI/UX: Toggle to show/hide barcode area and validator toggle
-# -------------------------
+# UI toggles
 st.sidebar.markdown("---")
-show_barcodes_default = True
 if "show_barcodes" not in st.session_state:
-    st.session_state["show_barcodes"] = show_barcodes_default
+    st.session_state["show_barcodes"] = True
 show_barcodes = st.sidebar.checkbox("Afficher les codes-barres (PDF417)", value=st.session_state["show_barcodes"], key="show_barcodes")
 
 st.sidebar.markdown("---")
 enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)", value=False)
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
-    st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement. Place aamva_utils.py pour activer.")
+    st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
 
 # Raster preview scale selector
 st.sidebar.markdown("**Rasterisation (aperçu PNG/GIF)**")
@@ -176,7 +112,7 @@ raster_scale_ui = st.sidebar.selectbox("Scale raster (entier)", [1,2,3,4,5], ind
 gif_delay_ui = st.sidebar.number_input("GIF delay (ms)", min_value=50, max_value=2000, value=200, step=50)
 
 # -------------------------
-# Utilitaires
+# Utilities
 # -------------------------
 def seed(*x):
     parts = []
@@ -203,7 +139,7 @@ def next_sequence(r):
     return str(r.randint(10,99))
 
 # -------------------------
-# Bureaux Field Office (préservés)
+# Field offices (préservés)
 # -------------------------
 offices = {
     "Baie de San Francisco — Corte Madera (525)": 525,
@@ -316,9 +252,10 @@ def validate_inputs() -> List[str]:
 # AAMVA builder (texte pour PDF417)
 # -------------------------
 def build_aamva_tags(fields: Dict[str,str]) -> str:
-    header = "@\n\rANSI 636014080102DL"
+    header = "@\r\nANSI 636014080102DL"
     parts = [header]
-    for tag in ("DCS","DAC","DBB","DBA","DBD","DAQ","DAG","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"):
+    order = ["DAQ","DCS","DAC","DBB","DBA","DBD","DAG","DAI","DAJ","DAK","DCF","DAU","DAY","DAZ"]
+    for tag in order:
         val = fields.get(tag)
         if val:
             parts.append(f"{tag}{val}")
@@ -372,7 +309,7 @@ def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
     return buffer.read()
 
 # -------------------------
-# PDF417 generation helper (uses vendorized pdf417gen if available)
+# PDF417 generation helper (uses pdf417gen if available)
 # -------------------------
 def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
     if not _PDF417_AVAILABLE:
@@ -388,7 +325,6 @@ def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scal
 
 # -------------------------
 # GÉNÉRATION DE LA CARTE (flux principal)
-# - generate -> optional validate -> propose correction -> (re)generate
 # -------------------------
 if generate:
     errs = validate_inputs()
@@ -421,7 +357,7 @@ if generate:
     endorse_disp = (endorse or "").upper()
     height_str = f"{int(h1)}'{int(h2)}\""
 
-    # champs AAMVA (exemple / inspiré du code initial)
+    # champs AAMVA (exemple)
     fields = {
         "DCS": ln.upper(),
         "DAC": fn.upper(),
@@ -444,7 +380,7 @@ if generate:
 
     # Choisir l'image par défaut selon le sexe et récupérer les bytes
     photo_src = IMAGE_M_URL if sex == "M" else IMAGE_F_URL
-    photo_bytes = fetch_image_bytes(photo_src)  # <-- défini ici pour éviter NameError
+    photo_bytes = fetch_image_bytes(photo_src)  # défini ici pour éviter NameError
 
     # Préparer HTML pour affichage (embed base64 si image récupérée)
     if photo_bytes:
@@ -466,28 +402,17 @@ if generate:
         <div class="body">
             {photo_html}
             <div class="info">
-                <div class="label">Nom</div>
-                <div class="value">{ln}</div>
-                <div class="label">Prénom</div>
-                <div class="value">{fn}</div>
-                <div class="label">Sexe</div>
-                <div class="value">{sex}</div>
-                <div class="label">DOB</div>
-                <div class="value">{dob.strftime('%m/%d/%Y')}</div>
-                <div class="label">Field Office</div>
-                <div class="value">{office_choice}</div>
-                <div class="label">DD</div>
-                <div class="value">{dd}</div>
-                <div class="label">ISS</div>
-                <div class="value">{iss.strftime('%m/%d/%Y')}</div>
-                <div class="label">EXP</div>
-                <div class="value">{exp.strftime('%m/%d/%Y')}</div>
-                <div class="label">Classe</div>
-                <div class="value">{cls_disp}</div>
-                <div class="label">Restrictions</div>
-                <div class="value">{rstr_disp}</div>
-                <div class="label">Endorsements</div>
-                <div class="value">{endorse_disp}</div>
+                <div class="label">Nom</div><div class="value">{ln}</div>
+                <div class="label">Prénom</div><div class="value">{fn}</div>
+                <div class="label">Sexe</div><div class="value">{sex}</div>
+                <div class="label">DOB</div><div class="value">{dob.strftime('%m/%d/%Y')}</div>
+                <div class="label">Field Office</div><div class="value">{office_choice}</div>
+                <div class="label">DD</div><div class="value">{dd}</div>
+                <div class="label">ISS</div><div class="value">{iss.strftime('%m/%d/%Y')}</div>
+                <div class="label">EXP</div><div class="value">{exp.strftime('%m/%d/%Y')}</div>
+                <div class="label">Classe</div><div class="value">{cls_disp}</div>
+                <div class="label">Restrictions</div><div class="value">{rstr_disp}</div>
+                <div class="label">Endorsements</div><div class="value">{endorse_disp}</div>
                 <div class="label">Yeux / Cheveux / Taille / Poids</div>
                 <div class="value">{eyes_disp} / {hair_disp} / {height_str} / {w} lb</div>
             </div>
@@ -498,47 +423,48 @@ if generate:
 
     # --- Optional validation block (only if enabled)
     payload_to_use = aamva
-    if enable_validator and _AAMVA_UTILS_AVAILABLE:
+    if enable_validator:
         st.subheader("Validation AAMVA (optionnelle)")
-        results = validate_aamva_payload(payload_to_use)
-        errors = results.get("errors", [])
-        warnings = results.get("warnings", [])
-        infos = results.get("infos", [])
+        if _AAMVA_UTILS_AVAILABLE:
+            results = validate_aamva_payload(payload_to_use)
+            errors = results.get("errors", [])
+            warnings = results.get("warnings", [])
+            infos = results.get("infos", [])
 
-        with st.expander("Résultats de validation", expanded=True):
-            if errors:
-                st.error(f"Erreurs détectées ({len(errors)}) :")
-                for e in errors:
-                    st.write("- " + e)
-            else:
-                st.success("Aucune erreur bloquante détectée.")
+            with st.expander("Résultats de validation", expanded=True):
+                if errors:
+                    st.error(f"Erreurs détectées ({len(errors)}) :")
+                    for e in errors:
+                        st.write("- " + e)
+                else:
+                    st.success("Aucune erreur bloquante détectée.")
 
-            if warnings:
-                st.warning(f"Avertissements ({len(warnings)}) :")
-                for w in warnings:
-                    st.write("- " + w)
+                if warnings:
+                    st.warning(f"Avertissements ({len(warnings)}) :")
+                    for w in warnings:
+                        st.write("- " + w)
 
-            if infos:
-                st.info("Informations :")
-                for i in infos:
-                    st.write("- " + i)
+                if infos:
+                    st.info("Informations :")
+                    for i in infos:
+                        st.write("- " + i)
 
-            corrected, applied = auto_correct_payload(payload_to_use)
-            if corrected and corrected != payload_to_use:
-                st.markdown("### Version corrigée proposée")
-                if applied:
-                    st.write("Corrections proposées :")
-                    for a in applied:
-                        st.write("- " + a)
-                st.text_area("Payload corrigé (modifiable)", value=corrected, height=200, key="aamva_corrected_preview")
-                if st.button("Appliquer la correction et utiliser pour génération"):
-                    st.session_state["aamva_payload"] = st.session_state.get("aamva_corrected_preview", corrected)
-                    st.success("Correction appliquée. Le payload corrigé sera utilisé pour la génération.")
-                    payload_to_use = st.session_state["aamva_payload"]
-            else:
-                st.write("Aucune correction automatique proposée.")
-    elif enable_validator and not _AAMVA_UTILS_AVAILABLE:
-        st.info("Validation non disponible : aamva_utils.py introuvable. Place aamva_utils.py pour activer la validation.")
+                corrected, applied = auto_correct_payload(payload_to_use)
+                if corrected and corrected != payload_to_use:
+                    st.markdown("### Version corrigée proposée")
+                    if applied:
+                        st.write("Corrections proposées :")
+                        for a in applied:
+                            st.write("- " + a)
+                    st.text_area("Payload corrigé (modifiable)", value=corrected, height=200, key="aamva_corrected_preview")
+                    if st.button("Appliquer la correction et utiliser pour génération"):
+                        st.session_state["aamva_payload"] = st.session_state.get("aamva_corrected_preview", corrected)
+                        st.success("Correction appliquée. Le payload corrigé sera utilisé pour la génération.")
+                        payload_to_use = st.session_state["aamva_payload"]
+                else:
+                    st.write("Aucune correction automatique proposée.")
+        else:
+            st.info("Validation non disponible : aamva_utils.py introuvable. Place aamva_utils.py pour activer la validation.")
 
     # --- PDF417 generation and rasterization (show/hide controlled by sidebar toggle)
     svg_str = None
@@ -546,7 +472,7 @@ if generate:
         st.subheader("PDF417")
         if _PDF417_AVAILABLE:
             try:
-                svg_str = generate_pdf417_svg(data_bytes,
+                svg_str = generate_pdf417_svg(payload_to_use.encode("utf-8"),
                                              columns=columns_param,
                                              security_level=security_level_param,
                                              scale=scale_param,
@@ -556,18 +482,9 @@ if generate:
                 with st.expander("Aperçu PDF417 (SVG)", expanded=True):
                     components.html(svg_html, height=260, scrolling=True)
                     st.download_button("Télécharger PDF417 (SVG)", data=svg_str.encode("utf-8"), file_name="pdf417.svg", mime="image/svg+xml")
-                if _PIL_AVAILABLE:
-                    try:
-                        # Try to rasterize simple SVGs via PIL helper if available
-                        # If rasterization fails, show info but do not crash
-                        from xml.etree import ElementTree as ET
-                        # naive rasterization not implemented here for complex SVGs; rely on pdf417gen output or external tools
-                        st.info("Aperçu PNG/GIF : rasterisation avancée non implémentée ici; installez Pillow + utilitaires si nécessaire.")
-                    except Exception:
-                        st.info("Rasterisation PNG non disponible.")
             except Exception as e:
                 st.error("Erreur génération PDF417 : " + str(e))
-                st.info("Vérifiez le module pdf417gen dans le dossier vendorisé ou installez pdf417gen.")
+                st.info("Vérifiez le module pdf417gen.")
         else:
             st.warning("pdf417gen non disponible. Vendorisez le module ou installez pdf417gen pour génération automatique.")
     else:
