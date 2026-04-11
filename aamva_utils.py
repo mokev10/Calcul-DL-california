@@ -1,10 +1,10 @@
 # aamva_utils.py
 # Utilitaires pour validation et correction automatique de payload AAMVA (PDF417)
-# Usage: from aamva_utils import validate_aamva_payload, auto_correct_payload, example_payload
+# Expose: validate_aamva_payload, auto_correct_payload, example_payload, GS
 
 import re
 import datetime
-from typing import List, Tuple, Dict, Optional, Any
+from typing import List, Tuple, Dict, Optional
 
 GS = "\x1E"  # Group Separator (0x1E)
 
@@ -14,8 +14,6 @@ REQUIRED_TAGS = [
 DATE_TAGS = ["DBB", "DBA", "DBD"]
 
 
-# -------------------------
-# Fonctions de validation
 def has_valid_header(payload: str) -> Tuple[bool, str]:
     if not payload:
         return False, "Payload vide."
@@ -175,7 +173,6 @@ def ensure_trailing_cr(payload: str) -> str:
 
 
 def normalize_whitespace_around_tags(payload: str) -> str:
-    # Supprime espaces superflus entre tag et valeur (prudence)
     def repl(m):
         tag = m.group(1)
         val = m.group(2)
@@ -187,19 +184,16 @@ def auto_correct_payload(payload: str) -> Tuple[str, List[str]]:
     corrections = []
     p = payload
 
-    # 1) Remplacer séquences échappées
     if "\\u001e" in p or "\\x1E" in p:
         p = replace_escaped_separators(p)
         corrections.append("Remplacement des séquences échappées '\\u001e' / '\\x1E' par le caractère 0x1E.")
 
-    # 2) Normaliser espaces après tags (prudence)
     if re.search(r"[A-Z]{3}\s+[A-Z0-9\-]{1,20}(\x1E|$)", p):
         p2 = normalize_whitespace_around_tags(p)
         if p2 != p:
             p = p2
             corrections.append("Suppression d'espaces superflus entre tags et valeurs (ex: 'DAQ H407' -> 'DAQH407').")
 
-    # 3) Ajouter CR final si absent
     if not (p.endswith("\r") or p.endswith("\r\n") or p.endswith("\n\r")):
         p = ensure_trailing_cr(p)
         corrections.append("Ajout d'un CR final '\\r'.")
@@ -231,7 +225,6 @@ def example_payload() -> str:
     return build_aamva_tags(fields)
 
 
-# Module prêt à être importé
 __all__ = [
     "GS", "validate_aamva_payload", "auto_correct_payload", "example_payload",
     "replace_escaped_separators", "ensure_trailing_cr", "normalize_whitespace_around_tags"
