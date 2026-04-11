@@ -1,231 +1,191 @@
 # aamva_utils.py
-# Utilitaires pour validation et correction automatique de payload AAMVA (PDF417)
-# Expose: validate_aamva_payload, auto_correct_payload, example_payload, GS
+# Utilitaires de validation et d'auto-correction pour payload AAMVA / PDF417
+# Fournit : validate_aamva_payload(payload: str) -> dict
+#           auto_correct_payload(payload: str) -> (corrected_payload:str, applied:list)
+#           example_payload() -> str
+#           GS constant (séparateur de groupe 0x1E)
 
 import re
-import datetime
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict
 
-GS = "\x1E"  # Group Separator (0x1E)
+GS = "\x1E"  # group separator 0x1E
 
-REQUIRED_TAGS = [
-    "DAQ", "DCS", "DAC", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF"
-]
-DATE_TAGS = ["DBB", "DBA", "DBD"]
+RE_TAG = re.compile(r"\b([A-Z]{3})([^\x1E\r\n]*)")
 
+RE_DATE = re.compile(r"^(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{4}$")  # MMDDYYYY
 
-def has_valid_header(payload: str) -> Tuple[bool, str]:
-    if not payload:
-        return False, "Payload vide."
-    head = payload[:200].upper()
-    if "ANSI" not in head or "DL" not in head:
-        return False, "Header manquant ou incorrect (attendu 'ANSI ... DL')."
-    if not re.search(r"ANSI\s+63\d{2}", head):
-        return False, "Header AAMVA non conforme (code version absent ou invalide)."
-    return True, "Header OK."
+RE_HEADER = re.compile(r"^@[\r\n]*ANSI\s+636014080102DL", re.IGNORECASE)
 
+RE_RECORD_TERMINATOR = re.compile(r"\r$")
 
-def uses_group_separator(payload: str) -> Tuple[bool, str]:
-    if GS in payload:
-        return True, "Séparateur de groupe (0x1E) présent."
-    if "\\u001e" in payload or "\\x1E" in payload:
-        return False, "Séparateur trouvé sous forme d'échappement (\\u001e ou \\x1E)."
-    return False, "Séparateur de groupe (0x1E) absent."
+RE_GS_PRESENT = re.compile(r"\x1E")
 
+RE_ASCII = re.compile(r"^[\x00-\x7F]*$")
 
-def ends_with_cr(payload: str) -> Tuple[bool, str]:
-    if payload.endswith("\r") or payload.endswith("\r\n") or payload.endswith("\n\r"):
-        return True, "Fin de record OK (CR présent)."
-    return False, "Fin de record manquante (ajouter un CR '\\r' à la fin)."
-
-
-def find_tags(payload: str) -> List[str]:
-    tags = re.findall(r"([A-Z]{3})(?=[^\r\n\x1E]*)", payload)
-    seen = set()
-    out = []
-    for t in tags:
-        if t not in seen:
-            seen.add(t)
-            out.append(t)
-    return out
-
-
-def check_required_tags(payload: str) -> Tuple[bool, List[str]]:
-    missing = []
-    for tag in REQUIRED_TAGS:
-        if tag not in payload:
-            missing.append(tag)
-    return (len(missing) == 0, missing)
-
-
-def check_date_format(value: str) -> bool:
-    if not re.fullmatch(r"\d{8}", value):
-        return False
-    try:
-        mm = int(value[0:2]); dd = int(value[2:4]); yyyy = int(value[4:8])
-        datetime.date(yyyy, mm, dd)
-        return True
-    except Exception:
-        return False
-
-
-def extract_tag_value(payload: str, tag: str) -> Optional[str]:
-    m = re.search(re.escape(tag) + r"([^\x1E\r\n]*)", payload)
-    if m:
-        return m.group(1).strip()
-    return None
-
-
-def check_dates_in_payload(payload: str) -> List[str]:
-    errors = []
-    for tag in DATE_TAGS:
-        val = extract_tag_value(payload, tag)
-        if val is None:
-            errors.append(f"{tag} absent.")
-            continue
-        if not check_date_format(val):
-            errors.append(f"{tag} a un format invalide (attendu MMDDYYYY) : '{val}'")
-    return errors
-
-
-def check_ascii(payload: str) -> Tuple[bool, str]:
-    try:
-        payload.encode("ascii")
-        return True, "Encodage ASCII OK."
-    except UnicodeEncodeError as e:
-        return False, f"Caractères non-ASCII détectés (accents ou symboles). Détail: {str(e)}"
-
-
-def minimal_length_check(payload: str) -> Tuple[bool, str]:
-    if len(payload) < 40:
-        return False, "Payload très court — probablement incomplet."
-    return True, "Longueur minimale OK."
-
-
-def svg_basic_checks(svg_text: str) -> List[str]:
-    issues = []
-    if "<svg" not in svg_text.lower():
-        issues.append("Le texte collé ne semble pas être un SVG.")
-        return issues
-    if not re.search(r"viewBox|viewbox|width=\"\d+\"|height=\"\d+\"", svg_text, flags=re.IGNORECASE):
-        issues.append("SVG sans width/height ni viewBox explicite — vérifier dimensions.")
-    if not re.search(r"<rect\b", svg_text, flags=re.IGNORECASE):
-        issues.append("SVG sans <rect> détecté — le rasteriseur simple peut échouer si le SVG est complexe.")
-    issues.append("Recommandation : utiliser un scale entier (2–4) et laisser une marge blanche (quiet zone) autour du PDF417.")
-    return issues
-
-
-def validate_aamva_payload(payload: str) -> Dict[str, List[str]]:
-    errors = []; warnings = []; infos = []
-    if not payload or not payload.strip():
-        errors.append("Payload vide."); return {"errors": errors, "warnings": warnings, "infos": infos}
-
-    ok, msg = has_valid_header(payload)
-    (infos if ok else errors).append(msg)
-
-    ok_gs, msg_gs = uses_group_separator(payload)
-    (infos if ok_gs else errors).append(msg_gs)
-
-    ok_end, msg_end = ends_with_cr(payload)
-    (infos if ok_end else warnings).append(msg_end)
-
-    ok_len, msg_len = minimal_length_check(payload)
-    (infos if ok_len else warnings).append(msg_len)
-
-    ok_tags, missing = check_required_tags(payload)
-    if not ok_tags:
-        errors.append("Champs obligatoires manquants: " + ", ".join(missing))
-    else:
-        infos.append("Tous les champs obligatoires sont présents (au moins en apparence).")
-
-    date_errors = check_dates_in_payload(payload)
-    if date_errors:
-        errors.extend(date_errors)
-    else:
-        infos.append("Formats de date OK (MMDDYYYY).")
-
-    ok_ascii, ascii_msg = check_ascii(payload)
-    (infos if ok_ascii else warnings).append(ascii_msg)
-
-    tags = find_tags(payload)
-    infos.append("Tags détectés (extrait) : " + ", ".join(tags[:20]) + ("..." if len(tags) > 20 else ""))
-
-    if "<svg" in payload.lower():
-        svg_issues = svg_basic_checks(payload)
-        for s in svg_issues:
-            warnings.append("SVG: " + s)
-
-    if "\\u001e" in payload or "\\x1E" in payload:
-        errors.append("Séparateur trouvé sous forme d'échappement (\\u001e ou \\x1E).")
-    return {"errors": errors, "warnings": warnings, "infos": infos}
-
-
-# -------------------------
-# Auto-correction (sûre et réversible)
-def replace_escaped_separators(payload: str) -> str:
-    return payload.replace("\\u001e", GS).replace("\\x1E", GS)
-
-
-def ensure_trailing_cr(payload: str) -> str:
-    if not (payload.endswith("\r") or payload.endswith("\r\n") or payload.endswith("\n\r")):
-        return payload + "\r"
-    return payload
-
-
-def normalize_whitespace_around_tags(payload: str) -> str:
-    def repl(m):
-        tag = m.group(1)
-        val = m.group(2)
-        return f"{tag}{val}"
-    return re.sub(r"([A-Z]{3})\s+([^\x1E\r\n]+)", repl, payload)
-
-
-def auto_correct_payload(payload: str) -> Tuple[str, List[str]]:
-    corrections = []
-    p = payload
-
-    if "\\u001e" in p or "\\x1E" in p:
-        p = replace_escaped_separators(p)
-        corrections.append("Remplacement des séquences échappées '\\u001e' / '\\x1E' par le caractère 0x1E.")
-
-    if re.search(r"[A-Z]{3}\s+[A-Z0-9\-]{1,20}(\x1E|$)", p):
-        p2 = normalize_whitespace_around_tags(p)
-        if p2 != p:
-            p = p2
-            corrections.append("Suppression d'espaces superflus entre tags et valeurs (ex: 'DAQ H407' -> 'DAQH407').")
-
-    if not (p.endswith("\r") or p.endswith("\r\n") or p.endswith("\n\r")):
-        p = ensure_trailing_cr(p)
-        corrections.append("Ajout d'un CR final '\\r'.")
-
-    return p, corrections
-
-
-# -------------------------
-# Exemple de payload (fictif)
-def build_aamva_tags(fields: Dict[str, str]) -> str:
-    header = "@\r\nANSI 636014080102DL"
-    parts = [header]
-    order = ["DAQ", "DCS", "DAC", "DAD", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"]
-    for tag in order:
-        val = fields.get(tag)
-        if val is not None:
-            parts.append(f"{tag}{val}")
-    payload = GS.join(parts) + "\r"
-    return payload
-
+RE_TAG_REQUIRED = ["DAQ","DCS","DAC","DBB","DBA","DBD"]
 
 def example_payload() -> str:
-    fields = {
-        "DAQ": "H40759", "DCS": "HARMS", "DAC": "ROSA", "DAD": "MARIE",
-        "DBB": "01011990", "DBA": "01012031", "DBD": "04102026",
-        "DAG": "2570 24TH STREET", "DAI": "OAKLAND", "DAJ": "CA", "DAK": "94601",
-        "DCF": "1234567890", "DAU": "510", "DAY": "BRN", "DAZ": "BRN",
-    }
-    return build_aamva_tags(fields)
+    parts = [
+        "@",
+        "ANSI 636014080102DL",
+        f"DAQH40759",
+        f"DCSHARMS",
+        f"DACROSA",
+        f"DBB01011990",
+        f"DBA01012031",
+        f"DBD04102026",
+        f"DAG2570 24TH STREET",
+        f"DAIOAKLAND",
+        f"DAJCA",
+        f"DAK94601",
+        f"DCF1234567890",
+        f"DAU510",
+        f"DAYBRN",
+        f"DAZBRN"
+    ]
+    return GS.join(parts) + "\r"
 
+def parse_tags(payload: str) -> Dict[str,str]:
+    tags = {}
+    for m in RE_TAG.finditer(payload):
+        tag = m.group(1)
+        val = m.group(2).strip()
+        tags[tag] = val
+    return tags
 
-__all__ = [
-    "GS", "validate_aamva_payload", "auto_correct_payload", "example_payload",
-    "replace_escaped_separators", "ensure_trailing_cr", "normalize_whitespace_around_tags"
-]
+def validate_aamva_payload(payload: str) -> Dict[str, List[str]]:
+    """
+    Retourne dict {errors:[], warnings:[], infos:[]}
+    Non-raise : utile pour UI.
+    """
+    errors: List[str] = []
+    warnings: List[str] = []
+    infos: List[str] = []
+
+    if not isinstance(payload, str) or not payload.strip():
+        errors.append("Payload vide ou non fourni.")
+        return {"errors": errors, "warnings": warnings, "infos": infos}
+
+    # Header
+    if not RE_HEADER.search(payload):
+        errors.append("Header ANSI manquant ou mal formé (attendu 'ANSI 636014080102DL').")
+    else:
+        infos.append("Header OK.")
+
+    # GS presence
+    if not RE_GS_PRESENT.search(payload):
+        warnings.append("Séparateur de groupe 0x1E absent. Les champs peuvent être collés.")
+    else:
+        infos.append("Séparateur de groupe (0x1E) présent.")
+
+    # Record terminator CR
+    if not RE_RECORD_TERMINATOR.search(payload):
+        warnings.append("Fin de record manquante (ajouter un CR '\\r' à la fin).")
+    else:
+        infos.append("Terminaison CR présente.")
+
+    # ASCII check
+    if not RE_ASCII.match(payload):
+        errors.append("Encodage non-ASCII détecté. Utiliser ASCII/UTF-8 sans caractères non-ASCII.")
+    else:
+        infos.append("Encodage ASCII OK.")
+
+    # Tags parse
+    tags = parse_tags(payload)
+    if not tags:
+        warnings.append("Aucun tag détecté (parsing échoué).")
+    else:
+        infos.append(f"Tags détectés (extrait) : {', '.join(list(tags.keys())[:10])}.")
+
+    # Required tags
+    missing = [t for t in RE_TAG_REQUIRED if t not in tags]
+    if missing:
+        errors.append("Champs obligatoires manquants: " + ", ".join(missing))
+    else:
+        infos.append("Tous les champs obligatoires semblent présents.")
+
+    # Date formats check (DBB, DBA, DBD)
+    for dt_tag in ("DBB","DBA","DBD"):
+        v = tags.get(dt_tag)
+        if v:
+            if not RE_DATE.match(v):
+                errors.append(f"Format date invalide pour {dt_tag} (attendu MMDDYYYY) : '{v}'")
+            else:
+                infos.append(f"{dt_tag} format OK.")
+        else:
+            warnings.append(f"{dt_tag} absent (vérifier si requis).")
+
+    return {"errors": errors, "warnings": warnings, "infos": infos}
+
+def auto_correct_payload(payload: str) -> Tuple[str, List[str]]:
+    """
+    Tente des corrections simples et sûres :
+    - Remplace les séparateurs visibles (literal '' ou séquences) par GS
+    - Ajoute CR final si manquant
+    - Nettoie doubles espaces dans les valeurs
+    - Normalise header (ANSI ...)
+    Retourne (corrected_payload, list_of_applied_corrections)
+    """
+    applied: List[str] = []
+    if not isinstance(payload, str):
+        return payload, applied
+
+    p = payload
+
+    # Normalize header: ensure '@' + CRLF + ANSI...
+    if not RE_HEADER.search(p):
+        # try to find 'ANSI' and prepend '@\r\n' if missing
+        if "ANSI 636014080102DL" in p.upper():
+            p = re.sub(r"(?i)ANSI\s+636014080102DL", "ANSI 636014080102DL", p)
+            if not p.strip().startswith("@"):
+                p = "@\r\n" + p
+            applied.append("Normalisé header ANSI (ajouté préfixe si nécessaire).")
+        else:
+            # do not invent header if totally missing
+            pass
+
+    # Replace visible GS characters (some editors show as '␞' or literal 0x1E)
+    # Replace sequences of literal group separators or the unicode U+241E symbol
+    if "\u241E" in p or "␞" in p:
+        p = p.replace("\u241E", GS).replace("␞", GS)
+        applied.append("Remplacé symboles visibles GS par 0x1E.")
+
+    # Replace occurrences of the two-character sequence '\x1E' written as backslash + x + 1E
+    p = re.sub(r"\\x1E", GS, p)
+    # Replace common mistaken separators (vertical bar, pipe) only as non-destructive suggestion:
+    if "|" in p and GS not in p:
+        # only replace pipes between tags like 'DAQH40759|DCSHARMS' -> use GS
+        p2 = re.sub(r"([A-Z]{3}[^\|]{0,50})\|(?=[A-Z]{3})", r"\1" + GS, p)
+        if p2 != p:
+            p = p2
+            applied.append("Remplacé '|' entre tags par 0x1E.")
+
+    # Ensure CR at end
+    if not RE_RECORD_TERMINATOR.search(p):
+        p = p + "\r"
+        applied.append("Ajouté CR final.")
+
+    # Collapse multiple spaces inside tag values (safe)
+    def _collapse_vals(m):
+        tag = m.group(1)
+        val = m.group(2)
+        newval = re.sub(r"\s{2,}", " ", val).strip()
+        return f"{tag}{newval}"
+    p_new = RE_TAG.sub(_collapse_vals, p)
+    if p_new != p:
+        p = p_new
+        applied.append("Nettoyé espaces multiples dans valeurs de tags.")
+
+    # If no GS present but tags appear concatenated, try to insert GS between tags
+    if GS not in p:
+        # naive insertion: insert GS before each 3-letter tag that is followed by uppercase letters/digits
+        p_try = re.sub(r"(?<!\x1E)(?<!\r)(?<!\n)(?P<tag>[A-Z]{3})(?=[A-Z0-9])", GS + r"\g<tag>", p)
+        # only accept if it increases recognisable tags
+        if len(RE_TAG.findall(p_try)) > len(RE_TAG.findall(p)):
+            p = p_try
+            applied.append("Inséré séparateurs GS entre tags collés (heuristique).")
+
+    # Final safety: ensure payload ends with CR only once
+    p = re.sub(r"(\r)+$", "\r", p)
+
+    return p, applied
