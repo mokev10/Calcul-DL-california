@@ -23,10 +23,11 @@ import streamlit.components.v1 as components
 
 # Optional import of aamva_utils (validation + auto-correction)
 try:
-    from aamva_utils import validate_aamva_payload, auto_correct_payload, example_payload, GS
+    from aamva_utils import validate_aamva_payload, auto_correct_payload, example_payload, GS as AAMVA_GS
     _AAMVA_UTILS_AVAILABLE = True
 except Exception:
     _AAMVA_UTILS_AVAILABLE = False
+    AAMVA_GS = None
 
 # ReportLab for PDF export (optional)
 try:
@@ -36,6 +37,7 @@ try:
     _REPORTLAB_AVAILABLE = True
 except Exception:
     _REPORTLAB_AVAILABLE = False
+    ImageReader = None
 
 # Pillow for rasterization (optional)
 try:
@@ -43,6 +45,8 @@ try:
     _PIL_AVAILABLE = True
 except Exception:
     _PIL_AVAILABLE = False
+    Image = None
+    ImageDraw = None
 
 # pdf417gen (optional)
 _PDF417_AVAILABLE = False
@@ -51,6 +55,9 @@ try:
     _PDF417_AVAILABLE = True
 except Exception:
     _PDF417_AVAILABLE = False
+
+# Fallback GS if aamva_utils not present
+GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
 st.set_page_config(page_title="Permis CA", layout="wide")
 
@@ -301,7 +308,7 @@ def build_indices(zip_db: Dict[str, Dict[str, str]]):
 CITY_TO_ZIPS, OFFICE_TO_ZIPS = build_indices(ZIP_DB)
 
 # -------------------------
-# PDF417 optional import
+# PDF417 optional import helpers
 def generate_pdf417_svg(data_bytes: bytes, columns:int, security_level:int, scale:int, ratio:int, color:str) -> str:
     if not _PDF417_AVAILABLE:
         raise RuntimeError("Module pdf417gen non disponible.")
@@ -661,40 +668,7 @@ iss = st.date_input("Date d'émission", st.session_state["iss_input"], key="iss_
 
 generate = st.button("Générer la carte")
 
-# -------------------------
-# Validation & generation helpers (unchanged)
-def validate_inputs() -> List[str]:
-    errors: List[str] = []
-    if not st.session_state.get("ln_input", "").strip():
-        errors.append("Nom de famille requis.")
-    if not st.session_state.get("fn_input", "").strip():
-        errors.append("Prénom requis.")
-    if st.session_state.get("dob_input") > datetime.date.today():
-        errors.append("Date de naissance ne peut pas être dans le futur.")
-    if st.session_state.get("iss_input") > datetime.date.today():
-        errors.append("Date d'émission ne peut pas être dans le futur.")
-    if st.session_state.get("w_input", 0) < 30 or st.session_state.get("w_input", 0) > 500:
-        errors.append("Poids hors plage attendue.")
-    if st.session_state.get("h1_input", 0) < 0 or st.session_state.get("h2_input", 0) < 0 or st.session_state.get("h1_input", 0) > 8 or st.session_state.get("h2_input", 0) > 11:
-        errors.append("Taille hors plage attendue.")
-    if not st.session_state.get("address1_input", "").strip():
-        errors.append("Adresse (ligne 1) requise.")
-    if not st.session_state.get("city_select", "").strip():
-        errors.append("Ville requise.")
-    if not st.session_state.get("state_input", "").strip():
-        errors.append("État requis.")
-    if not st.session_state.get("zip_select", "").strip():
-        errors.append("Code postal requis.")
-    z = re.sub(r"\D", "", st.session_state.get("zip_select", ""))
-    if z and z not in ZIP_DB:
-        try:
-            zi = int(z)
-            if not (90001 <= zi <= 96162):
-                errors.append("Code postal hors plage CA (90001–96162).")
-        except Exception:
-            errors.append("Code postal invalide.")
-    return errors
-
+# Helpers: build AAMVA payload (safe)
 def build_aamva_tags(fields: Dict[str,str]) -> str:
     header = "@\r\nANSI 636014080102DL"
     parts = [header]
@@ -719,20 +693,52 @@ def create_pdf_bytes(fields: Dict[str,str], photo_bytes: bytes = None) -> bytes:
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
-    x = 72; y = height - 72
-    c.setFont("Helvetica-Bold", 14); c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE"); y -= 24
+    x = 72
+    y = height - 72
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
+    y -= 24
     c.setFont("Helvetica", 11)
     for k, v in fields.items():
-        c.drawString(x, y, f"{k}: {v}"); y -= 16
+        c.drawString(x, y, f"{k}: {v}")
+        y -= 16
         if y < 72:
-            c.showPage(); y = height - 72
-    if photo_bytes:
+            c.showPage()
+            y = height - 72
+    if photo_bytes and ImageReader is not None:
         try:
             img = ImageReader(io.BytesIO(photo_bytes))
             c.drawImage(img, width - 72 - 90, height - 72 - 110, width=90, height=110)
         except Exception:
             pass
-    c.showPage(); c.save(); buffer.seek(0); return buffer.read()
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.read()
+
+# Validate inputs
+def validate_inputs() -> List[str]:
+    errors: List[str] = []
+    if not st.session_state.get("ln_input", "").strip(): errors.append("Nom de famille requis.")
+    if not st.session_state.get("fn_input", "").strip(): errors.append("Prénom requis.")
+    if st.session_state.get("dob_input") > datetime.date.today(): errors.append("Date de naissance ne peut pas être dans le futur.")
+    if st.session_state.get("iss_input") > datetime.date.today(): errors.append("Date d'émission ne peut pas être dans le futur.")
+    if st.session_state.get("w_input", 0) < 30 or st.session_state.get("w_input", 0) > 500: errors.append("Poids hors plage attendue.")
+    if st.session_state.get("h1_input", 0) < 0 or st.session_state.get("h2_input", 0) < 0 or st.session_state.get("h1_input", 0) > 8 or st.session_state.get("h2_input", 0) > 11:
+        errors.append("Taille hors plage attendue.")
+    if not st.session_state.get("address1_input", "").strip(): errors.append("Adresse (ligne 1) requise.")
+    if not st.session_state.get("city_select", "").strip(): errors.append("Ville requise.")
+    if not st.session_state.get("state_input", "").strip(): errors.append("État requis.")
+    if not st.session_state.get("zip_select", "").strip(): errors.append("Code postal requis.")
+    z = re.sub(r"\D", "", st.session_state.get("zip_select", ""))
+    if z and z not in ZIP_DB:
+        try:
+            zi = int(z)
+            if not (90001 <= zi <= 96162):
+                errors.append("Code postal hors plage CA (90001–96162).")
+        except Exception:
+            errors.append("Code postal invalide.")
+    return errors
 
 # -------------------------
 # Generate card and outputs
@@ -798,13 +804,35 @@ if generate:
     fields = {k:v for k,v in fields.items() if v is not None}
     aamva = build_aamva_tags(fields)
 
+    # photo default URLs and fetch
+    IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
+    IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
+    photo_src = IMAGE_M_URL if st.session_state.get("sex_input") == "M" else IMAGE_F_URL
+    photo_bytes = fetch_image_bytes(photo_src)  # <-- ensure photo_bytes is defined here
+
     # Persist payload in session (original)
     st.session_state["aamva_payload_original"] = aamva
     # If a corrected payload was previously applied, prefer it
     payload_to_use = st.session_state.get("aamva_payload", aamva)
 
     st.markdown("### Carte générée (aperçu)")
-    st.markdown(f"**DL**: {dl}  •  **Nom**: {ln_val}  •  **Prénom**: {fn_val}  •  **DOB**: {fields.get('DBB')}")
+    # show a small card preview including photo if available
+    colp, colinfo = st.columns([1,3])
+    with colp:
+        if photo_bytes and Image is not None:
+            try:
+                st.image(photo_bytes, width=120, caption="Photo")
+            except Exception:
+                st.empty()
+        else:
+            st.image(photo_src, width=120, caption="Photo (fallback)")
+    with colinfo:
+        st.markdown(f"**DL**: {dl}")
+        st.markdown(f"**Nom**: {ln_val}")
+        st.markdown(f"**Prénom**: {fn_val}")
+        st.markdown(f"**DOB**: {fields.get('DBB')}")
+        st.markdown(f"**Adresse**: {address1_val} {address2_val}")
+        st.markdown(f"**Ville**: {city_val}  •  **ZIP**: {postal_val}")
 
     # --- Optional validation block (only if enabled)
     if enable_validator:
