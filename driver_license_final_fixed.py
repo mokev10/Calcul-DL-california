@@ -4,14 +4,14 @@
 # - Préserve l'UI/UX initiale (menus déroulants, photo par défaut selon Sexe)
 # - Intègre aamva_utils.py de façon optionnelle (validation + auto-correction)
 # - Toggle pour afficher/masquer les codes-barres PDF417
-# - Flux : générer -> (optionnel) valider -> proposer correction -> appliquer -> régénérer
+# - Clés uniques pour widgets de téléchargement pour éviter StreamlitDuplicateElementId
 
 import streamlit as st
 import datetime, random, hashlib, io, base64, requests, re
 import streamlit.components.v1 as components
 from typing import Dict, List, Optional, Tuple, Any
 
-# PDF generation
+# ReportLab (PDF)
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -21,7 +21,7 @@ except Exception:
     ImageReader = None
     _REPORTLAB_AVAILABLE = False
 
-# Pillow optional
+# Pillow (optionnel)
 try:
     from PIL import Image, ImageDraw, ImageOps
     _PIL_AVAILABLE = True
@@ -30,7 +30,7 @@ except Exception:
     ImageDraw = None
     _PIL_AVAILABLE = False
 
-# pdf417gen optional
+# pdf417gen (optionnel)
 _PDF417_AVAILABLE = False
 try:
     from pdf417gen import encode, render_svg
@@ -38,13 +38,16 @@ try:
 except Exception:
     _PDF417_AVAILABLE = False
 
-# Optional aamva_utils
+# Optional aamva_utils (validation + autocorrection)
 try:
-    from aamva_utils import validate_aamva_payload, auto_correct_payload, example_payload, GS
+    from aamva_utils import validate_aamva_payload, auto_correct_payload, example_payload, GS as AAMVA_GS
     _AAMVA_UTILS_AVAILABLE = True
 except Exception:
     _AAMVA_UTILS_AVAILABLE = False
-    GS = "\x1E"
+    AAMVA_GS = None
+
+# Fallback GS
+GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
 st.set_page_config(page_title="Permis CA", layout="centered")
 
@@ -77,39 +80,46 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 # Sidebar controls
 # -------------------------
 st.sidebar.header("Paramètres PDF417 (optionnel)")
-columns_param = st.sidebar.slider("Colonnes", 1, 30, 6)
-security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0,9)), index=2)
-scale_param = st.sidebar.slider("Échelle", 1, 6, 3)
-ratio_param = st.sidebar.slider("Ratio", 1, 6, 3)
-color_param = st.sidebar.color_picker("Couleur du code", "#000000")
+columns_param = st.sidebar.slider("Colonnes", 1, 30, 6, key="sb_columns")
+security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0,9)), index=2, key="sb_ecc")
+scale_param = st.sidebar.slider("Échelle", 1, 6, 3, key="sb_scale")
+ratio_param = st.sidebar.slider("Ratio", 1, 6, 3, key="sb_ratio")
+color_param = st.sidebar.color_picker("Couleur du code", "#000000", key="sb_color")
 st.sidebar.markdown("Si pdf417gen n'est pas complet, l'app affichera un message d'avertissement.")
 
-st.sidebar.markdown("---")
-if st.sidebar.checkbox("Activer health check (debug)"):
+# Health check (debug)
+if st.sidebar.checkbox("Activer health check (debug)", key="sb_health"):
     st.sidebar.markdown("### Health Check pdf417gen")
     try:
         import pdf417gen
         from pdf417gen import encode, render_svg
         st.sidebar.success("Import pdf417gen OK")
+        st.sidebar.write("pdf417gen path:", getattr(pdf417gen, "__file__", "n/a"))
+        try:
+            codes = encode(b"TEST", columns=3, security_level=2, force_binary=False)
+            st.sidebar.write("encode() OK, type:", type(codes).__name__)
+        except Exception as e:
+            st.sidebar.warning("encode() raised: " + str(e))
+        st.sidebar.write("render_svg callable:", callable(render_svg))
     except Exception as exc:
         st.sidebar.error("Import pdf417gen failed: " + str(exc))
+        st.sidebar.info("Vérifie que pdf417gen/ est à la racine et contient __init__.py")
     st.stop()
 
 # UI toggles
-st.sidebar.markdown("---")
 if "show_barcodes" not in st.session_state:
     st.session_state["show_barcodes"] = True
-show_barcodes = st.sidebar.checkbox("Afficher les codes-barres (PDF417)", value=st.session_state["show_barcodes"], key="show_barcodes")
+show_barcodes = st.sidebar.checkbox("Afficher les codes-barres (PDF417)", value=st.session_state["show_barcodes"], key="sb_show_barcodes")
 
 st.sidebar.markdown("---")
-enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)", value=False)
+enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)", value=False, key="sb_enable_validator")
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
 
 # Raster preview scale selector
 st.sidebar.markdown("**Rasterisation (aperçu PNG/GIF)**")
-raster_scale_ui = st.sidebar.selectbox("Scale raster (entier)", [1,2,3,4,5], index=2)
-gif_delay_ui = st.sidebar.number_input("GIF delay (ms)", min_value=50, max_value=2000, value=200, step=50)
+raster_scale_ui = st.sidebar.selectbox("Scale raster (entier)", [1,2,3,4,5], index=2, key="sb_raster_scale")
+gif_delay_ui = st.sidebar.number_input("GIF delay (ms)", min_value=50, max_value=2000, value=200, step=50, key="sb_gif_delay")
 
 # -------------------------
 # Utilities
@@ -207,27 +217,27 @@ offices = {
 # -------------------------
 st.title("Générateur officiel de permis CA")
 
-ln = st.text_input("Nom de famille", "HARMS")
-fn = st.text_input("Prénom", "ROSA")
-sex = st.selectbox("Sexe", ["M","F"])
-dob = st.date_input("Date de naissance", datetime.date(1990,1,1))
+ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
+fn = st.text_input("Prénom", "ROSA", key="ui_fn")
+sex = st.selectbox("Sexe", ["M","F"], key="ui_sex")
+dob = st.date_input("Date de naissance", datetime.date(1990,1,1), key="ui_dob")
 
 col1, col2 = st.columns(2)
 with col1:
-    h1 = st.number_input("Pieds",0,8,5)
-    w = st.number_input("Poids (lb)",30,500,160)
+    h1 = st.number_input("Pieds",0,8,5, key="ui_h1")
+    w = st.number_input("Poids (lb)",30,500,160, key="ui_w")
 with col2:
-    h2 = st.number_input("Pouces",0,11,10)
-    eyes = st.text_input("Yeux","BRN")
-hair = st.text_input("Cheveux","BRN")
-cls = st.text_input("Classe","C")
-rstr = st.text_input("Restrictions","NONE")
-endorse = st.text_input("Endorsements","NONE")
-iss = st.date_input("Date d'émission", datetime.date.today())
+    h2 = st.number_input("Pouces",0,11,10, key="ui_h2")
+    eyes = st.text_input("Yeux","BRN", key="ui_eyes")
+hair = st.text_input("Cheveux","BRN", key="ui_hair")
+cls = st.text_input("Classe","C", key="ui_cls")
+rstr = st.text_input("Restrictions","NONE", key="ui_rstr")
+endorse = st.text_input("Endorsements","NONE", key="ui_endorse")
+iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 
-office_choice = st.selectbox("Field Office", list(offices.keys()))
+office_choice = st.selectbox("Field Office", list(offices.keys()), key="ui_office")
 
-generate = st.button("Générer la carte")
+generate = st.button("Générer la carte", key="ui_generate")
 
 # -------------------------
 # VALIDATIONS MINIMALES
@@ -456,9 +466,9 @@ if generate:
                         st.write("Corrections proposées :")
                         for a in applied:
                             st.write("- " + a)
-                    st.text_area("Payload corrigé (modifiable)", value=corrected, height=200, key="aamva_corrected_preview")
-                    if st.button("Appliquer la correction et utiliser pour génération"):
-                        st.session_state["aamva_payload"] = st.session_state.get("aamva_corrected_preview", corrected)
+                    st.text_area("Payload corrigé (modifiable)", value=corrected, height=200, key="ui_aamva_corrected_preview")
+                    if st.button("Appliquer la correction et utiliser pour génération", key="ui_apply_correction"):
+                        st.session_state["aamva_payload"] = st.session_state.get("ui_aamva_corrected_preview", corrected)
                         st.success("Correction appliquée. Le payload corrigé sera utilisé pour la génération.")
                         payload_to_use = st.session_state["aamva_payload"]
                 else:
@@ -481,7 +491,9 @@ if generate:
                 svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
                 with st.expander("Aperçu PDF417 (SVG)", expanded=True):
                     components.html(svg_html, height=260, scrolling=True)
-                    st.download_button("Télécharger PDF417 (SVG)", data=svg_str.encode("utf-8"), file_name="pdf417.svg", mime="image/svg+xml")
+                    # download button with unique key
+                    st.download_button("Télécharger PDF417 (SVG)", data=svg_str.encode("utf-8"),
+                                       file_name="pdf417.svg", mime="image/svg+xml", key="dl_pdf417_svg")
             except Exception as e:
                 st.error("Erreur génération PDF417 : " + str(e))
                 st.info("Vérifiez le module pdf417gen.")
@@ -490,16 +502,17 @@ if generate:
     else:
         with st.expander("Codes-barres masqués (cliquer pour afficher)"):
             st.write("Les codes-barres PDF417 sont actuellement masqués. Active la case 'Afficher les codes-barres (PDF417)' dans la barre latérale pour les voir.")
-            if st.button("Afficher maintenant"):
+            if st.button("Afficher maintenant", key="ui_show_now"):
                 st.session_state["show_barcodes"] = True
                 st.experimental_rerun()
 
-    # Boutons de téléchargement
+    # Boutons de téléchargement (clés uniques)
     cols = st.columns(2)
     with cols[0]:
         if svg_str:
             svg_bytes = svg_str.encode("utf-8")
-            st.download_button("Télécharger PDF417 (SVG)", data=svg_bytes, file_name="pdf417.svg", mime="image/svg+xml")
+            st.download_button("Télécharger PDF417 (SVG) (panel)", data=svg_bytes,
+                               file_name="pdf417_panel.svg", mime="image/svg+xml", key="dl_pdf417_svg_panel")
     with cols[1]:
         try:
             pdf_bytes = create_pdf_bytes({
@@ -516,7 +529,8 @@ if generate:
                 "Endorsements": endorse_disp,
                 "Yeux/Cheveux/Taille/Poids": f"{eyes_disp}/{hair_disp}/{height_str}/{w} lb"
             }, photo_bytes=photo_bytes)
-            st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf", mime="application/pdf")
+            st.download_button("Télécharger la carte (PDF)", data=pdf_bytes, file_name="permis_ca.pdf",
+                               mime="application/pdf", key="dl_permis_pdf")
         except Exception as e:
             st.error("Erreur génération PDF : " + str(e))
             if not _REPORTLAB_AVAILABLE:
