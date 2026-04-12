@@ -36,7 +36,7 @@ try:
     from aamva_utils import (
         validate_aamva_payload,
         auto_correct_payload,
-        example_payload,  # conservé pour compatibilité
+        example_payload,
         GS as AAMVA_GS,
         build_aamva_payload_continuous,
     )
@@ -53,7 +53,6 @@ IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/exte
 IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
 
-# Fallback local
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
     "95818": {"city": "Sacramento", "state": "CA", "office": ""},
@@ -76,14 +75,6 @@ def fetch_github_zipdb(url: str) -> Optional[str]:
 
 
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
-    """
-    Parse strict:
-    ZIP
-    City
-    CA
-    (ligne vide)
-    + fallback simple.
-    """
     db: Dict[str, Dict[str, str]] = {}
     if not text:
         return db
@@ -102,7 +93,7 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
             continue
         i += 1
 
-    # fallback heuristique si strict vide
+    # fallback heuristique seulement si parsing strict vide
     if not db:
         for ln in [ln.strip() for ln in text.splitlines() if ln.strip()]:
             m = re.search(r"\b(\d{5})\b", ln)
@@ -128,7 +119,7 @@ if fetched:
     if parsed:
         ZIP_DB.update(parsed)
 
-# Field offices catalog (affichage manuel indépendant)
+
 field_offices = {
     "Baie de San Francisco": {
         "Corte Madera": 525, "Daly City": 599, "El Cerrito": 585, "Fremont": 643,
@@ -162,34 +153,62 @@ for region, cities in field_offices.items():
         FIELD_OFFICE_MAP[city.upper()] = f"{region} — {city} ({code})"
 
 
-def build_zip_to_cities(zip_db: Dict[str, Dict[str, str]]) -> Dict[str, List[str]]:
-    """
-    Mapping ZIP -> list of city options.
-    Garantit jamais [] (fallback Unknown City).
-    """
-    out: Dict[str, List[str]] = {}
+def infer_field_office(city: str) -> str:
+    key = (city or "").strip().upper()
+    if not key:
+        return ""
+    if key in FIELD_OFFICE_MAP:
+        return FIELD_OFFICE_MAP[key]
+    for label in FIELD_OFFICE_MAP.values():
+        if key in label.upper():
+            return label
+    return ""
+
+
+def build_zip_city_field_office(zip_db: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, List[str]]]:
+    mapping: Dict[str, Dict[str, List[str]]] = {}
     for zip_code, info in zip_db.items():
         z = re.sub(r"\D", "", str(zip_code))[:5]
         if len(z) != 5:
             continue
         city = (info.get("city") or "").strip().title()
+        office = (info.get("office") or "").strip() or infer_field_office(city)
+
         if not city:
+            # ville inconnue => ignorer pour éviter d'injecter des options vides
             continue
-        out.setdefault(z, [])
-        if city not in out[z]:
-            out[z].append(city)
 
-    if not out:
-        out["94015"] = ["Daly City"]
+        entry = mapping.setdefault(z, {"cities": [], "field_offices": []})
+        if city not in entry["cities"]:
+            entry["cities"].append(city)
+        if office and office not in entry["field_offices"]:
+            entry["field_offices"].append(office)
 
-    for z in out:
-        if not out[z]:
-            out[z] = ["Unknown City"]
+    if not mapping:
+        mapping["94015"] = {
+            "cities": ["Daly City"],
+            "field_offices": ["Baie de San Francisco — Daly City (599)"],
+        }
 
-    return dict(sorted(out.items(), key=lambda kv: int(kv[0])))
+    # hard fallback per zip to avoid "No options to select"
+    for z, entry in mapping.items():
+        if not entry["cities"]:
+            entry["cities"] = ["Unknown City"]
+        if not entry["field_offices"]:
+            entry["field_offices"] = ["Unknown Field Office"]
+
+    return dict(sorted(mapping.items(), key=lambda kv: int(kv[0])))
 
 
-ZIP_TO_CITIES = build_zip_to_cities(ZIP_DB)
+ZIP_CITY_FIELD_OFFICE = build_zip_city_field_office(ZIP_DB)
+
+CITY_TO_ZIPS: Dict[str, List[str]] = {}
+OFFICE_TO_ZIPS: Dict[str, List[str]] = {}
+for zip_code, row in ZIP_CITY_FIELD_OFFICE.items():
+    for city in row["cities"]:
+        CITY_TO_ZIPS.setdefault(city, []).append(zip_code)
+    for office in row["field_offices"]:
+        OFFICE_TO_ZIPS.setdefault(office, []).append(zip_code)
 
 
 def normalize_city(value: str) -> str:
@@ -226,7 +245,8 @@ def next_sequence(rng: random.Random) -> str:
 
 def build_aamva_tags(fields: Dict[str, str]) -> str:
     """
-    Compat tests existants: délègue au builder continu strict.
+    Backward-compatible helper used by tests.
+    Produces a continuous ANSI/DL payload.
     """
     enriched = dict(fields)
     enriched.setdefault("DAG", "2570 24TH STREET")
@@ -268,11 +288,37 @@ if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
 
 
-# --- Liaison unique demandée: ZIP -> Ville ---
-def update_city_from_zip() -> None:
+def update_from_zip() -> None:
     zip_code = normalize_zip(st.session_state.get("ui_zip", ""))
-    cities = ZIP_TO_CITIES.get(zip_code) or ["Unknown City"]
-    st.session_state["ui_city"] = cities[0]  # jamais vide
+    row = ZIP_CITY_FIELD_OFFICE.get(zip_code)
+    if not row:
+        return
+    cities = row.get("cities") or ["Unknown City"]
+    offices = row.get("field_offices") or ["Unknown Field Office"]
+    st.session_state["ui_city"] = cities[0]
+    st.session_state["ui_office"] = offices[0]
+
+
+def update_from_city() -> None:
+    city = normalize_city(st.session_state.get("ui_city", ""))
+    zips = CITY_TO_ZIPS.get(city, [])
+    if not zips:
+        return
+    st.session_state["ui_zip"] = zips[0]
+    row = ZIP_CITY_FIELD_OFFICE.get(zips[0], {})
+    offices = row.get("field_offices") or ["Unknown Field Office"]
+    st.session_state["ui_office"] = offices[0]
+
+
+def update_from_office() -> None:
+    office = st.session_state.get("ui_office", "")
+    zips = OFFICE_TO_ZIPS.get(office, [])
+    if not zips:
+        return
+    st.session_state["ui_zip"] = zips[0]
+    row = ZIP_CITY_FIELD_OFFICE.get(zips[0], {})
+    cities = row.get("cities") or ["Unknown City"]
+    st.session_state["ui_city"] = cities[0]
 
 
 st.title("Générateur officiel de permis CA")
@@ -289,7 +335,6 @@ with col1:
 with col2:
     h2 = st.number_input("Pouces", 0, 11, 10, key="ui_h2")
     eyes = st.text_input("Yeux", "BRN", key="ui_eyes")
-
 hair = st.text_input("Cheveux", "BRN", key="ui_hair")
 cls = st.text_input("Classe", "C", key="ui_cls")
 rstr = st.text_input("Restrictions", "NONE", key="ui_rstr")
@@ -297,56 +342,55 @@ endorse = st.text_input("Endorsements", "NONE", key="ui_endorse")
 iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 address_line = st.text_input("Address Line", "2570 24TH STREET", key="ui_address_line")
 
-zip_options = list(ZIP_TO_CITIES.keys()) or ["94015"]
-
-# init session state robuste
-if "ui_zip" not in st.session_state or st.session_state["ui_zip"] not in ZIP_TO_CITIES:
+zip_options = list(ZIP_CITY_FIELD_OFFICE.keys()) or ["94015"]
+if "ui_zip" not in st.session_state or st.session_state["ui_zip"] not in ZIP_CITY_FIELD_OFFICE:
     st.session_state["ui_zip"] = zip_options[0]
 
-current_zip = st.session_state["ui_zip"]
-current_city_options = ZIP_TO_CITIES.get(current_zip) or ["Unknown City"]
+selected_zip = st.session_state["ui_zip"]
+selected_row = ZIP_CITY_FIELD_OFFICE.get(selected_zip, {"cities": ["Unknown City"], "field_offices": ["Unknown Field Office"]})
+city_options = selected_row.get("cities") or ["Unknown City"]
+office_options = selected_row.get("field_offices") or ["Unknown Field Office"]
 
-if "ui_city" not in st.session_state or st.session_state["ui_city"] not in current_city_options:
-    st.session_state["ui_city"] = current_city_options[0]
-
-# Field Office indépendant (pas de callback de sync)
-all_field_offices = sorted(set(FIELD_OFFICE_MAP.values()))
-if not all_field_offices:
-    all_field_offices = ["Unknown Field Office"]
-if "ui_office" not in st.session_state or st.session_state["ui_office"] not in all_field_offices:
-    st.session_state["ui_office"] = all_field_offices[0]
+if "ui_city" not in st.session_state or st.session_state["ui_city"] not in city_options:
+    st.session_state["ui_city"] = city_options[0]
+if "ui_office" not in st.session_state or st.session_state["ui_office"] not in office_options:
+    st.session_state["ui_office"] = office_options[0]
 
 col_zip, col_city = st.columns([2, 3])
-
 with col_zip:
     st.selectbox(
         "Code postal",
-        options=zip_options,  # jamais []
+        options=zip_options,
         index=zip_options.index(st.session_state["ui_zip"]),
         key="ui_zip",
-        on_change=update_city_from_zip,
+        on_change=update_from_zip,
     )
 
-# recalcul après changement ZIP
-current_zip = st.session_state["ui_zip"]
-current_city_options = ZIP_TO_CITIES.get(current_zip) or ["Unknown City"]  # jamais []
-if st.session_state.get("ui_city") not in current_city_options:
-    st.session_state["ui_city"] = current_city_options[0]
+# recalc after zip change
+selected_zip = st.session_state["ui_zip"]
+selected_row = ZIP_CITY_FIELD_OFFICE.get(selected_zip, {"cities": ["Unknown City"], "field_offices": ["Unknown Field Office"]})
+city_options = selected_row.get("cities") or ["Unknown City"]
+office_options = selected_row.get("field_offices") or ["Unknown Field Office"]
+if st.session_state.get("ui_city") not in city_options:
+    st.session_state["ui_city"] = city_options[0]
+if st.session_state.get("ui_office") not in office_options:
+    st.session_state["ui_office"] = office_options[0]
 
 with col_city:
     st.selectbox(
         "Ville",
-        options=current_city_options,  # jamais []
-        index=current_city_options.index(st.session_state["ui_city"]),
+        options=city_options,
+        index=city_options.index(st.session_state["ui_city"]),
         key="ui_city",
+        on_change=update_from_city,
     )
 
-# Field Office totalement indépendant
 st.selectbox(
     "Field Office",
-    options=all_field_offices,  # indépendant de ZIP/Ville
-    index=all_field_offices.index(st.session_state["ui_office"]),
+    options=office_options,
+    index=office_options.index(st.session_state["ui_office"]),
     key="ui_office",
+    on_change=update_from_office,
 )
 
 generate = st.button("Générer la carte", key="ui_generate")
@@ -354,7 +398,6 @@ generate = st.button("Générer la carte", key="ui_generate")
 
 def validate_inputs() -> List[str]:
     errors: List[str] = []
-
     if not st.session_state.get("ui_ln", "").strip():
         errors.append("Nom de famille requis.")
     if not st.session_state.get("ui_fn", "").strip():
@@ -379,11 +422,12 @@ def validate_inputs() -> List[str]:
     if not address:
         errors.append("Adresse requise.")
 
-    # cohérence ZIP -> Ville stricte
-    allowed_cities = [normalize_city(c) for c in (ZIP_TO_CITIES.get(zip_code) or [])]
-    if allowed_cities and city not in allowed_cities:
-        errors.append(f"Incohérence ZIP → Ville: {zip_code} n'est pas lié à {city}.")
-
+    # cohérence ZIP -> Ville
+    row = ZIP_CITY_FIELD_OFFICE.get(zip_code)
+    if row:
+        allowed = [normalize_city(c) for c in (row.get("cities") or [])]
+        if city not in allowed:
+            errors.append(f"Incohérence ZIP → Ville: {zip_code} n'est pas lié à {city}.")
     return errors
 
 
@@ -403,26 +447,22 @@ def create_pdf_bytes(fields: Dict[str, str], photo_bytes: bytes = None) -> bytes
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
     x, y = 72, height - 72
-
     c.setFont("Helvetica-Bold", 14)
     c.drawString(x, y, "CALIFORNIA USA DRIVER LICENSE")
     y -= 24
     c.setFont("Helvetica", 11)
-
     for key, val in fields.items():
         c.drawString(x, y, f"{key}: {val}")
         y -= 16
         if y < 72:
             c.showPage()
             y = height - 72
-
     if photo_bytes and ImageReader is not None:
         try:
             img = ImageReader(io.BytesIO(photo_bytes))
             c.drawImage(img, width - 162, height - 182, width=90, height=110)
         except Exception:
             pass
-
     c.showPage()
     c.save()
     buffer.seek(0)
@@ -462,20 +502,17 @@ if generate:
     rstr = st.session_state["ui_rstr"]
     endorse = st.session_state["ui_endorse"]
     iss = st.session_state["ui_iss"]
-
     zip_sel = normalize_zip(st.session_state["ui_zip"])
     city_sel = normalize_city(st.session_state["ui_city"])
-    office_sel = st.session_state["ui_office"]  # indépendant, manuel
+    office_sel = st.session_state["ui_office"]
     address_sel = st.session_state["ui_address_line"].strip()
 
-    # auto-fill ville depuis ZIP avant build payload
-    if not city_sel:
-        candidates = ZIP_TO_CITIES.get(zip_sel) or []
-        if candidates:
-            city_sel = normalize_city(candidates[0])
-            st.session_state["ui_city"] = city_sel
+    # sécurité: remplir ville automatiquement depuis ZIP avant génération
+    row = ZIP_CITY_FIELD_OFFICE.get(zip_sel, {})
+    if not city_sel and row.get("cities"):
+        city_sel = normalize_city(row["cities"][0])
+        st.session_state["ui_city"] = city_sel
 
-    # validation stricte demandée
     if not city_sel:
         st.error("Ville requise pour générer le code PDF417")
         st.stop()
@@ -501,38 +538,30 @@ if generate:
         "DBB": dob.strftime("%m%d%Y"),
         "DBA": exp.strftime("%m%d%Y"),
         "DBD": iss.strftime("%m%d%Y"),
-        "DAG": address_sel.upper(),  # adresse UI
-        "DAI": city_sel.upper(),     # ville UI
+        "DAG": address_sel.upper(),
+        "DAI": city_sel.upper(),
         "DAJ": "CA",
-        "DAK": zip_sel,              # zip UI
+        "DAK": zip_sel,
         "DCF": dd,
         "DAU": f"{int(h1)}{int(h2)}",
         "DAY": (eyes or "").upper(),
         "DAZ": (hair or "").upper(),
     }
 
-    # champs critiques obligatoires
     for required in ("DAG", "DAI", "DAJ", "DAK"):
         if not str(fields.get(required, "")).strip():
             st.error(f"Champ AAMVA obligatoire manquant: {required}")
             st.stop()
 
-    # cohérence ZIP -> Ville finale (juste avant build)
-    allowed = [normalize_city(c) for c in (ZIP_TO_CITIES.get(zip_sel) or [])]
-    if allowed and normalize_city(city_sel) not in allowed:
-        st.error(f"Incohérence ZIP → Ville détectée ({zip_sel} / {city_sel}).")
-        st.stop()
-
-    # payload continu strict
     if _AAMVA_UTILS_AVAILABLE:
         payload_to_use = build_aamva_payload_continuous(fields)
     else:
+        # fallback continu sans séparateurs invisibles
         ordered = ["DAQ", "DCS", "DAC", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"]
         payload_to_use = "@ANSI 636014080102DL00410288ZA03290015DL" + "".join(
             f"{tag}{str(fields.get(tag, '')).strip()}" for tag in ordered if str(fields.get(tag, "")).strip()
         )
 
-    # garde-fou payload
     if any(x in payload_to_use for x in ("\n", "\r", "\x1E")):
         st.error("Payload invalide: des séparateurs interdits ont été détectés.")
         st.stop()
