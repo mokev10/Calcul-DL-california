@@ -30,10 +30,6 @@ CA
 Los Angeles
 CA
 
-90009
-Los Angeles
-CA
-
 90010
 Los Angeles
 CA
@@ -114,10 +110,6 @@ CA
 Los Angeles
 CA
 
-90030
-Los Angeles
-CA
-
 90031
 Los Angeles
 CA
@@ -194,30 +186,6 @@ CA
 Los Angeles
 CA
 
-90050
-Los Angeles
-CA
-
-90051
-Los Angeles
-CA
-
-90052
-Los Angeles
-CA
-
-90053
-Los Angeles
-CA
-
-90054
-Los Angeles
-CA
-
-90055
-Los Angeles
-CA
-
 90056
 Los Angeles
 CA
@@ -227,19 +195,15 @@ Los Angeles
 CA
 
 90058
-Vernon
+Los Angeles
 CA
 
 90059
 Los Angeles
 CA
 
-90060
-Los Angeles
-CA
-
 90061
-Willowbrook
+Los Angeles
 CA
 
 90062
@@ -247,7 +211,7 @@ Los Angeles
 CA
 
 90063
-East Los Angeles
+Los Angeles
 CA
 
 90064
@@ -271,10 +235,6 @@ Los Angeles
 CA
 
 90069
-West Hollywood
-CA
-
-90070
 Los Angeles
 CA
 
@@ -282,68 +242,12 @@ CA
 Los Angeles
 CA
 
-90072
-Los Angeles
-CA
-
-90073
-Los Angeles
-CA
-
 90077
 Los Angeles
 CA
 
-90078
-Los Angeles
-CA
-
-90080
-Los Angeles
-CA
-
-90081
-Los Angeles
-CA
-
-90082
-Los Angeles
-CA
-
-90083
-Los Angeles
-CA
-
-90087
-Los Angeles
-CA
-
-90089
-Los Angeles
-CA
-
-90091
-Commerce
-CA
-
 90094
 Los Angeles
-CA
-
-90095
-Los Angeles
-CA
-
-90201
-Bell
-CA
-
-90202
-Bell Gardens
-CA
-
-90209
-Beverly Hills
 CA
 
 90210
@@ -358,48 +262,12 @@ CA
 Beverly Hills
 CA
 
-90213
-Beverly Hills
-CA
-
-90220
-Compton
-CA
-
-90221
-Compton
-CA
-
-90222
-Compton
-CA
-
-90223
-Compton
-CA
-
-90224
-Compton
-CA
-
 90230
-Culver City
-CA
-
-90231
 Culver City
 CA
 
 90232
 Culver City
-CA
-
-90233
-Culver City
-CA
-
-90239
-Downey
 CA
 
 90240
@@ -415,10 +283,6 @@ Downey
 CA
 
 90245
-El Segundo
-CA
-
-90246
 El Segundo
 CA
 
@@ -438,12 +302,8 @@ CA
 Hawthorne
 CA
 
-90251
-Hawthorne
-CA
-
 90254
-Hemosa Beach
+Hermosa Beach
 CA
 
 90255
@@ -454,20 +314,8 @@ CA
 Lawndale
 CA
 
-90261
-Lawndale
-CA
-
 90262
 Lynwood
-CA
-
-90263
-Malibu
-CA
-
-90264
-Malibu
 CA
 
 90265
@@ -475,10 +323,6 @@ Malibu
 CA
 
 90266
-Manhattan Beach
-CA
-
-90267
 Manhattan Beach
 CA
 
@@ -491,7 +335,7 @@ Pacific Palisades
 CA
 
 90274
-Palos Verdes Peninsula
+Palos Verdes Estates
 CA
 
 90275
@@ -510,32 +354,12 @@ CA
 South Gate
 CA
 
-90290
-Topanga
-CA
-
 90291
 Venice
 CA
 
 90292
 Marina Del Rey
-CA
-
-90293
-Playa Del Rey
-CA
-
-90294
-Venice
-CA
-
-90295
-Marina Del Rey
-CA
-
-90296
-Playa Del Rey
 CA
 
 90301
@@ -555,46 +379,6 @@ Inglewood
 CA
 
 90305
-Inglewood
-CA
-
-90306
-Inglewood
-CA
-
-90307
-Inglewood
-CA
-
-90308
-Inglewood
-CA
-
-90309
-Inglewood
-CA
-
-90310
-Inglewood
-CA
-
-90311
-Inglewood
-CA
-
-90312
-Inglewood
-CA
-
-90313
-Inglewood
-CA
-
-90397
-Inglewood
-CA
-
-90398
 Inglewood
 CA
 
@@ -618,30 +402,6 @@ CA
 Santa Monica
 CA
 
-90406
-Santa Monica
-CA
-
-90407
-Santa Monica
-CA
-
-90408
-Santa Monica
-CA
-
-90409
-Santa Monica
-CA
-
-90410
-Santa Monica
-CA
-
-90411
-Santa Monica
-CA
-
 90501
 Torrance
 CA
@@ -662,91 +422,11 @@ CA
 Torrance
 CA
 
-90506
-Torrance
-CA
-
-90507
-Torrance
-CA
-
-90508
-Torrance
-CA
-
-90509
-Torrance
-CA
-
-90510
-Torrance
-CA
-
-90601
-Whittier
-CA
-
-90602
-Whittier
-CA
-
-90603
-Whittier
-CA
-
-90604
-Whittier
-CA
-
-90605
-Whittier
-CA
-
-90606
-Whittier
-CA
-
-90607
-Whittier
-CA
-
-90608
-Whittier
-CA
-
-90609
-Whittier
-CA
-
-90610
-Whittier
-CA
-
-90611
-Whittier
-CA
-
-90612
-Whittier
-CA
-
 90620
 Buena Park
 CA
 
 90621
-Buena Park
-CA
-
-90622
-Buena Park
-CA
-
-90623
-La Palma
-CA
-
-90624
 Buena Park
 CA
 
@@ -758,31 +438,7 @@ CA
 La Habra
 CA
 
-90632
-La Habra
-CA
-
-90633
-La Habra
-CA
-
-90634
-La Mirada
-CA
-
-90636
-La Mirada
-CA
-
-90637
-La Mirada
-CA
-
 90638
-La Mirada
-CA
-
-90639
 La Mirada
 CA
 
@@ -794,27 +450,7 @@ CA
 Norwalk
 CA
 
-90651
-Norwalk
-CA
-
-90652
-Norwalk
-CA
-
-90659
-Norwalk
-CA
-
 90660
-Pico Rivera
-CA
-
-90661
-Pico Rivera
-CA
-
-90662
 Pico Rivera
 CA
 
@@ -822,44 +458,16 @@ CA
 Santa Fe Springs
 CA
 
-90671
-Santa Fe Springs
-CA
-
-90680
-Stanton
-CA
-
-90701
-Artesia
-CA
-
-90702
-Artesia
-CA
-
 90703
 Cerritos
-CA
-
-90704
-Avalon
 CA
 
 90706
 Bellflower
 CA
 
-90707
-Bellflower
-CA
-
 90710
 Harbor City
-CA
-
-90711
-Lakewood
 CA
 
 90712
@@ -870,28 +478,12 @@ CA
 Lakewood
 CA
 
-90714
-Lakewood
-CA
-
 90715
 Lakewood
 CA
 
-90716
-Hawaiian Gardens
-CA
-
 90717
 Lomita
-CA
-
-90720
-Los Alamitos
-CA
-
-90721
-Los Alamitos
 CA
 
 90723
@@ -906,24 +498,8 @@ CA
 San Pedro
 CA
 
-90733
-San Pedro
-CA
-
-90734
-San Pedro
-CA
-
 90740
 Seal Beach
-CA
-
-90742
-Sunset Beach
-CA
-
-90743
-Surfside
 CA
 
 90744
@@ -936,26 +512,6 @@ CA
 
 90746
 Carson
-CA
-
-90747
-Carson
-CA
-
-90748
-Wilmington
-CA
-
-90749
-Carson
-CA
-
-90755
-Signal Hill
-CA
-
-90801
-Long Beach
 CA
 
 90802
@@ -986,104 +542,12 @@ CA
 Long Beach
 CA
 
-90809
-Long Beach
-CA
-
 90810
 Long Beach
 CA
 
 90813
 Long Beach
-CA
-
-90814
-Long Beach
-CA
-
-90815
-Long Beach
-CA
-
-90822
-Long Beach
-CA
-
-90831
-Long Beach
-CA
-
-90832
-Long Beach
-CA
-
-90833
-Long Beach
-CA
-
-90834
-Long Beach
-CA
-
-90835
-Long Beach
-CA
-
-90840
-Long Beach
-CA
-
-90842
-Long Beach
-CA
-
-90844
-Long Beach
-CA
-
-90845
-Long Beach
-CA
-
-90846
-Long Beach
-CA
-
-90847
-Long Beach
-CA
-
-90848
-Long Beach
-CA
-
-90853
-Long Beach
-CA
-
-90888
-Long Beach
-CA
-
-90895
-Carson
-CA
-
-90899
-Long Beach
-CA
-
-90929
-Marina Del Rey
-CA
-
-91001
-Altadena
-CA
-
-91003
-Altadena
 CA
 
 91006
@@ -1094,10 +558,6 @@ CA
 Arcadia
 CA
 
-91009
-Duarte
-CA
-
 91010
 Duarte
 CA
@@ -1106,15 +566,7 @@ CA
 La Canada Flintridge
 CA
 
-91012
-La Canada Flintridge
-CA
-
 91016
-Monrovia
-CA
-
-91017
 Monrovia
 CA
 
@@ -1122,63 +574,11 @@ CA
 Montrose
 CA
 
-91021
-Montrose
-CA
-
-91023
-Mount Wilson
-CA
-
 91024
 Sierra Madre
 CA
 
-91025
-Sierra Madre
-CA
-
-91030
-South Pasadena
-CA
-
-91031
-South Pasadena
-CA
-
-91040
-Sunland
-CA
-
-91041
-Sunland
-CA
-
-91042
-Tujunga
-CA
-
-91043
-Tujunga
-CA
-
-91046
-Verdugo City
-CA
-
-91066
-Arcadia
-CA
-
-91077
-Arcadia
-CA
-
 91101
-Pasadena
-CA
-
-91102
 Pasadena
 CA
 
@@ -1199,94 +599,6 @@ Pasadena
 CA
 
 91107
-Pasadena
-CA
-
-91108
-San Marino
-CA
-
-91109
-Pasadena
-CA
-
-91110
-Pasadena
-CA
-
-91114
-Pasadena
-CA
-
-91115
-Pasadena
-CA
-
-91116
-Pasadena
-CA
-
-91117
-Pasadena
-CA
-
-91118
-San Marino
-CA
-
-91121
-Pasadena
-CA
-
-91123
-Pasadena
-CA
-
-91124
-Pasadena
-CA
-
-91125
-Pasadena
-CA
-
-91126
-Pasadena
-CA
-
-91129
-Pasadena
-CA
-
-91131
-Pasadena
-CA
-
-91182
-Pasadena
-CA
-
-91184
-Pasadena
-CA
-
-91185
-Pasadena
-CA
-
-91188
-Pasadena
-CA
-
-91189
-Pasadena
-CA
-
-91191
-Pasadena
-CA
-
-91199
 Pasadena
 CA
 
@@ -1314,46 +626,6 @@ CA
 Glendale
 CA
 
-91207
-Glendale
-CA
-
-91208
-Glendale
-CA
-
-91209
-Glendale
-CA
-
-91210
-Glendale
-CA
-
-91214
-La Crescenta
-CA
-
-91221
-Glendale
-CA
-
-91222
-Glendale
-CA
-
-91224
-La Crescenta
-CA
-
-91225
-Glendale
-CA
-
-91226
-Glendale
-CA
-
 91301
 Agoura Hills
 CA
@@ -1370,10 +642,6 @@ CA
 Canoga Park
 CA
 
-91305
-Canoga Park
-CA
-
 91306
 Winnetka
 CA
@@ -1382,44 +650,12 @@ CA
 West Hills
 CA
 
-91308
-West Hills
-CA
-
-91309
-Canoga Park
-CA
-
-91310
-Castaic
-CA
-
 91311
-Chatsworth
-CA
-
-91313
 Chatsworth
 CA
 
 91316
 Encino
-CA
-
-91319
-Newbury Park
-CA
-
-91320
-Newbury Park
-CA
-
-91321
-Newhall
-CA
-
-91322
-Newhall
 CA
 
 91324
@@ -1434,31 +670,7 @@ CA
 Porter Ranch
 CA
 
-91327
-Northridge
-CA
-
-91328
-Northridge
-CA
-
-91329
-Northridge
-CA
-
-91330
-Northridge
-CA
-
 91331
-Pacoima
-CA
-
-91333
-Pacoima
-CA
-
-91334
 Pacoima
 CA
 
@@ -1466,15 +678,7 @@ CA
 Reseda
 CA
 
-91337
-Reseda
-CA
-
 91340
-San Fernando
-CA
-
-91341
 San Fernando
 CA
 
@@ -1490,27 +694,11 @@ CA
 Granada Hills
 CA
 
-91345
-Mission Hills
-CA
-
-91346
-Mission Hills
-CA
-
-91350
+91351
 Santa Clarita
 CA
 
-91351
-Canyon Country
-CA
-
 91352
-Sun Valley
-CA
-
-91353
 Sun Valley
 CA
 
@@ -1526,123 +714,23 @@ CA
 Tarzana
 CA
 
-91357
-Tarzana
-CA
-
-91358
-Thousand Oaks
-CA
-
-91359
-Westlake Village
-CA
-
 91360
 Thousand Oaks
 CA
 
 91361
-Westlake Village
+Thousand Oaks
 CA
 
 91362
 Thousand Oaks
 CA
 
-91363
-Westlake Village
-CA
-
 91364
 Woodland Hills
 CA
 
-91365
-Woodland Hills
-CA
-
 91367
-Woodland Hills
-CA
-
-91371
-Woodland Hills
-CA
-
-91372
-Calabasas
-CA
-
-91376
-Agoura Hills
-CA
-
-91377
-Oak Park
-CA
-
-91380
-Santa Clarita
-CA
-
-91381
-Stevenson Ranch
-CA
-
-91382
-Santa Clarita
-CA
-
-91383
-Santa Clarita
-CA
-
-91384
-Castaic
-CA
-
-91385
-Valencia
-CA
-
-91386
-Canyon Country
-CA
-
-91387
-Canyon Country
-CA
-
-91388
-Van Nuys
-CA
-
-91390
-Santa Clarita
-CA
-
-91392
-Sylmar
-CA
-
-91393
-North Hills
-CA
-
-91394
-Granada Hills
-CA
-
-91395
-Mission Hills
-CA
-
-91396
-Winnetka
-CA
-
-91399
 Woodland Hills
 CA
 
@@ -1658,10 +746,6 @@ CA
 Sherman Oaks
 CA
 
-91404
-Van Nuys
-CA
-
 91405
 Van Nuys
 CA
@@ -1670,72 +754,12 @@ CA
 Van Nuys
 CA
 
-91407
-Van Nuys
-CA
-
-91408
-Van Nuys
-CA
-
-91409
-Van Nuys
-CA
-
-91410
-Van Nuys
-CA
-
 91411
 Van Nuys
 CA
 
-91412
-Panorama City
-CA
-
-91413
-Sherman Oaks
-CA
-
-91416
-Encino
-CA
-
 91423
 Sherman Oaks
-CA
-
-91426
-Encino
-CA
-
-91436
-Encino
-CA
-
-91470
-Van Nuys
-CA
-
-91482
-Van Nuys
-CA
-
-91495
-Sherman Oaks
-CA
-
-91496
-Van Nuys
-CA
-
-91497
-Van Nuys
-CA
-
-91499
-Van Nuys
 CA
 
 91501
@@ -1743,10 +767,6 @@ Burbank
 CA
 
 91502
-Burbank
-CA
-
-91503
 Burbank
 CA
 
@@ -1758,47 +778,11 @@ CA
 Burbank
 CA
 
-91506
-Burbank
-CA
-
-91507
-Burbank
-CA
-
-91508
-Burbank
-CA
-
-91510
-Burbank
-CA
-
-91521
-Burbank
-CA
-
-91522
-Burbank
-CA
-
-91523
-Burbank
-CA
-
-91526
-Burbank
-CA
-
 91601
 North Hollywood
 CA
 
 91602
-North Hollywood
-CA
-
-91603
 North Hollywood
 CA
 
@@ -1814,64 +798,12 @@ CA
 North Hollywood
 CA
 
-91607
-Valley Village
-CA
-
-91608
-Universal City
-CA
-
-91609
-North Hollywood
-CA
-
-91610
-Toluca Lake
-CA
-
-91611
-North Hollywood
-CA
-
-91612
-North Hollywood
-CA
-
-91614
-Studio City
-CA
-
-91615
-North Hollywood
-CA
-
-91616
-North Hollywood
-CA
-
-91617
-Valley Village
-CA
-
-91618
-North Hollywood
-CA
-
-91701
-Rancho Cucamonga
-CA
-
 91702
 Azusa
 CA
 
 91706
 Baldwin Park
-CA
-
-91708
-Chino
 CA
 
 91709
@@ -1886,30 +818,6 @@ CA
 Claremont
 CA
 
-91714
-City of Industry
-CA
-
-91715
-City of Industry
-CA
-
-91716
-City of Industry
-CA
-
-91718
-Corona
-CA
-
-91719
-Corona
-CA
-
-91720
-Corona
-CA
-
 91722
 Covina
 CA
@@ -1920,10 +828,6 @@ CA
 
 91724
 Covina
-CA
-
-91729
-Rancho Cucamonga
 CA
 
 91730
@@ -1942,14 +846,6 @@ CA
 South El Monte
 CA
 
-91734
-El Monte
-CA
-
-91735
-El Monte
-CA
-
 91737
 Rancho Cucamonga
 CA
@@ -1966,10 +862,6 @@ CA
 Glendora
 CA
 
-91743
-Guasti
-CA
-
 91744
 La Puente
 CA
@@ -1978,28 +870,12 @@ CA
 Hacienda Heights
 CA
 
-91746
-La Puente
-CA
-
-91747
-La Puente
-CA
-
 91748
 Rowland Heights
 CA
 
-91749
-La Puente
-CA
-
 91750
 La Verne
-CA
-
-91752
-Mira Loma
 CA
 
 91754
@@ -2008,18 +884,6 @@ CA
 
 91755
 Monterey Park
-CA
-
-91756
-Monterey Park
-CA
-
-91758
-Ontario
-CA
-
-91759
-Mt Baldy
 CA
 
 91761
@@ -2054,19 +918,7 @@ CA
 Pomona
 CA
 
-91769
-Pomona
-CA
-
 91770
-Rosemead
-CA
-
-91771
-Rosemead
-CA
-
-91772
 Rosemead
 CA
 
@@ -2082,10 +934,6 @@ CA
 San Gabriel
 CA
 
-91778
-San Gabriel
-CA
-
 91780
 Temple City
 CA
@@ -2094,16 +942,8 @@ CA
 Upland
 CA
 
-91785
-Upland
-CA
-
 91786
 Upland
-CA
-
-91788
-Walnut
 CA
 
 91789
@@ -2122,31 +962,7 @@ CA
 West Covina
 CA
 
-91793
-West Covina
-CA
-
-91795
-Walnut
-CA
-
-91797
-Pomona
-CA
-
-91798
-Ontario
-CA
-
-91799
-Pomona
-CA
-
 91801
-Alhambra
-CA
-
-91802
 Alhambra
 CA
 
@@ -2154,59 +970,11 @@ CA
 Alhambra
 CA
 
-91804
-Alhambra
-CA
-
-91841
-Alhambra
-CA
-
-91896
-Alhambra
-CA
-
-91899
-Alhambra
-CA
-
-91901
-Alpine
-CA
-
-91902
-Bonita
-CA
-
-91903
-Alpine
-CA
-
-91905
-Boulevard
-CA
-
-91906
-Campo
-CA
-
-91908
-Bonita
-CA
-
-91909
-Chula Vista
-CA
-
 91910
 Chula Vista
 CA
 
 91911
-Chula Vista
-CA
-
-91912
 Chula Vista
 CA
 
@@ -2222,36 +990,8 @@ CA
 Chula Vista
 CA
 
-91916
-Descanso
-CA
-
-91917
-Dulzura
-CA
-
-91921
-Chula Vista
-CA
-
-91931
-Guatay
-CA
-
 91932
 Imperial Beach
-CA
-
-91933
-Imperial Beach
-CA
-
-91934
-Jacumba
-CA
-
-91935
-Jamul
 CA
 
 91941
@@ -2262,84 +1002,8 @@ CA
 La Mesa
 CA
 
-91943
-La Mesa
-CA
-
-91944
-La Mesa
-CA
-
-91945
-Lemon Grove
-CA
-
-91946
-Lemon Grove
-CA
-
-91947
-Lincoln Acres
-CA
-
-91948
-Mount Laguna
-CA
-
-91950
-National City
-CA
-
-91951
-National City
-CA
-
-91962
-Pine Valley
-CA
-
-91963
-Potrero
-CA
-
-91976
-Spring Valley
-CA
-
-91977
-Spring Valley
-CA
-
-91978
-Spring Valley
-CA
-
-91979
-Spring Valley
-CA
-
-91980
-Tecate
-CA
-
-91987
-Tecate
-CA
-
-91990
-Potrero
-CA
-
-92003
-Bonsall
-CA
-
-92004
-Borrego Springs
-CA
-
 92007
-Cardiff by the Sea
+Cardiff By The Sea
 CA
 
 92008
@@ -2358,20 +1022,8 @@ CA
 Carlsbad
 CA
 
-92012
-Carlsbad
-CA
-
-92013
-Carlsbad
-CA
-
 92014
 Del Mar
-CA
-
-92018
-Carlsbad
 CA
 
 92019
@@ -2384,14 +1036,6 @@ CA
 
 92021
 El Cajon
-CA
-
-92022
-El Cajon
-CA
-
-92023
-Encinitas
 CA
 
 92024
@@ -2418,27 +1062,7 @@ CA
 Escondido
 CA
 
-92030
-Escondido
-CA
-
-92033
-Escondido
-CA
-
-92036
-Julian
-CA
-
 92037
-La Jolla
-CA
-
-92038
-La Jolla
-CA
-
-92039
 La Jolla
 CA
 
@@ -2446,28 +1070,8 @@ CA
 Lakeside
 CA
 
-92046
-Escondido
-CA
-
-92049
-Oceanside
-CA
-
-92051
-Oceanside
-CA
-
-92052
-Oceanside
-CA
-
 92054
 Oceanside
-CA
-
-92055
-Camp Pendleton
 CA
 
 92056
@@ -2478,16 +1082,8 @@ CA
 Oceanside
 CA
 
-92059
-Pala
-CA
-
-92060
-Palomar Mountain
-CA
-
-92061
-Pauma Valley
+92058
+Oceanside
 CA
 
 92064
@@ -2498,36 +1094,12 @@ CA
 Ramona
 CA
 
-92066
-Ranchita
-CA
-
-92067
-Rancho Santa Fe
-CA
-
-92068
-San Luis Rey
-CA
-
 92069
 San Marcos
 CA
 
-92070
-Santa Ysabel
-CA
-
 92071
 Santee
-CA
-
-92072
-Santee
-CA
-
-92074
-Poway
 CA
 
 92075
@@ -2538,16 +1110,8 @@ CA
 San Marcos
 CA
 
-92079
-San Marcos
-CA
-
 92081
 Vista
-CA
-
-92082
-Valley Center
 CA
 
 92083
@@ -2558,36 +1122,8 @@ CA
 Vista
 CA
 
-92085
-Vista
-CA
-
-92086
-Warner Springs
-CA
-
-92088
-Fallbrook
-CA
-
-92090
-El Cajon
-CA
-
-92091
-Rancho Santa Fe
-CA
-
-92092
-La Jolla
-CA
-
 92093
 La Jolla
-CA
-
-92096
-San Marcos
 CA
 
 92101
@@ -2634,10 +1170,6 @@ CA
 San Diego
 CA
 
-92112
-San Diego
-CA
-
 92113
 San Diego
 CA
@@ -2656,10 +1188,6 @@ CA
 
 92117
 San Diego
-CA
-
-92118
-Coronado
 CA
 
 92119
@@ -2710,71 +1238,7 @@ CA
 San Diego
 CA
 
-92132
-San Diego
-CA
-
-92133
-San Diego
-CA
-
-92134
-San Diego
-CA
-
-92135
-San Diego
-CA
-
-92136
-San Diego
-CA
-
-92137
-San Diego
-CA
-
-92138
-San Diego
-CA
-
 92139
-San Diego
-CA
-
-92140
-San Diego
-CA
-
-92142
-San Diego
-CA
-
-92143
-San Diego
-CA
-
-92145
-San Diego
-CA
-
-92147
-San Diego
-CA
-
-92149
-San Diego
-CA
-
-92150
-San Diego
-CA
-
-92152
-San Diego
-CA
-
-92153
 San Diego
 CA
 
@@ -2782,307 +1246,31 @@ CA
 San Diego
 CA
 
-92155
-San Diego
-CA
-
-92158
-San Diego
-CA
-
-92159
-San Diego
-CA
-
-92160
-San Diego
-CA
-
-92161
-San Diego
-CA
-
-92162
-San Diego
-CA
-
-92163
-San Diego
-CA
-
-92164
-San Diego
-CA
-
-92165
-San Diego
-CA
-
-92166
-San Diego
-CA
-
-92167
-San Diego
-CA
-
-92168
-San Diego
-CA
-
-92169
-San Diego
-CA
-
-92170
-San Diego
-CA
-
-92171
-San Diego
-CA
-
-92172
-San Diego
-CA
-
 92173
 San Diego
-CA
-
-92174
-San Diego
-CA
-
-92175
-San Diego
-CA
-
-92176
-San Diego
-CA
-
-92177
-San Diego
-CA
-
-92178
-San Diego
-CA
-
-92179
-San Diego
-CA
-
-92182
-San Diego
-CA
-
-92184
-San Diego
-CA
-
-92186
-San Diego
-CA
-
-92187
-San Diego
-CA
-
-92190
-San Diego
-CA
-
-92191
-San Diego
-CA
-
-92192
-San Diego
-CA
-
-92193
-San Diego
-CA
-
-92194
-San Diego
-CA
-
-92195
-San Diego
-CA
-
-92196
-San Diego
-CA
-
-92197
-San Diego
-CA
-
-92198
-San Diego
-CA
-
-92199
-San Diego
-CA
-
-92201
-Indio
-CA
-
-92202
-Indio
-CA
-
-92203
-Indio
-CA
-
-92210
-Indian Wells
-CA
-
-92211
-Palm desert
 CA
 
 92220
 Banning
 CA
 
-92222
-Bard
-CA
-
 92223
 Beaumont
-CA
-
-92225
-Blythe
-CA
-
-92226
-Blythe
-CA
-
-92227
-Brawley
-CA
-
-92230
-Cabazon
-CA
-
-92231
-Calexico
-CA
-
-92232
-Calexico
-CA
-
-92233
-Calipatria
 CA
 
 92234
 Cathedral City
 CA
 
-92235
-Cathedral City
-CA
-
-92236
-Coachella
-CA
-
-92239
-Desert Center
-CA
-
 92240
 Desert Hot Springs
-CA
-
-92241
-Desert Hot Springs
-CA
-
-92242
-Earp
-CA
-
-92243
-El Centro
-CA
-
-92244
-El Centro
-CA
-
-92247
-La Quinta
-CA
-
-92248
-La Quinta
-CA
-
-92249
-Heber
-CA
-
-92250
-Holtville
-CA
-
-92251
-Imperial
-CA
-
-92252
-Joshua Tree
 CA
 
 92253
 La Quinta
 CA
 
-92254
-Mecca
-CA
-
-92255
-Palm Desert
-CA
-
-92256
-Morongo Valley
-CA
-
-92257
-Niland
-CA
-
-92258
-North Palm Springs
-CA
-
-92259
-Ocotillo
-CA
-
 92260
-Palm Desert
-CA
-
-92261
 Palm Desert
 CA
 
@@ -3090,200 +1278,20 @@ CA
 Palm Springs
 CA
 
-92263
-Palm Springs
-CA
-
 92264
 Palm Springs
-CA
-
-92266
-Palo Verde
-CA
-
-92267
-Parker Dam
-CA
-
-92268
-Pioneertown
 CA
 
 92270
 Rancho Mirage
 CA
 
-92273
-Seely
-CA
-
-92274
-Thermal
-CA
-
-92275
-Salton City
-CA
-
-92276
-Thousand Palms
-CA
-
-92277
-Twenthnine Palms
-CA
-
-92278
-Twenthnine Palms
-CA
-
-92280
-Vidal
-CA
-
-92281
-Westmorland
-CA
-
-92282
-White Water
-CA
-
-92283
-Winterhaven
-CA
-
-92284
-Yucca Valley
-CA
-
-92285
-Landers
-CA
-
-92286
-Yucca Valley
-CA
-
-92292
-Palm Springs
-CA
-
-92301
-Adelanto
-CA
-
-92304
-Amboy
-CA
-
-92305
-Angelus Oaks
-CA
-
-92307
-Apple Valley
-CA
-
-92308
-Apple Valley
-CA
-
-92309
-Baker
-CA
-
-92310
-Fort Irwin
-CA
-
 92311
 Barstow
 CA
 
-92312
-Barstow
-CA
-
-92313
-Grand Terrance
-CA
-
-92314
-Big Bear City
-CA
-
-92315
-Big Bear Lake
-CA
-
-92316
-Bloomington
-CA
-
-92317
-Blue Jay
-CA
-
-92318
-Bryn Mawr
-CA
-
-92320
-Calimesa
-CA
-
-92321
-Cedar Glen
-CA
-
-92322
-Cedarpines Park
-CA
-
-92323
-Cima
-CA
-
 92324
 Colton
-CA
-
-92325
-Crestline
-CA
-
-92326
-Crest Park
-CA
-
-92327
-Daggett
-CA
-
-92328
-Death Valley
-CA
-
-92329
-Phelan
-CA
-
-92331
-Fontana
-CA
-
-92332
-Essex
-CA
-
-92333
-Fawnskin
-CA
-
-92334
-Fontana
 CA
 
 92335
@@ -3294,34 +1302,6 @@ CA
 Fontana
 CA
 
-92337
-Fontana
-CA
-
-92338
-Ludlow
-CA
-
-92339
-Forest Falls
-CA
-
-92340
-Hesperia
-CA
-
-92341
-Green Valley Lake
-CA
-
-92342
-Helendale
-CA
-
-92344
-Hesperia
-CA
-
 92345
 Hesperia
 CA
@@ -3330,68 +1310,8 @@ CA
 Highland
 CA
 
-92347
-Hnkley
-CA
-
-92350
-Loma Linda
-CA
-
-92352
-Lake Arrowhead
-CA
-
 92354
 Loma Linda
-CA
-
-92356
-Lucerne Valley
-CA
-
-92357
-Loma Linda
-CA
-
-92358
-Lytle Creek
-CA
-
-92359
-Mentone
-CA
-
-92363
-Needles
-CA
-
-92364
-Nipton
-CA
-
-92365
-Newberry Springs
-CA
-
-92366
-Mountain Pass
-CA
-
-92368
-Oro Grande
-CA
-
-92369
-Patton
-CA
-
-92371
-Phelan
-CA
-
-92372
-Pinon Hills
 CA
 
 92373
@@ -3402,51 +1322,11 @@ CA
 Redlands
 CA
 
-92375
-Redlands
-CA
-
 92376
 Rialto
 CA
 
-92377
-Rialto
-CA
-
-92378
-Rimforest
-CA
-
-92382
-Running Springs
-CA
-
-92384
-Shoshone
-CA
-
-92385
-Skyforest
-CA
-
-92386
-Sugarloaf
-CA
-
-92389
-Tecopa
-CA
-
-92391
-Twin Peaks
-CA
-
 92392
-Victorville
-CA
-
-92393
 Victorville
 CA
 
@@ -3458,27 +1338,11 @@ CA
 Victorville
 CA
 
-92397
-Wrightwood
-CA
-
-92398
-Yermo
-CA
-
 92399
 Yucaipa
 CA
 
 92401
-San Bernardino
-CA
-
-92402
-San Bernardino
-CA
-
-92403
 San Bernardino
 CA
 
@@ -3490,10 +1354,6 @@ CA
 San Bernardino
 CA
 
-92406
-San Bernardino
-CA
-
 92407
 San Bernardino
 CA
@@ -3502,51 +1362,7 @@ CA
 San Bernardino
 CA
 
-92410
-San Bernardino
-CA
-
-92411
-San Bernardino
-CA
-
-92412
-San Bernardino
-CA
-
-92413
-San Bernardino
-CA
-
-92414
-San Bernardino
-CA
-
-92415
-San Bernardino
-CA
-
-92418
-San Bernardino
-CA
-
-92423
-San Bernardino
-CA
-
-92424
-San Bernardino
-CA
-
-92427
-San Bernardino
-CA
-
 92501
-Riverside
-CA
-
-92502
 Riverside
 CA
 
@@ -3575,63 +1391,15 @@ Riverside
 CA
 
 92509
-Riverside
-CA
-
-92513
-Riverside
-CA
-
-92514
-Riverside
-CA
-
-92515
-Riverside
-CA
-
-92516
-Riverside
-CA
-
-92517
-Riverside
-CA
-
-92518
-March Air Reserve
-CA
-
-92519
-Riverside
-CA
-
-92521
-Riverside
-CA
-
-92522
-Riverside
+Jurupa Valley
 CA
 
 92530
 Lake Elsinore
 CA
 
-92531
-Lake Elsinore
-CA
-
 92532
 Lake Elsinore
-CA
-
-92536
-Aquanga
-CA
-
-92539
-Anza
 CA
 
 92543
@@ -3646,23 +1414,7 @@ CA
 Hemet
 CA
 
-92546
-Hemet
-CA
-
-92548
-Homeland
-CA
-
-92549
-Idyllwild
-CA
-
 92551
-Moreno Valley
-CA
-
-92552
 Moreno Valley
 CA
 
@@ -3670,24 +1422,12 @@ CA
 Moreno Valley
 CA
 
-92554
-Moreno Valley
-CA
-
 92555
-Moreno Valley
-CA
-
-92556
 Moreno Valley
 CA
 
 92557
 Moreno Valley
-CA
-
-92561
-Mountain Center
 CA
 
 92562
@@ -3698,14 +1438,6 @@ CA
 Murrieta
 CA
 
-92564
-Murrieta
-CA
-
-92567
-Nuevo
-CA
-
 92570
 Perris
 CA
@@ -3714,40 +1446,12 @@ CA
 Perris
 CA
 
-92572
-Perris
-CA
-
-92581
-San Jacinto
-CA
-
-92582
-San Jacinto
-CA
-
-92583
-San Jacinto
-CA
-
 92584
 Menifee
 CA
 
-92585
-Sun City
-CA
-
 92586
-Sun City
-CA
-
-92587
-Sun City
-CA
-
-92589
-Temecula
+Menifee
 CA
 
 92590
@@ -3762,20 +1466,8 @@ CA
 Temecula
 CA
 
-92593
-Temecula
-CA
-
 92595
 Wildomar
-CA
-
-92596
-Winchester
-CA
-
-92599
-Perris
 CA
 
 92602
@@ -3790,20 +1482,8 @@ CA
 Irvine
 CA
 
-92605
-Huntington Beach
-CA
-
 92606
 Irvine
-CA
-
-92607
-Laguna Niguel
-CA
-
-92609
-El Toro
 CA
 
 92610
@@ -3818,14 +1498,6 @@ CA
 Irvine
 CA
 
-92615
-Huntington Beach
-CA
-
-92616
-Irvine
-CA
-
 92617
 Irvine
 CA
@@ -3834,28 +1506,8 @@ CA
 Irvine
 CA
 
-92619
-Irvine
-CA
-
 92620
 Irvine
-CA
-
-92621
-Brea
-CA
-
-92623
-Irvine
-CA
-
-92624
-Capistrano Beach
-CA
-
-92625
-Corona Del Mar
 CA
 
 92626
@@ -3866,64 +1518,12 @@ CA
 Costa Mesa
 CA
 
-92628
-Costa Mesa
-CA
-
 92629
 Dana Point
 CA
 
 92630
 Lake Forest
-CA
-
-92631
-Fullerton
-CA
-
-92632
-Fullerton
-CA
-
-92633
-Fullerton
-CA
-
-92634
-Fullerton
-CA
-
-92635
-Fullerton
-CA
-
-92637
-Laguna Woods
-CA
-
-92640
-Garden Grove
-CA
-
-92641
-Garden Grove
-CA
-
-92642
-Garden Grove
-CA
-
-92643
-Garden Grove
-CA
-
-92644
-Garden Grove
-CA
-
-92645
-Garden Grove
 CA
 
 92646
@@ -3942,28 +1542,12 @@ CA
 Huntington Beach
 CA
 
-92650
-East Irvine
-CA
-
 92651
-Laguna Beach
-CA
-
-92652
 Laguna Beach
 CA
 
 92653
 Laguna Hills
-CA
-
-92654
-Lag Laguna Hills
-CA
-
-92655
-Midway City
 CA
 
 92656
@@ -3974,14 +1558,6 @@ CA
 Newport Coast
 CA
 
-92658
-Newport Beach
-CA
-
-92659
-Newport Beach
-CA
-
 92660
 Newport Beach
 CA
@@ -3990,32 +1566,8 @@ CA
 Newport Beach
 CA
 
-92662
-Newport Beach
-CA
-
 92663
 Newport Beach
-CA
-
-92665
-Orange
-CA
-
-92667
-Orange
-CA
-
-92668
-Orange
-CA
-
-92669
-Orange
-CA
-
-92670
-Placentia
 CA
 
 92672
@@ -4026,64 +1578,24 @@ CA
 San Clemente
 CA
 
-92674
-San Clemente
-CA
-
 92675
 San Juan Capistrano
-CA
-
-92676
-Silverado
 CA
 
 92677
 Laguna Niguel
 CA
 
-92678
-Trabuco Canyon
-CA
-
 92679
 Trabuco Canyon
-CA
-
-92680
-Tustin
-CA
-
-92681
-Tustin
 CA
 
 92683
 Westminster
 CA
 
-92684
-Westminster
-CA
-
-92685
-Westminster
-CA
-
-92686
-Yorba Linda
-CA
-
-92687
-Orange
-CA
-
 92688
 Rancho Santa Margarita
-CA
-
-92690
-Mission Viejo
 CA
 
 92691
@@ -4094,27 +1606,7 @@ CA
 Mission Viejo
 CA
 
-92693
-San Juan Capistrano
-CA
-
-92694
-Ladera Ranch
-CA
-
-92697
-Irvine
-CA
-
-92698
-Aliso Viejo
-CA
-
 92701
-Santa Ana
-CA
-
-92702
 Santa Ana
 CA
 
@@ -4142,67 +1634,7 @@ CA
 Fountain Valley
 CA
 
-92709
-Irvine
-CA
-
-92710
-Irvine
-CA
-
-92711
-Santa Ana
-CA
-
-92712
-Santa Ana
-CA
-
-92713
-Irvine
-CA
-
-92714
-Irvine
-CA
-
-92715
-Irvine
-CA
-
-92717
-Irvine
-CA
-
-92718
-Irvine
-CA
-
-92720
-Irvine
-CA
-
-92725
-Santa Ana
-CA
-
-92728
-Fountain Valley
-CA
-
-92730
-Irvine
-CA
-
-92735
-Santa Ana
-CA
-
 92780
-Tustin
-CA
-
-92781
 Tustin
 CA
 
@@ -4210,19 +1642,11 @@ CA
 Tustin
 CA
 
-92799
-Santa Ana
-CA
-
 92801
 Anaheim
 CA
 
 92802
-Anaheim
-CA
-
-92803
 Anaheim
 CA
 
@@ -4246,48 +1670,8 @@ CA
 Anaheim
 CA
 
-92809
-Anaheim
-CA
-
-92811
-Atwood
-CA
-
-92812
-Anaheim
-CA
-
-92814
-Anaheim
-CA
-
-92815
-Anaheim
-CA
-
-92816
-Anaheim
-CA
-
-92817
-Anaheim
-CA
-
 92821
 Brea
-CA
-
-92822
-Brea
-CA
-
-92823
-Brea
-CA
-
-92825
-Anaheim
 CA
 
 92831
@@ -4302,23 +1686,7 @@ CA
 Fullerton
 CA
 
-92834
-Fullerton
-CA
-
 92835
-Fullerton
-CA
-
-92836
-Fullerton
-CA
-
-92837
-Fullerton
-CA
-
-92838
 Fullerton
 CA
 
@@ -4327,10 +1695,6 @@ Garden Grove
 CA
 
 92841
-Garden Grove
-CA
-
-92842
 Garden Grove
 CA
 
@@ -4346,43 +1710,11 @@ CA
 Garden Grove
 CA
 
-92846
-Garden Grove
-CA
-
-92850
-Anaheim
-CA
-
-92856
-Orange
-CA
-
-92857
-Orange
-CA
-
-92859
-Orange
-CA
-
 92860
 Norco
 CA
 
 92861
-Villa Park
-CA
-
-92862
-Orange
-CA
-
-92863
-Orange
-CA
-
-92864
 Orange
 CA
 
@@ -4410,18 +1742,6 @@ CA
 Placentia
 CA
 
-92871
-Placentia
-CA
-
-92877
-Corona
-CA
-
-92878
-Corona
-CA
-
 92879
 Corona
 CA
@@ -4442,10 +1762,6 @@ CA
 Corona
 CA
 
-92885
-Yorba Linda
-CA
-
 92886
 Yorba Linda
 CA
@@ -4454,39 +1770,7 @@ CA
 Yorba Linda
 CA
 
-92899
-Anaheim
-CA
-
-93001
-Ventura
-CA
-
-93002
-Ventura
-CA
-
 93003
-Ventura
-CA
-
-93004
-Ventura
-CA
-
-93005
-Ventura
-CA
-
-93006
-Ventura
-CA
-
-93007
-Ventura
-CA
-
-93009
 Ventura
 CA
 
@@ -4494,67 +1778,19 @@ CA
 Camarillo
 CA
 
-93011
-Camarillo
-CA
-
 93012
 Camarillo
-CA
-
-93013
-Carpinteria
-CA
-
-93014
-Carpenteria
-CA
-
-93015
-Fillmore
-CA
-
-93016
-Fillmore
-CA
-
-93020
-Moorpark
 CA
 
 93021
 Moorpark
 CA
 
-93022
-Oak View
-CA
-
-93023
-Ojai
-CA
-
-93024
-Ojai
-CA
-
 93030
 Oxnard
 CA
 
-93031
-Oxnard
-CA
-
-93032
-Oxnard
-CA
-
 93033
-Oxnard
-CA
-
-93034
 Oxnard
 CA
 
@@ -4566,44 +1802,8 @@ CA
 Oxnard
 CA
 
-93040
-Piru
-CA
-
-93041
-Port Hueneme
-CA
-
-93042
-Point Mugu
-CA
-
-93043
-Port Hueneme
-CA
-
-93044
-Port Hueneme
-CA
-
-93060
-Santa Paula
-CA
-
-93061
-Santa Paula
-CA
-
-93062
-Simi Valley
-CA
-
 93063
 Simi Valley
-CA
-
-93064
-Brandeis
 CA
 
 93065
@@ -4614,27 +1814,7 @@ CA
 Somis
 CA
 
-93067
-Summerland
-CA
-
-93093
-Simi Valley
-CA
-
-93094
-Simi Valley
-CA
-
-93099
-Simi Valley
-CA
-
 93101
-Santa Barbara
-CA
-
-93102
 Santa Barbara
 CA
 
@@ -4646,379 +1826,27 @@ CA
 Santa Barbara
 CA
 
-93106
-Santa Barbara
-CA
-
-93107
-Santa Barbara
-CA
-
 93108
 Santa Barbara
-CA
-
-93109
-Santa Barbara
-CA
-
-93110
-Santa Barbara
-CA
-
-93111
-Santa Barbara
-CA
-
-93116
-Goleta
-CA
-
-93117
-Goleta
-CA
-
-93118
-Goleta
-CA
-
-93120
-Santa Barbara
-CA
-
-93121
-Santa Barbara
-CA
-
-93130
-Santa Barbara
-CA
-
-93140
-Santa Barbara
-CA
-
-93150
-Santa Barbara
-CA
-
-93160
-Santa Barbara
-CA
-
-93190
-Santa Barbara
-CA
-
-93199
-Goleta
-CA
-
-93201
-Alpaugh
-CA
-
-93202
-Armona
-CA
-
-93203
-Arvin
-CA
-
-93204
-Avenal
-CA
-
-93205
-Bodfish
-CA
-
-93206
-Buttonwillow
-CA
-
-93207
-California Hot Springs
-CA
-
-93208
-Camp Nelson
-CA
-
-93210
-Coalinga
-CA
-
-93212
-Corcoran
-CA
-
-93215
-Delano
-CA
-
-93216
-Delano
-CA
-
-93218
-Ducor
-CA
-
-93219
-Earlimart
-CA
-
-93220
-Edison
-CA
-
-93221
-Exeter
-CA
-
-93222
-Frazier Park
-CA
-
-93223
-Farmersville
-CA
-
-93224
-Fellows
-CA
-
-93225
-Frazier Park
-CA
-
-93226
-Glennville
-CA
-
-93227
-Goshen
 CA
 
 93230
 Hanford
 CA
 
-93232
-Hanford
-CA
-
-93234
-Huron
-CA
-
-93235
-Ivanhoe
-CA
-
-93237
-Kaweah
-CA
-
-93238
-Kernville
-CA
-
-93239
-Kettleman City
-CA
-
-93240
-Lake Isabella
-CA
-
-93241
-Lamont
-CA
-
-93242
-Laton
-CA
-
-93243
-Lebec
-CA
-
-93244
-Lemon Cove
-CA
-
-93245
-Lemoore
-CA
-
-93246
-Lemoore
-CA
-
-93247
-Lindsay
-CA
-
-93249
-Lost Hills
-CA
-
-93250
-Mc Farland
-CA
-
-93251
-Mc Kittrick
-CA
-
-93252
-Maricopa
-CA
-
-93254
-New Cuyama
-CA
-
-93255
-Onyx
-CA
-
-93256
-Pixley
-CA
-
 93257
 Porterville
-CA
-
-93258
-Porterville
-CA
-
-93260
-Posey
-CA
-
-93261
-Richgrove
-CA
-
-93262
-Sequoia National Park
-CA
-
-93263
-Shafter
-CA
-
-93265
-Springville
-CA
-
-93266
-Stratford
-CA
-
-93267
-Strathmore
-CA
-
-93268
-Taft
-CA
-
-93270
-Terra Bella
-CA
-
-93271
-Three Rivers
-CA
-
-93272
-Tipton
 CA
 
 93274
 Tulare
 CA
 
-93275
-Tulare
-CA
-
-93276
-Tupman
-CA
-
-93277
-Visalia
-CA
-
-93278
-Visalia
-CA
-
-93279
-Visalia
-CA
-
-93280
-Wasco
-CA
-
-93282
-Waukena
-CA
-
-93283
-Weldon
-CA
-
-93285
-Wofford Heights
-CA
-
-93286
-Woodlake
-CA
-
-93287
-Woody
-CA
-
-93290
-Visalia
-CA
-
-93291
-Visalia
-CA
-
-93292
-Visalia
-CA
-
 93301
 Bakersfield
 CA
 
-93302
-Bakersfield
-CA
-
-93303
-Bakersfield
-CA
-
 93304
-Bakersfield
-CA
-
-93305
 Bakersfield
 CA
 
@@ -5046,67 +1874,7 @@ CA
 Bakersfield
 CA
 
-93313
-Bakersfield
-CA
-
-93314
-Bakersfield
-CA
-
-93380
-Bakersfield
-CA
-
-93381
-Bakersfield
-CA
-
-93382
-Bakersfield
-CA
-
-93383
-Bakersfield
-CA
-
-93384
-Bakersfield
-CA
-
-93385
-Bakersfield
-CA
-
-93386
-Bakersfield
-CA
-
-93387
-Bakersfield
-CA
-
-93388
-Bakersfield
-CA
-
-93389
-Bakersfield
-CA
-
-93390
-Bakersfield
-CA
-
 93401
-San Luis Obispo
-CA
-
-93402
-Los Osos
-CA
-
-93403
 San Luis Obispo
 CA
 
@@ -5114,152 +1882,12 @@ CA
 San Luis Obispo
 CA
 
-93406
-San Luis Obispo
-CA
-
-93407
-San Luis Obispo
-CA
-
-93408
-San Luis Obispo
-CA
-
-93409
-San Luis Obispo
-CA
-
-93410
-San Luis Obispo
-CA
-
-93412
-Los Osos
-CA
-
-93420
-Arroyo Grande
-CA
-
-93421
-Arroyo Grande
-CA
-
-93422
-Atascadero
-CA
-
-93423
-Atascadero
-CA
-
-93424
-Avila Beach
-CA
-
-93426
-Bradley
-CA
-
-93427
-Buellton
-CA
-
-93428
-Cambria
-CA
-
-93429
-Casmalia
-CA
-
-93430
-Cayucos
-CA
-
-93432
-Creston
-CA
-
-93433
-Grover Beach
-CA
-
-93434
-Guadalupe
-CA
-
-93435
-Harmony
-CA
-
 93436
 Lompoc
 CA
 
-93437
-Lompoc
-CA
-
-93438
-Lompoc
-CA
-
-93440
-Los Alamos
-CA
-
-93441
-Los Olivos
-CA
-
-93442
-Morro Bay
-CA
-
-93443
-Morro Bay
-CA
-
-93444
-Nipomo
-CA
-
-93445
-Oceano
-CA
-
 93446
 Paso Robles
-CA
-
-93447
-Paso Robles
-CA
-
-93448
-Pismo Beach
-CA
-
-93449
-Pismo Beach
-CA
-
-93450
-San Ardo
-CA
-
-93451
-San Miguel
-CA
-
-93452
-San Simeon
-CA
-
-93453
-Santa Margarita
 CA
 
 93454
@@ -5270,136 +1898,8 @@ CA
 Santa Maria
 CA
 
-93456
-Santa Maria
-CA
-
-93457
-Santa Maria
-CA
-
 93458
 Santa Maria
-CA
-
-93460
-Santa Ynez
-CA
-
-93461
-Shandon
-CA
-
-93463
-Solvang
-CA
-
-93464
-Solvang
-CA
-
-93465
-Templeton
-CA
-
-93475
-Oceano
-CA
-
-93483
-Grover Beach
-CA
-
-93501
-Mojave
-CA
-
-93502
-Mojave
-CA
-
-93504
-California City
-CA
-
-93505
-California City
-CA
-
-93510
-Acton
-CA
-
-93512
-Benton
-CA
-
-93513
-Big Pine
-CA
-
-93514
-Bishop
-CA
-
-93515
-Bishop
-CA
-
-93516
-Boron
-CA
-
-93517
-Bridgeport
-CA
-
-93518
-Caliente
-CA
-
-93519
-Cantil
-CA
-
-93522
-Darwin
-CA
-
-93523
-Edwards
-CA
-
-93524
-Edwards
-CA
-
-93526
-Independence
-CA
-
-93527
-Inyokern
-CA
-
-93528
-Johannesburg
-CA
-
-93529
-June Lake
-CA
-
-93530
-Keeler
-CA
-
-93531
-Keene
-CA
-
-93532
-Lake Hughes
 CA
 
 93534
@@ -5414,38 +1914,6 @@ CA
 Lancaster
 CA
 
-93539
-Lancaster
-CA
-
-93541
-Lee Vining
-CA
-
-93542
-Little Lake
-CA
-
-93543
-Littlerock
-CA
-
-93544
-Llano
-CA
-
-93545
-Lone Pine
-CA
-
-93546
-Mammoth Lakes
-CA
-
-93549
-Olancha
-CA
-
 93550
 Palmdale
 CA
@@ -5458,114 +1926,6 @@ CA
 Palmdale
 CA
 
-93553
-Pearblossom
-CA
-
-93554
-Randsburg
-CA
-
-93555
-Ridgecrest
-CA
-
-93556
-Ridgecrest
-CA
-
-93558
-Red Mountain
-CA
-
-93560
-Rosamond
-CA
-
-93561
-Tehachapi
-CA
-
-93562
-Trona
-CA
-
-93563
-Valyermo
-CA
-
-93581
-Tehachapi
-CA
-
-93584
-Lancaster
-CA
-
-93586
-Lancaster
-CA
-
-93590
-Palmdale
-CA
-
-93591
-Palmdale
-CA
-
-93592
-Trona
-CA
-
-93596
-Boron
-CA
-
-93599
-Palmdale
-CA
-
-93601
-Ahwahnee
-CA
-
-93602
-Auberry
-CA
-
-93603
-Badger
-CA
-
-93604
-Bass Lake
-CA
-
-93605
-Big Creek
-CA
-
-93606
-Biola
-CA
-
-93607
-Burrel
-CA
-
-93608
-Cantua Creek
-CA
-
-93609
-Caruthers
-CA
-
-93610
-Chowchilla
-CA
-
 93611
 Clovis
 CA
@@ -5574,216 +1934,20 @@ CA
 Clovis
 CA
 
-93613
-Clovis
-CA
-
-93614
-Coarsegold
-CA
-
-93615
-Cutler
-CA
-
-93616
-Del Rey
-CA
-
-93618
-Dinuba
-CA
-
 93619
 Clovis
-CA
-
-93620
-Dos Palos
-CA
-
-93621
-Dunlap
-CA
-
-93622
-Firebaugh
-CA
-
-93623
-Fish Camp
-CA
-
-93624
-Five Points
-CA
-
-93625
-Fowler
-CA
-
-93626
-Friant
-CA
-
-93627
-Helm
-CA
-
-93628
-Hume
-CA
-
-93630
-Kerman
-CA
-
-93631
-Kingsburg
-CA
-
-93633
-Kings Canyon National Pk
-CA
-
-93634
-Lakeshore
 CA
 
 93635
 Los Banos
 CA
 
-93636
-Madera
-CA
-
-93637
-Madera
-CA
-
 93638
 Madera
 CA
 
-93639
-Madera
-CA
-
-93640
-Mendota
-CA
-
-93641
-Miramonte
-CA
-
-93642
-Mono Hot Springs
-CA
-
-93643
-North Fork
-CA
-
-93644
-Oakhurst
-CA
-
-93645
-O Neals
-CA
-
-93646
-Orange Cove
-CA
-
-93647
-Orosi
-CA
-
-93648
-Parlier
-CA
-
-93649
-Piedra
-CA
-
 93650
 Fresno
-CA
-
-93651
-Prather
-CA
-
-93652
-Raisin City
-CA
-
-93653
-Raymond
-CA
-
-93654
-Reedley
-CA
-
-93656
-Riverdale
-CA
-
-93657
-Sanger
-CA
-
-93660
-San Joaquin
-CA
-
-93661
-Santa Rita Park
-CA
-
-93662
-Selma
-CA
-
-93664
-Shaver Lake
-CA
-
-93665
-South Dos Palos
-CA
-
-93666
-Sultana
-CA
-
-93667
-Tollhouse
-CA
-
-93668
-Tranquillity
-CA
-
-93669
-Wishon
-CA
-
-93670
-Yettem
-CA
-
-93673
-Traver
-CA
-
-93675
-Squaw Valley
 CA
 
 93701
@@ -5810,18 +1974,6 @@ CA
 Fresno
 CA
 
-93707
-Fresno
-CA
-
-93708
-Fresno
-CA
-
-93709
-Fresno
-CA
-
 93710
 Fresno
 CA
@@ -5830,47 +1982,11 @@ CA
 Fresno
 CA
 
-93712
-Fresno
-CA
-
-93714
-Fresno
-CA
-
-93715
-Fresno
-CA
-
-93716
-Fresno
-CA
-
-93717
-Fresno
-CA
-
-93718
-Fresno
-CA
-
 93720
 Fresno
 CA
 
-93721
-Fresno
-CA
-
 93722
-Fresno
-CA
-
-93723
-Fresno
-CA
-
-93724
 Fresno
 CA
 
@@ -5886,143 +2002,11 @@ CA
 Fresno
 CA
 
-93728
-Fresno
-CA
-
-93729
-Fresno
-CA
-
 93730
 Fresno
 CA
 
-93740
-Fresno
-CA
-
-93741
-Fresno
-CA
-
-93744
-Fresno
-CA
-
-93745
-Fresno
-CA
-
-93747
-Fresno
-CA
-
-93750
-Fresno
-CA
-
-93755
-Fresno
-CA
-
-93760
-Fresno
-CA
-
-93761
-Fresno
-CA
-
-93764
-Fresno
-CA
-
-93765
-Fresno
-CA
-
-93771
-Fresno
-CA
-
-93772
-Fresno
-CA
-
-93773
-Fresno
-CA
-
-93774
-Fresno
-CA
-
-93775
-Fresno
-CA
-
-93776
-Fresno
-CA
-
-93777
-Fresno
-CA
-
-93778
-Fresno
-CA
-
-93779
-Fresno
-CA
-
-93780
-Fresno
-CA
-
-93784
-Fresno
-CA
-
-93786
-Fresno
-CA
-
-93790
-Fresno
-CA
-
-93791
-Fresno
-CA
-
-93792
-Fresno
-CA
-
-93793
-Fresno
-CA
-
-93794
-Fresno
-CA
-
-93844
-Fresno
-CA
-
-93888
-Fresno
-CA
-
 93901
-Salinas
-CA
-
-93902
 Salinas
 CA
 
@@ -6038,79 +2022,7 @@ CA
 Salinas
 CA
 
-93908
-Salinas
-CA
-
-93912
-Salinas
-CA
-
-93915
-Salinas
-CA
-
-93920
-Big Sur
-CA
-
-93921
-Carmel by the Sea
-CA
-
-93922
-Carmel
-CA
-
-93923
-Carmel
-CA
-
-93924
-Carmel Valley
-CA
-
-93925
-Chualar
-CA
-
-93926
-Gonzales
-CA
-
-93927
-Greenfield
-CA
-
-93928
-Jolon
-CA
-
-93930
-King City
-CA
-
-93932
-Lockwood
-CA
-
-93933
-Marina
-CA
-
 93940
-Monterey
-CA
-
-93942
-Monterey
-CA
-
-93943
-Monterey
-CA
-
-93944
 Monterey
 CA
 
@@ -6118,44 +2030,12 @@ CA
 Pacific Grove
 CA
 
-93953
-Pebble Beach
-CA
-
-93954
-San Lucas
-CA
-
 93955
 Seaside
 CA
 
-93960
-Soledad
-CA
-
-93962
-Spreckels
-CA
-
-94002
-Belmont
-CA
-
-94005
-Brisbane
-CA
-
 94010
 Burlingame
-CA
-
-94011
-Burlingame
-CA
-
-94013
-Daly City
 CA
 
 94014
@@ -6170,31 +2050,11 @@ CA
 Daly City
 CA
 
-94017
-Daly City
-CA
-
-94018
-El Granada
-CA
-
 94019
 Half Moon Bay
 CA
 
-94020
-La Honda
-CA
-
-94021
-Loma Mar
-CA
-
 94022
-Los Altos
-CA
-
-94023
 Los Altos
 CA
 
@@ -6206,36 +2066,12 @@ CA
 Menlo Park
 CA
 
-94026
-Menlo Park
-CA
-
 94027
 Atherton
 CA
 
-94028
-Portola Valley
-CA
-
 94030
 Millbrae
-CA
-
-94035
-Mountain View
-CA
-
-94037
-Montara
-CA
-
-94038
-Moss Beach
-CA
-
-94039
-Mountain View
 CA
 
 94040
@@ -6246,20 +2082,8 @@ CA
 Mountain View
 CA
 
-94042
-Mountain View
-CA
-
 94043
 Mountain View
-CA
-
-94044
-Pacifica
-CA
-
-94060
-Pescadero
 CA
 
 94061
@@ -6271,10 +2095,6 @@ Redwood City
 CA
 
 94063
-Redwood City
-CA
-
-94064
 Redwood City
 CA
 
@@ -6290,15 +2110,7 @@ CA
 San Carlos
 CA
 
-94074
-San Gregorio
-CA
-
 94080
-South San Francisco
-CA
-
-94083
 South San Francisco
 CA
 
@@ -6314,28 +2126,8 @@ CA
 Sunnyvale
 CA
 
-94088
-Sunnyvale
-CA
-
 94089
 Sunnyvale
-CA
-
-94096
-San Bruno
-CA
-
-94098
-San Bruno
-CA
-
-94099
-South San Francisco
-CA
-
-94101
-San Francisco
 CA
 
 94102
@@ -6351,10 +2143,6 @@ San Francisco
 CA
 
 94105
-San Francisco
-CA
-
-94106
 San Francisco
 CA
 
@@ -6402,14 +2190,6 @@ CA
 San Francisco
 CA
 
-94119
-San Francisco
-CA
-
-94120
-San Francisco
-CA
-
 94121
 San Francisco
 CA
@@ -6426,27 +2206,7 @@ CA
 San Francisco
 CA
 
-94125
-San Francisco
-CA
-
-94126
-San Francisco
-CA
-
 94127
-San Francisco
-CA
-
-94128
-San Francisco
-CA
-
-94129
-San Francisco
-CA
-
-94130
 San Francisco
 CA
 
@@ -6466,411 +2226,7 @@ CA
 San Francisco
 CA
 
-94135
-San Francisco
-CA
-
-94136
-San Francisco
-CA
-
-94137
-San Francisco
-CA
-
-94138
-San Francisco
-CA
-
-94139
-San Francisco
-CA
-
-94140
-San Francisco
-CA
-
-94141
-San Francisco
-CA
-
-94142
-San Francisco
-CA
-
-94143
-San Francisco
-CA
-
-94144
-San Francisco
-CA
-
-94145
-San Francisco
-CA
-
-94146
-San Francisco
-CA
-
-94147
-San Francisco
-CA
-
-94150
-San Francisco
-CA
-
-94151
-San Francisco
-CA
-
-94152
-San Francisco
-CA
-
-94153
-San Francisco
-CA
-
-94154
-San Francisco
-CA
-
-94155
-San Francisco
-CA
-
-94156
-San Francisco
-CA
-
-94157
-San Francisco
-CA
-
-94158
-San Francisco
-CA
-
-94159
-San Francisco
-CA
-
-94160
-San Francisco
-CA
-
-94161
-San Francisco
-CA
-
-94162
-San Francisco
-CA
-
-94163
-San Francisco
-CA
-
-94164
-San Francisco
-CA
-
-94165
-San Francisco
-CA
-
-94166
-San Francisco
-CA
-
-94167
-San Francisco
-CA
-
-94168
-San Francisco
-CA
-
-94169
-San Francisco
-CA
-
-94170
-San Francisco
-CA
-
-94171
-San Francisco
-CA
-
-94172
-San Francisco
-CA
-
-94175
-San Francisco
-CA
-
-94177
-San Francisco
-CA
-
-94188
-San Francisco
-CA
-
-94199
-San Francisco
-CA
-
-94203
-Sacramento
-CA
-
-94204
-Sacramento
-CA
-
-94205
-Sacramento
-CA
-
-94206
-Sacramento
-CA
-
-94207
-Sacramento
-CA
-
-94208
-Sacramento
-CA
-
-94209
-Sacramento
-CA
-
-94211
-Sacramento
-CA
-
-94229
-Sacramento
-CA
-
-94230
-Sacramento
-CA
-
-94232
-Sacramento
-CA
-
-94234
-Sacramento
-CA
-
-94235
-Sacramento
-CA
-
-94236
-Sacramento
-CA
-
-94237
-Sacramento
-CA
-
-94239
-Sacramento
-CA
-
-94240
-Sacramento
-CA
-
-94244
-Sacramento
-CA
-
-94245
-Sacramento
-CA
-
-94246
-Sacramento
-CA
-
-94247
-Sacramento
-CA
-
-94248
-Sacramento
-CA
-
-94249
-Sacramento
-CA
-
-94250
-Sacramento
-CA
-
-94252
-Sacramento
-CA
-
-94254
-Sacramento
-CA
-
-94256
-Sacramento
-CA
-
-94257
-Sacramento
-CA
-
-94258
-Sacramento
-CA
-
-94259
-Sacramento
-CA
-
-94261
-Sacramento
-CA
-
-94262
-Sacramento
-CA
-
-94263
-Sacramento
-CA
-
-94267
-Sacramento
-CA
-
-94268
-Sacramento
-CA
-
-94269
-Sacramento
-CA
-
-94271
-Sacramento
-CA
-
-94273
-Sacramento
-CA
-
-94274
-Sacramento
-CA
-
-94277
-Sacramento
-CA
-
-94278
-Sacramento
-CA
-
-94279
-Sacramento
-CA
-
-94280
-Sacramento
-CA
-
-94282
-Sacramento
-CA
-
-94283
-Sacramento
-CA
-
-94284
-Sacramento
-CA
-
-94285
-Sacramento
-CA
-
-94286
-Sacramento
-CA
-
-94287
-Sacramento
-CA
-
-94288
-Sacramento
-CA
-
-94289
-Sacramento
-CA
-
-94290
-Sacramento
-CA
-
-94291
-Sacramento
-CA
-
-94293
-Sacramento
-CA
-
-94294
-Sacramento
-CA
-
-94295
-Sacramento
-CA
-
-94296
-Sacramento
-CA
-
-94297
-Sacramento
-CA
-
-94298
-Sacramento
-CA
-
-94299
-Sacramento
-CA
-
 94301
-Palo Alto
-CA
-
-94302
 Palo Alto
 CA
 
@@ -6882,15 +2238,7 @@ CA
 Palo Alto
 CA
 
-94305
-Stanford
-CA
-
 94306
-Palo Alto
-CA
-
-94309
 Palo Alto
 CA
 
@@ -6910,68 +2258,16 @@ CA
 San Mateo
 CA
 
-94497
-San Mateo
-CA
-
 94501
 Alameda
-CA
-
-94502
-Alameda
-CA
-
-94503
-American Canyon
-CA
-
-94506
-Danville
-CA
-
-94507
-Alamo
-CA
-
-94508
-Angwin
 CA
 
 94509
 Antioch
 CA
 
-94510
-Benicia
-CA
-
-94511
-Bethel Island
-CA
-
-94512
-Birds Landing
-CA
-
 94513
 Brentwood
-CA
-
-94514
-Byron
-CA
-
-94515
-Calistoga
-CA
-
-94516
-Canyon
-CA
-
-94517
-Clayton
 CA
 
 94518
@@ -6990,36 +2286,12 @@ CA
 Concord
 CA
 
-94522
-Concord
-CA
-
 94523
 Pleasant Hill
 CA
 
-94524
-Concord
-CA
-
-94525
-Crockett
-CA
-
 94526
 Danville
-CA
-
-94527
-Concord
-CA
-
-94528
-Diablo
-CA
-
-94529
-Concord
 CA
 
 94530
@@ -7038,15 +2310,7 @@ CA
 Fairfield
 CA
 
-94535
-Travis AFB
-CA
-
 94536
-Fremont
-CA
-
-94537
 Fremont
 CA
 
@@ -7058,19 +2322,11 @@ CA
 Fremont
 CA
 
-94540
-Hayward
-CA
-
 94541
 Hayward
 CA
 
 94542
-Hayward
-CA
-
-94543
 Hayward
 CA
 
@@ -7088,10 +2344,6 @@ CA
 
 94547
 Hercules
-CA
-
-94548
-Knightsen
 CA
 
 94549
@@ -7122,10 +2374,6 @@ CA
 Moraga
 CA
 
-94557
-Hayward
-CA
-
 94558
 Napa
 CA
@@ -7140,10 +2388,6 @@ CA
 
 94561
 Oakley
-CA
-
-94562
-Oakville
 CA
 
 94563
@@ -7162,24 +2406,12 @@ CA
 Pleasanton
 CA
 
-94567
-Pope Valley
-CA
-
 94568
 Dublin
 CA
 
 94569
 Port Costa
-CA
-
-94570
-Moraga
-CA
-
-94571
-Rio Vista
 CA
 
 94572
@@ -7192,14 +2424,6 @@ CA
 
 94574
 Saint Helena
-CA
-
-94575
-Moraga
-CA
-
-94576
-Deer Park
 CA
 
 94577
@@ -7218,24 +2442,12 @@ CA
 San Lorenzo
 CA
 
-94581
-Napa
-CA
-
 94582
 San Ramon
 CA
 
 94583
 San Ramon
-CA
-
-94585
-Suisun City
-CA
-
-94586
-Sunol
 CA
 
 94587
@@ -7262,26 +2474,6 @@ CA
 Vallejo
 CA
 
-94595
-Walnut Creek
-CA
-
-94596
-Walnut Creek
-CA
-
-94597
-Walnut Creek
-CA
-
-94598
-Walnut Creek
-CA
-
-94599
-Yountville
-CA
-
 94601
 Oakland
 CA
@@ -7291,10 +2483,6 @@ Oakland
 CA
 
 94603
-Oakland
-CA
-
-94604
 Oakland
 CA
 
@@ -7311,7 +2499,7 @@ Oakland
 CA
 
 94608
-Emeryville
+Oakland
 CA
 
 94609
@@ -7330,22 +2518,6 @@ CA
 Oakland
 CA
 
-94613
-Oakland
-CA
-
-94614
-Oakland
-CA
-
-94615
-Oakland
-CA
-
-94617
-Oakland
-CA
-
 94618
 Oakland
 CA
@@ -7354,56 +2526,8 @@ CA
 Oakland
 CA
 
-94620
-Piedmont
-CA
-
 94621
 Oakland
-CA
-
-94622
-Oakland
-CA
-
-94623
-Oakland
-CA
-
-94624
-Oakland
-CA
-
-94625
-Oakland
-CA
-
-94649
-Oakland
-CA
-
-94659
-Oakland
-CA
-
-94660
-Oakland
-CA
-
-94661
-Oakland
-CA
-
-94662
-Emeryville
-CA
-
-94666
-Oakland
-CA
-
-94701
-Berkeley
 CA
 
 94702
@@ -7442,19 +2566,7 @@ CA
 Berkeley
 CA
 
-94712
-Berkeley
-CA
-
-94720
-Berkeley
-CA
-
 94801
-Richmond
-CA
-
-94802
 Richmond
 CA
 
@@ -7470,26 +2582,6 @@ CA
 Richmond
 CA
 
-94806
-San Pablo
-CA
-
-94807
-Richmond
-CA
-
-94808
-Richmond
-CA
-
-94820
-El Sobrante
-CA
-
-94850
-Richmond
-CA
-
 94901
 San Rafael
 CA
@@ -7502,91 +2594,27 @@ CA
 Greenbrae
 CA
 
-94912
-San Rafael
-CA
-
-94913
-San Rafael
-CA
-
-94914
-Kentfield
-CA
-
-94915
-San Rafael
-CA
-
 94920
 Belvedere Tiburon
-CA
-
-94922
-Bodega
-CA
-
-94923
-Bodega Bay
-CA
-
-94924
-Bolinas
 CA
 
 94925
 Corte Madera
 CA
 
-94926
-Cotati
-CA
-
-94927
-Rohnert Park
-CA
-
 94928
 Rohnert Park
-CA
-
-94929
-Dillon Beach
 CA
 
 94930
 Fairfax
 CA
 
-94931
-Cotati
-CA
-
-94933
-Forest Knolls
-CA
-
-94937
-Inverness
-CA
-
-94938
-Lagunitas
-CA
-
 94939
 Larkspur
 CA
 
-94940
-Marshall
-CA
-
 94941
-Mill Valley
-CA
-
-94942
 Mill Valley
 CA
 
@@ -7594,15 +2622,7 @@ CA
 Novato
 CA
 
-94946
-Nicasio
-CA
-
 94947
-Novato
-CA
-
-94948
 Novato
 CA
 
@@ -7610,19 +2630,7 @@ CA
 Novato
 CA
 
-94950
-Olema
-CA
-
-94951
-Penngrove
-CA
-
 94952
-Petaluma
-CA
-
-94953
 Petaluma
 CA
 
@@ -7630,163 +2638,15 @@ CA
 Petaluma
 CA
 
-94955
-Petaluma
-CA
-
-94956
-Point Reyes Station
-CA
-
-94957
-Ross
-CA
-
-94960
-San Anselmo
-CA
-
-94963
-San Geronimo
-CA
-
-94964
-San Quentin
-CA
-
-94965
-Sausalito
-CA
-
-94966
-Sausalito
-CA
-
-94970
-Stinson Beach
-CA
-
-94971
-Tomales
-CA
-
-94972
-Valley Ford
-CA
-
-94973
-Woodacre
-CA
-
-94974
-San Quentin
-CA
-
-94975
-Petaluma
-CA
-
-94976
-Corte Madera
-CA
-
-94977
-Larkspur
-CA
-
-94978
-Fairfax
-CA
-
-94979
-San Anselmo
-CA
-
-94998
-Novato
-CA
-
-94999
-Petaluma
-CA
-
-95001
-Aptos
-CA
-
-95002
-Alviso
-CA
-
-95003
-Aptos
-CA
-
-95004
-Aromas
-CA
-
-95005
-Ben Lomond
-CA
-
-95006
-Boulder Creek
-CA
-
-95007
-Brookdale
-CA
-
 95008
 Campbell
-CA
-
-95009
-Campbell
-CA
-
-95010
-Capitola
-CA
-
-95011
-Campbell
-CA
-
-95012
-Castroville
-CA
-
-95013
-Coyote
 CA
 
 95014
 Cupertino
 CA
 
-95015
-Cupertino
-CA
-
-95017
-Davenport
-CA
-
-95018
-Felton
-CA
-
-95019
-Freedom
-CA
-
 95020
-Gilroy
-CA
-
-95021
 Gilroy
 CA
 
@@ -7794,72 +2654,12 @@ CA
 Hollister
 CA
 
-95024
-Hollister
-CA
-
-95026
-Holy City
-CA
-
-95030
-Los Gatos
-CA
-
-95031
-Los Gatos
-CA
-
-95032
-Los Gatos
-CA
-
-95033
-Los Gatos
-CA
-
 95035
-Milpitas
-CA
-
-95036
 Milpitas
 CA
 
 95037
 Morgan Hill
-CA
-
-95038
-Morgan Hill
-CA
-
-95039
-Moss Landing
-CA
-
-95041
-Mount Hermon
-CA
-
-95042
-New Almaden
-CA
-
-95043
-Paicines
-CA
-
-95044
-Redwood Estates
-CA
-
-95045
-San Juan Bautista
-CA
-
-95046
-San Martin
 CA
 
 95050
@@ -7870,23 +2670,7 @@ CA
 Santa Clara
 CA
 
-95052
-Santa Clara
-CA
-
-95053
-Santa Clara
-CA
-
 95054
-Santa Clara
-CA
-
-95055
-Santa Clara
-CA
-
-95056
 Santa Clara
 CA
 
@@ -7894,76 +2678,12 @@ CA
 Santa Cruz
 CA
 
-95061
-Santa Cruz
-CA
-
 95062
 Santa Cruz
 CA
 
-95063
-Santa Cruz
-CA
-
-95064
-Santa Cruz
-CA
-
-95065
-Santa Cruz
-CA
-
-95066
-Scotts Valley
-CA
-
-95067
-Scotts Valley
-CA
-
 95070
 Saratoga
-CA
-
-95071
-Saratoga
-CA
-
-95073
-Soquel
-CA
-
-95075
-Tres Pinos
-CA
-
-95076
-Watsonville
-CA
-
-95077
-Watsonville
-CA
-
-95101
-San Jose
-CA
-
-95103
-San Jose
-CA
-
-95106
-San Jose
-CA
-
-95108
-San Jose
-CA
-
-95109
-San Jose
 CA
 
 95110
@@ -7979,10 +2699,6 @@ San Jose
 CA
 
 95113
-San Jose
-CA
-
-95115
 San Jose
 CA
 
@@ -8078,115 +2794,11 @@ CA
 San Jose
 CA
 
-95140
-Mount Hamilton
-CA
-
-95141
-San Jose
-CA
-
 95148
 San Jose
 CA
 
-95150
-San Jose
-CA
-
-95151
-San Jose
-CA
-
-95152
-San Jose
-CA
-
-95153
-San Jose
-CA
-
-95154
-San Jose
-CA
-
-95155
-San Jose
-CA
-
-95156
-San Jose
-CA
-
-95157
-San Jose
-CA
-
-95158
-San Jose
-CA
-
-95159
-San Jose
-CA
-
-95160
-San Jose
-CA
-
-95161
-San Jose
-CA
-
-95164
-San Jose
-CA
-
-95170
-San Jose
-CA
-
-95172
-San Jose
-CA
-
-95173
-San Jose
-CA
-
-95190
-San Jose
-CA
-
-95191
-San Jose
-CA
-
-95192
-San Jose
-CA
-
-95193
-San Jose
-CA
-
-95194
-San Jose
-CA
-
-95196
-San Jose
-CA
-
-95201
-Stockton
-CA
-
 95202
-Stockton
-CA
-
-95203
 Stockton
 CA
 
@@ -8206,10 +2818,6 @@ CA
 Stockton
 CA
 
-95208
-Stockton
-CA
-
 95209
 Stockton
 CA
@@ -8218,296 +2826,12 @@ CA
 Stockton
 CA
 
-95211
-Stockton
-CA
-
 95212
-Stockton
-CA
-
-95213
-Stockton
-CA
-
-95215
 Stockton
 CA
 
 95219
 Stockton
-CA
-
-95220
-Acampo
-CA
-
-95221
-Altaville
-CA
-
-95222
-Angels Camp
-CA
-
-95223
-Arnold
-CA
-
-95224
-Avery
-CA
-
-95225
-Burson
-CA
-
-95226
-Campo Seco
-CA
-
-95227
-Clements
-CA
-
-95228
-Copperopolis
-CA
-
-95229
-Douglas Flat
-CA
-
-95230
-Farmington
-CA
-
-95231
-French Camp
-CA
-
-95232
-Glencoe
-CA
-
-95233
-Hathaway Pines
-CA
-
-95234
-Holt
-CA
-
-95236
-Linden
-CA
-
-95237
-Lockeford
-CA
-
-95240
-Lodi
-CA
-
-95241
-Lodi
-CA
-
-95242
-Lodi
-CA
-
-95245
-Mokelumne Hill
-CA
-
-95246
-Mountain Ranch
-CA
-
-95247
-Murphys
-CA
-
-95248
-Rail Road Flat
-CA
-
-95249
-San Andreas
-CA
-
-95250
-Sheep Ranch
-CA
-
-95251
-Vallecito
-CA
-
-95252
-Valley Springs
-CA
-
-95253
-Victor
-CA
-
-95254
-Wallace
-CA
-
-95255
-West Point
-CA
-
-95257
-Wilseyville
-CA
-
-95258
-Woodbridge
-CA
-
-95267
-Stockton
-CA
-
-95269
-Stockton
-CA
-
-95296
-Stockton
-CA
-
-95297
-Stockton
-CA
-
-95301
-Atwater
-CA
-
-95303
-Ballico
-CA
-
-95304
-Tracy
-CA
-
-95305
-Big Oak Flat
-CA
-
-95306
-Catheys Valley
-CA
-
-95307
-Ceres
-CA
-
-95309
-Chinese Camp
-CA
-
-95310
-Columbia
-CA
-
-95311
-Coulterville
-CA
-
-95312
-Cressey
-CA
-
-95313
-Crows Landing
-CA
-
-95314
-Dardanelle
-CA
-
-95315
-Delhi
-CA
-
-95316
-Denair
-CA
-
-95317
-El Nido
-CA
-
-95318
-El Portal
-CA
-
-95319
-Empire
-CA
-
-95320
-Escalon
-CA
-
-95321
-Groveland
-CA
-
-95322
-Gustine
-CA
-
-95323
-Hickman
-CA
-
-95324
-Hilmar
-CA
-
-95325
-Hornitos
-CA
-
-95326
-Hughson
-CA
-
-95327
-Jamestown
-CA
-
-95328
-Keyes
-CA
-
-95329
-La Grange
-CA
-
-95330
-Lathrop
-CA
-
-95333
-Le Grand
-CA
-
-95334
-Livingston
-CA
-
-95335
-Long Barn
 CA
 
 95336
@@ -8518,36 +2842,8 @@ CA
 Manteca
 CA
 
-95338
-Mariposa
-CA
-
 95340
 Merced
-CA
-
-95341
-Merced
-CA
-
-95343
-Merced
-CA
-
-95344
-Merced
-CA
-
-95345
-Midpines
-CA
-
-95346
-Mi Wuk Village
-CA
-
-95347
-Moccasin
 CA
 
 95348
@@ -8559,14 +2855,6 @@ Modesto
 CA
 
 95351
-Modesto
-CA
-
-95352
-Modesto
-CA
-
-95353
 Modesto
 CA
 
@@ -8586,64 +2874,8 @@ CA
 Modesto
 CA
 
-95358
-Modesto
-CA
-
-95360
-Newman
-CA
-
 95361
 Oakdale
-CA
-
-95363
-Patterson
-CA
-
-95364
-Pinecrest
-CA
-
-95365
-Planada
-CA
-
-95366
-Ripon
-CA
-
-95367
-Riverbank
-CA
-
-95368
-Salida
-CA
-
-95369
-Snelling
-CA
-
-95370
-Sonora
-CA
-
-95372
-Soulsbyville
-CA
-
-95373
-Standard
-CA
-
-95374
-Stevinson
-CA
-
-95375
-Strawberry
 CA
 
 95376
@@ -8654,63 +2886,15 @@ CA
 Tracy
 CA
 
-95378
-Tracy
-CA
-
-95379
-Tuolumne
-CA
-
-95380
-Turlock
-CA
-
-95381
-Turlock
-CA
-
 95382
 Turlock
-CA
-
-95383
-Twain Harte
-CA
-
-95385
-Vernalis
-CA
-
-95386
-Waterford
-CA
-
-95387
-Westley
-CA
-
-95388
-Winton
-CA
-
-95389
-Yosemite National Park
 CA
 
 95391
 Tracy
 CA
 
-95397
-Modesto
-CA
-
 95401
-Santa Rosa
-CA
-
-95402
 Santa Rosa
 CA
 
@@ -8726,15 +2910,7 @@ CA
 Santa Rosa
 CA
 
-95406
-Santa Rosa
-CA
-
 95407
-Santa Rosa
-CA
-
-95408
 Santa Rosa
 CA
 
@@ -8742,227 +2918,7 @@ CA
 Santa Rosa
 CA
 
-95410
-Albion
-CA
-
-95412
-Annapolis
-CA
-
-95415
-Boonville
-CA
-
-95416
-Boyes Hot Springs
-CA
-
-95417
-Branscomb
-CA
-
-95418
-Calpella
-CA
-
-95419
-Camp Meeker
-CA
-
-95420
-Caspar
-CA
-
-95421
-Cazadero
-CA
-
-95422
-Clearlake
-CA
-
-95423
-Clearlake Oaks
-CA
-
-95424
-Clearlake Park
-CA
-
-95425
-Cloverdale
-CA
-
-95426
-Cobb
-CA
-
-95427
-Comptche
-CA
-
-95428
-Covelo
-CA
-
-95429
-Dos Rios
-CA
-
-95430
-Duncans Mills
-CA
-
-95431
-Eldridge
-CA
-
-95432
-Elk
-CA
-
-95433
-El Verano
-CA
-
-95435
-Finley
-CA
-
-95436
-Forestville
-CA
-
-95437
-Fort Bragg
-CA
-
-95439
-Fulton
-CA
-
-95441
-Geyserville
-CA
-
-95442
-Glen Ellen
-CA
-
-95443
-Glenhaven
-CA
-
-95444
-Graton
-CA
-
-95445
-Gualala
-CA
-
-95446
-Guerneville
-CA
-
-95448
-Healdsburg
-CA
-
-95449
-Hopland
-CA
-
-95450
-Jenner
-CA
-
-95451
-Kelseyville
-CA
-
-95452
-Kenwood
-CA
-
-95453
-Lakeport
-CA
-
-95454
-Laytonville
-CA
-
-95456
-Littleriver
-CA
-
-95457
-Lower Lake
-CA
-
-95458
-Lucerne
-CA
-
-95459
-Manchester
-CA
-
-95460
-Mendocino
-CA
-
-95461
-Middletown
-CA
-
-95462
-Monte Rio
-CA
-
-95463
-Navarro
-CA
-
-95464
-Nice
-CA
-
-95465
-Occidental
-CA
-
-95466
-Philo
-CA
-
-95467
-Hidden Valley Lake
-CA
-
-95468
-Point Arena
-CA
-
-95469
-Potter Valley
-CA
-
-95470
-Redwood Valley
-CA
-
-95471
-Rio Nido
-CA
-
 95472
-Sebastopol
-CA
-
-95473
 Sebastopol
 CA
 
@@ -8970,59 +2926,7 @@ CA
 Sonoma
 CA
 
-95480
-Stewarts Point
-CA
-
-95481
-Talmage
-CA
-
-95482
-Ukiah
-CA
-
-95485
-Upper Lake
-CA
-
-95486
-Villa Grande
-CA
-
-95487
-Vineburg
-CA
-
-95488
-Westport
-CA
-
-95490
-Willits
-CA
-
-95492
-Windsor
-CA
-
-95493
-Witter Springs
-CA
-
-95494
-Yorkville
-CA
-
-95497
-The Sea Ranch
-CA
-
 95501
-Eureka
-CA
-
-95502
 Eureka
 CA
 
@@ -9030,231 +2934,7 @@ CA
 Eureka
 CA
 
-95511
-Alderpoint
-CA
-
-95514
-Blocksburg
-CA
-
-95518
-Arcata
-CA
-
-95519
-McKinleyville
-CA
-
-95521
-Arcata
-CA
-
-95524
-Bayside
-CA
-
-95525
-Blue Lake
-CA
-
-95526
-Bridgeville
-CA
-
-95527
-Burnt Ranch
-CA
-
-95528
-Carlotta
-CA
-
-95531
-Crescent City
-CA
-
-95532
-Crescent City
-CA
-
-95534
-Cutten
-CA
-
-95536
-Ferndale
-CA
-
-95537
-Fields Landing
-CA
-
-95538
-Fort Dick
-CA
-
-95540
-Fortuna
-CA
-
-95542
-Garberville
-CA
-
-95543
-Gasquet
-CA
-
-95545
-Honeydew
-CA
-
-95546
-Hoopa
-CA
-
-95547
-Hydesville
-CA
-
-95548
-Klamath
-CA
-
-95549
-Kneeland
-CA
-
-95550
-Korbel
-CA
-
-95551
-Loleta
-CA
-
-95552
-Mad River
-CA
-
-95553
-Miranda
-CA
-
-95554
-Myers Flat
-CA
-
-95555
-Orick
-CA
-
-95556
-Orleans
-CA
-
-95558
-Petrolia
-CA
-
-95559
-Phillipsville
-CA
-
-95560
-Redway
-CA
-
-95562
-Rio Dell
-CA
-
-95563
-Salyer
-CA
-
-95564
-Samoa
-CA
-
-95565
-Scotia
-CA
-
-95567
-Smith River
-CA
-
-95568
-CPU Somes Bar Gen Sto
-CA
-
-95569
-Redcrest
-CA
-
-95570
-Trinidad
-CA
-
-95571
-Weott
-CA
-
-95573
-Willow Creek
-CA
-
-95585
-Leggett
-CA
-
-95587
-Piercy
-CA
-
-95589
-Whitethorn
-CA
-
-95595
-Zenia
-CA
-
-95601
-Amador City
-CA
-
-95602
-Auburn
-CA
-
-95603
-Auburn
-CA
-
-95604
-Auburn
-CA
-
-95605
-West Sacramento
-CA
-
-95606
-Brooks
-CA
-
-95607
-Capay
-CA
-
 95608
-Carmichael
-CA
-
-95609
 Carmichael
 CA
 
@@ -9262,31 +2942,7 @@ CA
 Citrus Heights
 CA
 
-95611
-Citrus Heights
-CA
-
-95612
-Clarksburg
-CA
-
-95613
-Coloma
-CA
-
-95614
-Cool
-CA
-
-95615
-Courtland
-CA
-
 95616
-Davis
-CA
-
-95617
 Davis
 CA
 
@@ -9294,152 +2950,20 @@ CA
 Davis
 CA
 
-95619
-Diamond Springs
-CA
-
-95620
-Dixon
-CA
-
-95621
-Citrus Heights
-CA
-
-95623
-El Dorado
-CA
-
 95624
 Elk Grove
-CA
-
-95625
-Elmira
-CA
-
-95626
-Elverta
-CA
-
-95627
-Esparto
-CA
-
-95628
-Fair Oaks
-CA
-
-95629
-Fiddletown
 CA
 
 95630
 Folsom
 CA
 
-95631
-Foresthill
-CA
-
 95632
 Galt
 CA
 
-95633
-Garden Valley
-CA
-
-95634
-Georgetown
-CA
-
-95635
-Greenwood
-CA
-
-95636
-Grizzly Flats
-CA
-
-95637
-Guinda
-CA
-
-95638
-Herald
-CA
-
-95639
-Hood
-CA
-
-95640
-Ione
-CA
-
-95641
-Isleton
-CA
-
-95642
-Jackson
-CA
-
-95644
-Kit Carson
-CA
-
-95645
-Knights Landing
-CA
-
-95646
-Kirkwood
-CA
-
 95648
 Lincoln
-CA
-
-95650
-Loomis
-CA
-
-95651
-Lotus
-CA
-
-95652
-McClellan
-CA
-
-95653
-Madison
-CA
-
-95654
-Martell
-CA
-
-95655
-Mather
-CA
-
-95656
-Mount Aukum
-CA
-
-95658
-Newcastle
-CA
-
-95659
-Nicolaus
-CA
-
-95660
-North Highlands
 CA
 
 95661
@@ -9450,60 +2974,8 @@ CA
 Orangevale
 CA
 
-95663
-Penryn
-CA
-
-95664
-Pilot Hill
-CA
-
-95665
-Pine Grove
-CA
-
-95666
-Pioneer
-CA
-
-95667
-Placerville
-CA
-
-95668
-Pleasant Grove
-CA
-
-95669
-Plymouth
-CA
-
 95670
 Rancho Cordova
-CA
-
-95671
-Represa
-CA
-
-95672
-Rescue
-CA
-
-95673
-Rio Linda
-CA
-
-95674
-Rio Oso
-CA
-
-95675
-River Pines
-CA
-
-95676
-Robbins
 CA
 
 95677
@@ -9514,38 +2986,6 @@ CA
 Roseville
 CA
 
-95679
-Rumsey
-CA
-
-95680
-Ryde
-CA
-
-95681
-Sheridan
-CA
-
-95682
-Shingle Springs
-CA
-
-95683
-Sloughhouse
-CA
-
-95684
-Somerset
-CA
-
-95685
-Sutter Creek
-CA
-
-95686
-Thornton
-CA
-
 95687
 Vacaville
 CA
@@ -9554,124 +2994,12 @@ CA
 Vacaville
 CA
 
-95689
-Volcano
-CA
-
-95690
-Walnut Grove
-CA
-
 95691
 West Sacramento
 CA
 
-95692
-Wheatland
-CA
-
-95693
-Wilton
-CA
-
-95694
-Winters
-CA
-
-95695
-Woodland
-CA
-
-95696
-Vacaville
-CA
-
-95697
-Yolo
-CA
-
-95698
-Zamora
-CA
-
-95699
-Drytown
-CA
-
-95701
-Alta
-CA
-
-95703
-Applegate
-CA
-
-95709
-Camino
-CA
-
-95712
-Chicago Park
-CA
-
-95713
-Colfax
-CA
-
-95714
-Dutch Flat
-CA
-
-95715
-Emigrant Gap
-CA
-
-95717
-Gold Run
-CA
-
-95720
-Kyburz
-CA
-
-95721
-Echo Lake
-CA
-
-95722
-Meadow Vista
-CA
-
-95724
-Norden
-CA
-
-95726
-Pollock Pines
-CA
-
-95728
-Soda Springs
-CA
-
-95735
-Twin Bridges
-CA
-
-95736
-Weimar
-CA
-
-95741
-Rancho Cordova
-CA
-
 95742
 Rancho Cordova
-CA
-
-95746
-Granite Bay
 CA
 
 95747
@@ -9686,39 +3014,7 @@ CA
 Elk Grove
 CA
 
-95759
-Elk Grove
-CA
-
-95762
-El Dorado Hills
-CA
-
-95763
-Folsom
-CA
-
-95765
-Rocklin
-CA
-
-95776
-Woodland
-CA
-
-95798
-West Sacramento
-CA
-
-95799
-West Sacramento
-CA
-
-95812
-Sacramento
-CA
-
-95813
+95811
 Sacramento
 CA
 
@@ -9786,15 +3082,7 @@ CA
 Sacramento
 CA
 
-95830
-Sacramento
-CA
-
 95831
-Sacramento
-CA
-
-95832
 Sacramento
 CA
 
@@ -9810,19 +3098,7 @@ CA
 Sacramento
 CA
 
-95836
-Sacramento
-CA
-
-95837
-Sacramento
-CA
-
 95838
-Sacramento
-CA
-
-95840
 Sacramento
 CA
 
@@ -9838,119 +3114,11 @@ CA
 Antelope
 CA
 
-95851
-Sacramento
-CA
-
-95852
-Sacramento
-CA
-
-95853
-Sacramento
-CA
-
-95860
-Sacramento
-CA
-
 95864
 Sacramento
 CA
 
-95865
-Sacramento
-CA
-
-95866
-Sacramento
-CA
-
-95867
-Sacramento
-CA
-
-95887
-Sacramento
-CA
-
-95894
-Sacramento
-CA
-
-95899
-Sacramento
-CA
-
-95901
-Marysville
-CA
-
-95903
-Beale AFB
-CA
-
-95910
-Alleghany
-CA
-
-95912
-Arbuckle
-CA
-
-95913
-Artois
-CA
-
-95914
-Bangor
-CA
-
-95915
-Belden
-CA
-
-95916
-Berry Creek
-CA
-
-95917
-Biggs
-CA
-
-95918
-Browns Valley
-CA
-
-95919
-Brownsville
-CA
-
-95920
-Butte City
-CA
-
-95922
-Camptonville
-CA
-
-95923
-Canyon Dam
-CA
-
-95924
-Cedar Ridge
-CA
-
-95925
-Challenge
-CA
-
 95926
-Chico
-CA
-
-95927
 Chico
 CA
 
@@ -9958,235 +3126,11 @@ CA
 Chico
 CA
 
-95929
-Chico
-CA
-
-95930
-Clipper Mills
-CA
-
-95932
-Colusa
-CA
-
-95934
-Crescent Mills
-CA
-
-95935
-Dobbins
-CA
-
-95936
-Downieville
-CA
-
-95937
-Dunnigan
-CA
-
-95938
-Durham
-CA
-
-95939
-Elk Creek
-CA
-
-95940
-Feather Falls
-CA
-
-95941
-Forbestown
-CA
-
-95942
-Forest Ranch
-CA
-
-95943
-Glenn
-CA
-
-95944
-Goodyears Bar
-CA
-
 95945
 Grass Valley
 CA
 
-95946
-Penn Valley
-CA
-
-95947
-Greenville
-CA
-
-95948
-Gridley
-CA
-
-95949
-Grass Valley
-CA
-
-95950
-Grimes
-CA
-
-95951
-Hamilton City
-CA
-
-95953
-Live Oak
-CA
-
-95954
-Magalia
-CA
-
-95955
-Maxwell
-CA
-
-95956
-Meadow Valley
-CA
-
-95957
-Meridian
-CA
-
-95958
-Nelson
-CA
-
-95959
-Nevada City
-CA
-
-95960
-North San Juan
-CA
-
-95961
-Olivehurst
-CA
-
-95962
-Oregon House
-CA
-
-95963
-Orland
-CA
-
-95965
-Oroville
-CA
-
-95966
-Oroville
-CA
-
-95967
-Paradise
-CA
-
-95968
-Palermo
-CA
-
-95969
-Paradise
-CA
-
-95970
-Princeton
-CA
-
-95971
-Quincy
-CA
-
-95972
-Rackerby
-CA
-
-95973
-Chico
-CA
-
-95974
-Richvale
-CA
-
-95975
-Rough and Ready
-CA
-
-95976
-Chico
-CA
-
-95977
-Smartville
-CA
-
-95978
-Stirling City
-CA
-
-95979
-Stonyford
-CA
-
-95980
-Storrie
-CA
-
-95981
-Strawberry Valley
-CA
-
-95982
-Sutter
-CA
-
-95983
-Taylorsville
-CA
-
-95984
-Twain
-CA
-
-95986
-Washington
-CA
-
-95987
-Williams
-CA
-
-95988
-Willows
-CA
-
 95991
-Yuba City
-CA
-
-95992
-Yuba City
-CA
-
-95993
 Yuba City
 CA
 
@@ -10202,516 +3146,16 @@ CA
 Redding
 CA
 
-96006
-Adin
-CA
-
-96007
-Anderson
-CA
-
-96008
-Bella Vista
-CA
-
-96009
-Bieber
-CA
-
-96010
-Big Bar
-CA
-
-96011
-Big Bend
-CA
-
-96013
-Burney
-CA
-
-96014
-Callahan
-CA
-
-96015
-Canby
-CA
-
-96016
-Cassel
-CA
-
-96017
-Castella
-CA
-
-96019
-Shasta Lake
-CA
-
-96020
-Chester
-CA
-
-96021
-Corning
-CA
-
-96022
-Cottonwood
-CA
-
-96023
-Dorris
-CA
-
-96024
-Douglas City
-CA
-
-96025
-Dunsmuir
-CA
-
-96027
-Etna
-CA
-
-96028
-Fall River Mills
-CA
-
-96029
-Flournoy
-CA
-
-96031
-Forks of Salmon
-CA
-
-96032
-Fort Jones
-CA
-
-96033
-French Gulch
-CA
-
-96034
-Gazelle
-CA
-
-96035
-Gerber
-CA
-
-96037
-Greenview
-CA
-
-96038
-Grenada
-CA
-
-96039
-Happy Camp
-CA
-
-96040
-Hat Creek
-CA
-
-96041
-Hayfork
-CA
-
-96044
-Hornbrook
-CA
-
-96046
-Hyampom
-CA
-
-96047
-Igo
-CA
-
-96048
-Junction City
-CA
-
-96049
-Redding
-CA
-
-96050
-Klamath River
-CA
-
-96051
-Lakehead
-CA
-
-96052
-Lewiston
-CA
-
-96054
-Lookout
-CA
-
-96055
-Los Molinos
-CA
-
-96056
-McArthur
-CA
-
-96057
-McCloud
-CA
-
-96058
-Macdoel
-CA
-
-96059
-Manton
-CA
-
-96061
-Mill Creek
-CA
-
-96062
-Millville
-CA
-
-96063
-Mineral
-CA
-
-96064
-Montague
-CA
-
-96065
-Montgomery Creek
-CA
-
-96067
-Mount Shasta
-CA
-
-96068
-Nubieber
-CA
-
-96069
-Oak Run
-CA
-
-96070
-Obrien
-CA
-
-96071
-Old Station
-CA
-
-96073
-Palo Cedro
-CA
-
-96074
-Paskenta
-CA
-
-96075
-Paynes Creek
-CA
-
-96076
-Platina
-CA
-
-96078
-Proberta
-CA
-
-96079
-Shasta Lake
-CA
-
 96080
 Red Bluff
-CA
-
-96084
-Round Mountain
-CA
-
-96085
-Scott Bar
-CA
-
-96086
-Seiad Valley
-CA
-
-96087
-Shasta
-CA
-
-96088
-Shingletown
-CA
-
-96089
-Shasta Lake
-CA
-
-96090
-Tehama
-CA
-
-96091
-Trinity Center
-CA
-
-96092
-Vina
-CA
-
-96093
-Weaverville
-CA
-
-96094
-Weed
-CA
-
-96095
-Whiskeytown
-CA
-
-96096
-Whitmore
-CA
-
-96097
-Yreka
-CA
-
-96099
-Redding
-CA
-
-96101
-Alturas
-CA
-
-96103
-Blairsden-Graeagle
-CA
-
-96104
-Cedarville
-CA
-
-96105
-Chilcoot
-CA
-
-96106
-Clio
-CA
-
-96107
-Coleville
-CA
-
-96108
-Davis Creek
-CA
-
-96109
-Doyle
-CA
-
-96110
-Eagleville
-CA
-
-96111
-Floriston
-CA
-
-96112
-Fort Bidwell
-CA
-
-96113
-Herlong
-CA
-
-96114
-Janesville
-CA
-
-96115
-Lake City
-CA
-
-96116
-Likely
-CA
-
-96117
-Litchfield
-CA
-
-96118
-Loyalton
-CA
-
-96119
-Madeline
-CA
-
-96120
-Markleeville
-CA
-
-96121
-Milford
-CA
-
-96122
-Portola
-CA
-
-96123
-Ravendale
-CA
-
-96124
-Calpine
-CA
-
-96125
-Sierra City
-CA
-
-96126
-Sierraville
-CA
-
-96127
-Susanville
-CA
-
-96128
-Standish
-CA
-
-96129
-Beckwourth
 CA
 
 96130
 Susanville
 CA
 
-96132
-Termo
-CA
-
-96133
-Topaz
-CA
-
-96134
-Tulelake
-CA
-
-96135
-Vinton
-CA
-
-96136
-Wendel
-CA
-
-96137
-Westwood
-CA
-
-96140
-Carnelian Bay
-CA
-
-96141
-Homewood
-CA
-
-96142
-Tahoma
-CA
-
-96143
-Kings Beach
-CA
-
-96145
-Tahoe City
-CA
-
-96146
-Olympic Valley
-CA
-
-96148
-Tahoe Vista
-CA
-
 96150
 South Lake Tahoe
-CA
-
-96151
-South Lake Tahoe
-CA
-
-96152
-South Lake Tahoe
-CA
-
-96154
-South Lake Tahoe
-CA
-
-96155
-South Lake Tahoe
-CA
-
-96156
-South Lake Tahoe
-CA
-
-96157
-South Lake Tahoe
-CA
-
-96158
-South Lake Tahoe
-CA
-
-96160
-Truckee
 CA
 
 96161
