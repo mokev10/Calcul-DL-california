@@ -3,6 +3,7 @@
 
 from .field_mapping import FieldMapper
 
+
 class VersionOneFieldMapper(FieldMapper):
     def __init__(self):
         super().__init__()
@@ -13,12 +14,49 @@ class VersionOneFieldMapper(FieldMapper):
             "driverLicenseName": "DAA",
         })
 
+
 class VersionTwoFieldMapper(FieldMapper):
     def __init__(self):
         super().__init__()
         self._fields["firstName"] = "DCT"
 
-# ... similarly create VersionThreeFieldMapper ... VersionTwelveFieldMapper
+
+class VersionThreeFieldMapper(FieldMapper):
+    pass
+
+
+class VersionFourFieldMapper(FieldMapper):
+    pass
+
+
+class VersionFiveFieldMapper(FieldMapper):
+    pass
+
+
+class VersionSixFieldMapper(FieldMapper):
+    pass
+
+
+class VersionSevenFieldMapper(FieldMapper):
+    pass
+
+
+class VersionEightFieldMapper(FieldMapper):
+    pass
+
+
+class VersionNineFieldMapper(FieldMapper):
+    pass
+
+
+class VersionTenFieldMapper(FieldMapper):
+    pass
+
+
+class VersionElevenFieldMapper(FieldMapper):
+    pass
+
+
 # For v12, add DDM, DDN, DDO, DDP and remove alias fields DBN/DBG/DBS
 class VersionTwelveFieldMapper(FieldMapper):
     def __init__(self):

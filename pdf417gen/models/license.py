@@ -37,6 +37,7 @@ class License:
     non_domiciled_indicator: Optional[str] = None
     enhanced_credential_indicator: Optional[str] = None
     permit_indicator: Optional[str] = None
+    weight: Optional[str] = None
     version: Optional[str] = None
     pdf417: Optional[str] = None
 
