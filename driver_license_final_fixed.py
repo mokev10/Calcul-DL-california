@@ -11,10 +11,15 @@
 import streamlit as st
 import datetime, random, hashlib, io, base64, requests, re
 import streamlit.components.v1 as components
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
-# >>> Liaison ajoutée avec california_zip_city.py
-from california_zip_city import CALIFORNIA_ZIP_TO_CITY
+# Liaison california_zip_city
+from california_zip_city import (
+    CALIFORNIA_ZIP_TO_CITY,
+    ZIP_DB_FILE_PATH,
+    get_city_from_zip as cz_get_city_from_zip,
+)
 
 # ReportLab (PDF)
 try:
@@ -86,64 +91,92 @@ def fetch_github_zipdb(url: str) -> Optional[str]:
 
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     """
-    Parse a raw text ZIP_DB file (various formats tolerated).
-    Returns mapping zip -> {city, state, office}
-    Heuristics: lines containing 5-digit zip and city names.
+    Parse ZIP_DB.txt en supportant PRIORITAIREMENT le format strict:
+        ZIP
+        City
+        CA
+        (ligne vide optionnelle)
+
+    Retourne zip -> {city, state, office}.
     """
     db: Dict[str, Dict[str, str]] = {}
     if not text:
         return db
-    t = text.replace("\r", "\n")
-    t = re.sub(r"<\/?t(?:able|r|d|h)[^>]*>", "\n", t, flags=re.IGNORECASE)
-    t = re.sub(r"&nbsp;|\t", " ", t)
-    lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
-    for ln in lines:
-        # try patterns: "City  CA  94102" or "94102 City CA" or "94102 City"
-        m_zip = re.search(r"\b(\d{5})\b", ln)
-        if m_zip:
-            z = m_zip.group(1)
-            # attempt to extract city: text before or after zip
-            before = ln[:m_zip.start()].strip(" ,;-")
-            after = ln[m_zip.end():].strip(" ,;-")
-            city = ""
-            state = "CA"
-            # prefer before if it contains letters
-            if before and re.search(r"[A-Za-z]", before):
-                city = re.split(r"[,\-–:]", before)[-1].strip().title()
-            elif after and re.search(r"[A-Za-z]", after):
-                city = re.split(r"[,\-–:]", after)[0].strip().title()
-            # fallback: try to split by multiple columns
-            if not city:
-                parts = re.split(r"\s{2,}", ln)
-                for p in parts:
-                    if re.search(r"[A-Za-z]", p) and not re.search(r"\b\d{5}\b", p):
-                        city = p.strip().title()
-                        break
-            db[z] = {"city": city or "", "state": state, "office": ""}
+
+    lines = [ln.strip() for ln in text.splitlines()]
+
+    # 1) Parsing strict 3 lignes
+    i = 0
+    n = len(lines)
+    while i + 2 < n:
+        z = lines[i]
+        city = lines[i + 1]
+        state = lines[i + 2].upper()
+
+        if re.fullmatch(r"\d{5}", z) and state == "CA":
+            db[z] = {"city": city.title() if city else "", "state": "CA", "office": ""}
+            i += 3
+            while i < n and lines[i] == "":
+                i += 1
+            continue
+        i += 1
+
+    # 2) Compatibilité heuristique (anciens formats)
+    if not db:
+        t = text.replace("\r", "\n")
+        t = re.sub(r"<\/?t(?:able|r|d|h)[^>]*>", "\n", t, flags=re.IGNORECASE)
+        t = re.sub(r"&nbsp;|\t", " ", t)
+        lines2 = [ln.strip() for ln in t.splitlines() if ln.strip()]
+        for ln in lines2:
+            m_zip = re.search(r"\b(\d{5})\b", ln)
+            if m_zip:
+                z = m_zip.group(1)
+                before = ln[:m_zip.start()].strip(" ,;-")
+                after = ln[m_zip.end():].strip(" ,;-")
+                city = ""
+                state = "CA"
+
+                if before and re.search(r"[A-Za-z]", before):
+                    city = re.split(r"[,\-–:]", before)[-1].strip().title()
+                elif after and re.search(r"[A-Za-z]", after):
+                    city = re.split(r"[,\-–:]", after)[0].strip().title()
+
+                if not city:
+                    parts = re.split(r"\s{2,}", ln)
+                    for p in parts:
+                        if re.search(r"[A-Za-z]", p) and not re.search(r"\b\d{5}\b", p):
+                            city = p.strip().title()
+                            break
+
+                db[z] = {"city": city or "", "state": state, "office": ""}
+
     # Normalize keys
     normalized: Dict[str, Dict[str, str]] = {}
     for z, info in db.items():
         zc = re.sub(r"\D", "", z)[:5]
         if len(zc) == 5:
-            normalized[zc] = {"city": (info.get("city") or "").strip(), "state": (info.get("state") or "CA").strip(), "office": (info.get("office") or "").strip()}
+            normalized[zc] = {
+                "city": (info.get("city") or "").strip(),
+                "state": (info.get("state") or "CA").strip(),
+                "office": (info.get("office") or "").strip()
+            }
     return normalized
 
+# Charger depuis GitHub si dispo
 fetched = fetch_github_zipdb(GITHUB_RAW_ZIPDB)
 if fetched:
     parsed = parse_zipdb_text(fetched)
     if parsed:
         ZIP_DB.update(parsed)
 
-# >>> Liaison ajoutée : fusion depuis california_zip_city.py (sans supprimer l'existant)
-for z, city in CALIFORNIA_ZIP_TO_CITY.items():
-    zc = re.sub(r"\D", "", str(z))[:5]
-    if len(zc) != 5:
-        continue
-    if zc in ZIP_DB:
-        if not (ZIP_DB[zc].get("city") or "").strip():
-            ZIP_DB[zc]["city"] = (city or "").strip().title()
-    else:
-        ZIP_DB[zc] = {"city": (city or "").strip().title(), "state": "CA", "office": ""}
+# Charger local ZIP_DB.txt (format strict) via california_zip_city
+# => garantit la liaison ZIP -> Ville si le fichier local est présent
+if CALIFORNIA_ZIP_TO_CITY:
+    for z, city in CALIFORNIA_ZIP_TO_CITY.items():
+        if z not in ZIP_DB:
+            ZIP_DB[z] = {"city": city, "state": "CA", "office": ""}
+        elif not (ZIP_DB[z].get("city") or "").strip():
+            ZIP_DB[z]["city"] = city
 
 # -------------------------
 # Field offices mapping (flattened)
@@ -264,6 +297,15 @@ st.sidebar.markdown("**Rasterisation (aperçu PNG/GIF)**")
 raster_scale_ui = st.sidebar.selectbox("Scale raster (entier)", [1,2,3,4,5], index=2, key="sb_raster")
 gif_delay_ui = st.sidebar.number_input("GIF delay (ms)", min_value=50, max_value=2000, value=200, step=50, key="sb_gif_delay")
 
+# DEBUG temporaire demandé
+with st.sidebar.expander("DEBUG ZIP → Ville", expanded=False):
+    st.write("Chemin ZIP_DB local:", str(Path(ZIP_DB_FILE_PATH).resolve()))
+    st.write("Fichier existe:", Path(ZIP_DB_FILE_PATH).exists())
+    st.write("Entrées CALIFORNIA_ZIP_TO_CITY:", len(CALIFORNIA_ZIP_TO_CITY))
+    st.write("Entrées ZIP_DB final:", len(ZIP_DB))
+    st.write("Test 90001 (module):", cz_get_city_from_zip("90001"))
+    st.write("Test 90001 (ZIP_DB final):", ZIP_DB.get("90001", {}).get("city", ""))
+
 # -------------------------
 # Synchronization callbacks (ZIP <-> City <-> Field Office)
 # -------------------------
@@ -274,7 +316,13 @@ def update_from_zip():
     info = ZIP_DB.get(z)
     if info:
         city = info.get("city", "")
+        # fallback direct module
+        if not city:
+            city = cz_get_city_from_zip(z)
+            if city:
+                ZIP_DB[z]["city"] = city
         st.session_state["ui_city"] = city.title() if city else st.session_state.get("ui_city", "")
+
         # map to field office label if possible
         key = city.upper() if city else ""
         office_label = FIELD_OFFICE_MAP.get(key, info.get("office", ""))
@@ -286,8 +334,10 @@ def update_from_zip():
                     break
         st.session_state["ui_office"] = office_label or st.session_state.get("ui_office", "")
     else:
-        # unknown zip: keep city unchanged
-        pass
+        # unknown zip: fallback module
+        city = cz_get_city_from_zip(z)
+        if city:
+            st.session_state["ui_city"] = city.title()
 
 def update_from_city():
     city = normalize_city(st.session_state.get("ui_city", ""))
@@ -295,15 +345,13 @@ def update_from_city():
         return
     zips = CITY_TO_ZIPS.get(city.title(), [])
     if zips:
-        # choose first zip if not already selected
         chosen = zips[0]
         st.session_state["ui_zip"] = chosen
-    # set office if mapping exists
+
     office_label = FIELD_OFFICE_MAP.get(city.upper())
     if office_label:
         st.session_state["ui_office"] = office_label
     else:
-        # try to find office by zip
         z = normalize_zip(st.session_state.get("ui_zip", ""))
         info = ZIP_DB.get(z)
         if info and info.get("office"):
@@ -321,7 +369,6 @@ def update_from_office():
         if city:
             st.session_state["ui_city"] = city.title()
             return
-    # fallback: extract city from label
     m = re.search(r"—\s*(.*?)\s*\(", office)
     if m:
         city_guess = m.group(1).strip()
@@ -362,15 +409,32 @@ iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 
 # ZIP and City options built from ZIP_DB
 zip_options = sorted(ZIP_DB.keys())
-city_options = sorted({(info.get("city") or "").title() for info in ZIP_DB.values() if info.get("city")})
+city_options = sorted({
+    (info.get("city") or "").title()
+    for info in ZIP_DB.values()
+    if (info.get("city") or "").strip()
+})
 
 # Ensure session defaults exist
 if "ui_zip" not in st.session_state:
     st.session_state["ui_zip"] = zip_options[0] if zip_options else "94925"
+
 if "ui_city" not in st.session_state:
-    st.session_state["ui_city"] = ZIP_DB.get(st.session_state["ui_zip"], {}).get("city", "").title()
+    z0 = st.session_state["ui_zip"]
+    st.session_state["ui_city"] = (
+        ZIP_DB.get(z0, {}).get("city", "").title() or cz_get_city_from_zip(z0).title()
+    )
+
 if "ui_office" not in st.session_state:
     st.session_state["ui_office"] = ZIP_DB.get(st.session_state["ui_zip"], {}).get("office", "")
+
+# Garantir une ville non vide pour le ZIP courant
+selected_zip_now = st.session_state.get("ui_zip", "")
+selected_city_now = ZIP_DB.get(selected_zip_now, {}).get("city", "") or cz_get_city_from_zip(selected_zip_now)
+
+# Si city_options est vide, forcer au moins la ville du ZIP sélectionné
+if not city_options and selected_city_now:
+    city_options = [selected_city_now.title()]
 
 col_zip, col_city = st.columns([2,3])
 with col_zip:
@@ -381,11 +445,19 @@ with col_zip:
         key="ui_zip",
         on_change=update_from_zip
     )
+
+# Ville liée explicitement au ZIP sélectionné (comme demandé)
+linked_city = ZIP_DB.get(st.session_state.get("ui_zip", ""), {}).get("city", "") or cz_get_city_from_zip(st.session_state.get("ui_zip", ""))
+linked_city_display = linked_city.title() if linked_city else ""
+
+# Si linked_city existe, on l'affiche en priorité; sinon fallback sur liste globale
+city_select_options = [linked_city_display] if linked_city_display else city_options
+
 with col_city:
     city_select = st.selectbox(
         "Ville",
-        options=city_options,
-        index=city_options.index(st.session_state["ui_city"]) if st.session_state["ui_city"] in city_options else 0,
+        options=city_select_options,
+        index=0 if city_select_options else None,
         key="ui_city",
         on_change=update_from_city
     )
