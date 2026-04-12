@@ -43,3 +43,13 @@ def test_helpers():
     assert get_version(SAMPLE) == "08"
     assert get_full_name(SAMPLE) == "JOHN QUINCY PUBLIC"
     assert get_age(SAMPLE) is not None
+
+def test_parse_extended_fields():
+    lic = parse(SAMPLE)
+    assert lic.street_address == "789 E OAK ST"
+    assert lic.height == 69
+    assert lic.weight == "180"
+
+def test_not_expired_sample():
+    # SAMPLE has expiration date in 2035 in test payload.
+    assert is_expired(SAMPLE) is False
