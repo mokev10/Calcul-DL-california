@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Version complète prête à coller
-# - Liaison bidirectionnelle entre Code postal <-> Ville
-# - Field Office reste indépendant
-# - Menus déroulants affichent un placeholder "Choisir une option"
-# - CSS corrigé pour éviter les "codes qui fuient" (overflow)
-# - Préserve la logique, les règles, les menus déroulants et le CSS UI/UX
-# - Clés Streamlit uniques pour éviter les duplications
+# - Liaison bidirectionnelle ZIP <-> Ville
+# - Field Office indépendant
+# - Placeholder "Choisir une option"
+# - CSS renforcé pour empêcher tout overflow / "codes qui fuient"
+# - Aucune modification de la logique métier
 
 import base64
 import datetime
@@ -237,8 +236,7 @@ def build_aamva_tags(fields: Dict[str, str]) -> str:
     return "@ANSI 636014080102DL" + "".join(f"{tag}{enriched.get(tag,'')}" for tag in ordered if enriched.get(tag))
 
 # -------------------------
-# CSS UI/UX (ne change rien à la logique)
-# - Ajout de règles pour éviter l'overflow des codes dans les selectbox
+# CSS UI/UX (renforcé pour overflow)
 # -------------------------
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -282,14 +280,15 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7
   font-size:13px !important;
 }
 
-/* Prevent select overflow and long codes from breaking layout */
+/* Force selectbox container sizing and prevent overflow */
 .stSelectbox, .stSelectbox>div, .stSelectbox>div>div {
   max-width: 100% !important;
   box-sizing: border-box !important;
+  overflow: hidden !important;
 }
 
-/* Truncate long option text inside the visible select control */
-.stSelectbox select {
+/* Visible select control: truncate long text with ellipsis */
+.stSelectbox select, .stSelectbox select {
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -297,10 +296,22 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7
   max-width: 100% !important;
 }
 
+/* Also target common Streamlit internal classes for different versions */
+.css-1v3fvcr .stSelectbox select, .css-1v3fvcr select {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
 /* Make placeholder visually distinct */
 .stSelectbox select option:first-child {
   color: #6b7280;
   font-style: italic;
+}
+
+/* Add tooltip-like full text on hover for visible select (works in many browsers) */
+.stSelectbox select:hover {
+  cursor: default;
 }
 
 /* Focus style */
@@ -430,7 +441,6 @@ placeholder = "Choisir une option"
 
 zip_options = [placeholder] + sorted(ZIP_TO_CITIES.keys())
 city_options_all = sorted(CITY_TO_ZIPS.keys())
-# For city select we will show cities relevant to selected zip (or all if none)
 office_options_from_db = sorted({info.get("office") for info in ZIP_DB.values() if info.get("office")})
 field_office_labels = sorted(set(FIELD_OFFICE_MAP.values()))
 office_options = [placeholder] + sorted(set(office_options_from_db) | set(field_office_labels)) if (office_options_from_db or field_office_labels) else [placeholder]
@@ -443,7 +453,8 @@ if "ui_city" not in st.session_state:
 if "ui_office" not in st.session_state:
     st.session_state["ui_office"] = office_options[0] if office_options else placeholder
 
-col_zip, col_city = st.columns([2, 3])
+# Layout: limit column widths to avoid overflow
+col_zip, col_city = st.columns([1.2, 1.8])
 with col_zip:
     st.selectbox(
         "Code postal",
@@ -514,7 +525,6 @@ def validate_inputs() -> List[str]:
     if not address:
         errors.append("Adresse requise.")
 
-    # UI en force garantit la cohérence ZIP <-> Ville ; pas d'autre vérification nécessaire.
     return errors
 
 
