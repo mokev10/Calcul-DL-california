@@ -1,5 +1,21 @@
-# runtime / test dependencies
-streamlit>=1.0.0
+# Core
+streamlit>=1.18.0,<2.0.0
 requests>=2.28.0
-reportlab>=4.0
+
+# PDF / génération
+reportlab>=3.6.0
+
+# Optional barcode generator (only if you use pdf417gen features)
+pdf417gen>=0.5.0
+
+# Testing
 pytest>=7.0
+
+# Utilities (optional / local)
+# aamva_utils is likely a local/private module — install it from your repo or copy it into the project.
+# If you publish it to PyPI, replace the line below with the package name.
+# aamva_utils @ git+https://github.com/your-org/aamva_utils.git
+
+# Pin common extras that help avoid runtime surprises
+charset-normalizer>=2.0.0
+urllib3>=1.26.0
