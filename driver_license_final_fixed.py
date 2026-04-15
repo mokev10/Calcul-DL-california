@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# driver_license_fieldoffice_single_select.py
+# driver_license_final_fixed.py
 # Version complète — Field Office via UN SEUL menu déroulant (label -> code)
-# Field office stocké dans le payload sous forme de code (ex: "502")
-# Fichier complet prêt à copier
+# Indépendance totale entre ZIP/ville et Field Office
+# Fichier prêt à copier
 
 import base64
 import datetime
@@ -51,12 +51,27 @@ except Exception:
 
 GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
-st.set_page_config(page_title="Générateur officiel de permis Californien", layout="wide")
+st.set_page_config(page_title="Permis CALIFORNIA", layout="wide")
 
 IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
 IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
 LOCAL_ZIPDB_JSON = "zip_db.json"
+
+# -------------------------
+# ZIP_DB (extrait / complet possible)
+# -------------------------
+# Conserver la structure d'origine : ZIP -> {city, state, office}
+ZIP_DB: Dict[str, Dict[str, str]] = {
+    "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
+    "95818": {"city": "Sacramento", "state": "CA", "office": ""},
+    "94102": {"city": "San Francisco", "state": "CA", "office": ""},
+    "94015": {"city": "Daly City", "state": "CA", "office": ""},
+    "94601": {"city": "Oakland", "state": "CA", "office": ""},
+    "90001": {"city": "Los Angeles", "state": "CA", "office": ""},
+    "92101": {"city": "San Diego", "state": "CA", "office": ""},
+    # ... (conserver le reste de votre ZIP_DB complet ici)
+}
 
 # -------------------------
 # Field Office map (structure fournie par l'utilisateur)
@@ -141,7 +156,6 @@ def build_field_office_options() -> List[str]:
     La première option est vide (aucune sélection).
     """
     opts: List[str] = [""]
-    # Tri des régions pour stabilité
     for region in sorted(FIELD_OFFICE_MAP.keys()):
         cities = FIELD_OFFICE_MAP[region]
         for city in sorted(cities.keys()):
@@ -157,7 +171,6 @@ def parse_label_to_code(label: str) -> Tuple[Optional[str], Optional[str]]:
     """
     if not label:
         return None, ""
-    # Extraire le code entre parenthèses à la fin
     m = re.search(r"\((\d+)\)\s*$", label)
     if not m:
         return None, label
@@ -165,7 +178,7 @@ def parse_label_to_code(label: str) -> Tuple[Optional[str], Optional[str]]:
     return code, label
 
 # -------------------------
-# ZIP DB helpers (chargement paresseux)
+# ZIP DB helpers (chargement paresseux depuis local ou GitHub)
 # -------------------------
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     out: Dict[str, Dict[str, str]] = {}
@@ -199,7 +212,7 @@ def load_zip_db() -> Dict[str, Dict[str, str]]:
                 return parsed
     except Exception:
         pass
-    return {"94102": {"city": "San Francisco", "state": "CA", "office": ""}}
+    return ZIP_DB  # fallback to embedded
 
 _ZIP_DB_CACHE: Optional[Dict[str, Dict[str, str]]] = None
 def get_zip_db() -> Dict[str, Dict[str, str]]:
@@ -220,10 +233,6 @@ def format_date(dt: datetime.date) -> str:
 def generate_random_id() -> str:
     return hashlib.sha1(str(random.random()).encode()).hexdigest()[:10]
 
-# Neutralisation de toute inférence automatique de field_office (ne sera pas utilisée)
-def infer_field_office(zip_code: str, city: str) -> str:
-    return ""
-
 def build_payload(data: Dict[str, str]) -> Dict[str, str]:
     payload: Dict[str, str] = {}
     payload["first_name"] = data.get("first_name", "")
@@ -235,7 +244,6 @@ def build_payload(data: Dict[str, str]) -> Dict[str, str]:
     payload["city"] = data.get("city", "")
     payload["state"] = data.get("state", "")
     payload["zip"] = data.get("zip", "")
-    # Field office : stocker le code (string) si sélectionné, sinon vide
     payload["field_office"] = data.get("field_office", "") or ""
     payload["field_office_label"] = data.get("field_office_label", "") or ""
     payload["license_number"] = data.get("license_number", generate_random_id())
@@ -453,7 +461,6 @@ def main():
             st.markdown("<div style='margin-top:8px' class='small-muted'>Field Office (sélectionnez dans la liste) :</div>", unsafe_allow_html=True)
             selected_label = st.selectbox("Field Office", options=fo_options, index=0)
             fo_code, fo_label = parse_label_to_code(selected_label)
-            # fo_code is None or string code
             st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown('<div class="card" style="margin-top:12px">', unsafe_allow_html=True)
