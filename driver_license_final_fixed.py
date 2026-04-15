@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
-# Version mise à jour — champs Code postal et Ville en texte libre
-# Interface pédagogique Streamlit — NE GÉNÈRE PAS de permis officiels ni de PDF417
+# Version mise à jour — license_number commence par l'initiale du nom de famille
+# Usage pédagogique uniquement — NE GÉNÈRE PAS de documents officiels
 
 import datetime
 import random
@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, Optional
 
 import streamlit as st
 
-# Optional imports (ReportLab/pdf417gen/AAMVA utils) preserved if disponibles
+# Optional imports (ReportLab/pdf417gen/AAMVA utils) preserved if available
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.utils import ImageReader
@@ -19,24 +19,18 @@ except Exception:
     ImageReader = None
     _REPORTLAB_AVAILABLE = False
 
-st.set_page_config(page_title="Générateur pédagogique de permis (interface)", layout="wide")
+st.set_page_config(page_title="Générateur pédagogique de permis (mise à jour)", layout="wide")
 
 # ---------------------------
-# ZIP database (extrait)
+# Données (extraits)
 # ---------------------------
-# NOTE: kept for reference/validation if needed; fields "office" intentionally empty.
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "90001": {"city": "Los Angeles", "state": "CA", "office": ""},
-    "90011": {"city": "Los Angeles", "state": "CA", "office": ""},
     "94102": {"city": "San Francisco", "state": "CA", "office": ""},
     "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
-    "95818": {"city": "Sacramento", "state": "CA", "office": ""},
-    # ... étendre jusqu'à 96162 si nécessaire
+    # ... étendre si nécessaire
 }
 
-# ---------------------------
-# Field offices (single dropdown)
-# ---------------------------
 FIELD_OFFICES_BY_REGION: Dict[str, Dict[str, int]] = {
     "Baie de San Francisco": {
         "Corte Madera": 525,
@@ -112,21 +106,56 @@ def build_field_office_choices(regions: Dict[str, Dict[str, int]]) -> List[Tuple
         for city, code in cities.items():
             label = f"{region} — {city} ({code})"
             choices.append((label, code))
+    choices.sort(key=lambda x: x[0].lower())
     return choices
 
 FIELD_OFFICE_CHOICES = build_field_office_choices(FIELD_OFFICES_BY_REGION)
 
 # ---------------------------
-# Helpers
+# Nouvelle logique de génération du numéro de permis
 # ---------------------------
-def generate_license_number() -> str:
-    return "H" + "".join(str(random.randint(0, 9)) for _ in range(8))
+def _initial_from_family_name(family_name: str) -> str:
+    """
+    Retourne la première lettre majuscule du nom de famille si c'est une lettre A-Z,
+    sinon retourne 'H' par défaut.
+    """
+    if not family_name:
+        return "H"
+    first = family_name.strip()[0].upper()
+    if "A" <= first <= "Z":
+        return first
+    return "H"
 
+def _random_even_digit() -> str:
+    return str(random.choice([0,2,4,6,8]))
+
+def _random_odd_digit() -> str:
+    return str(random.choice([1,3,5,7,9]))
+
+def generate_license_number_from_name(family_name: str, digits: int = 8) -> str:
+    """
+    Génère un numéro pseudo-aléatoire commençant par l'initiale du nom de famille.
+    Les chiffres suivants alternent pair/impair : position 0 -> pair, position 1 -> impair, etc.
+    Ex: Davis -> 'D' + 8 chiffres alternés -> 'D21291706' (exemple)
+    Usage pédagogique uniquement.
+    """
+    initial = _initial_from_family_name(family_name)
+    parts: List[str] = []
+    for i in range(digits):
+        if i % 2 == 0:
+            parts.append(_random_even_digit())
+        else:
+            parts.append(_random_odd_digit())
+    return initial + "".join(parts)
+
+# ---------------------------
+# Helpers UI
+# ---------------------------
 def format_date(d: datetime.date) -> str:
     return d.strftime("%Y/%m/%d")
 
 # ---------------------------
-# Minimal CSS for a modern look
+# UI Streamlit
 # ---------------------------
 st.markdown(
     """
@@ -139,11 +168,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------------------------
-# UI
-# ---------------------------
-st.title("Générateur pédagogique de permis — Interface")
-st.caption("Usage académique uniquement — ne génère pas de documents officiels")
+st.title("Générateur pédagogique de permis — Numéro basé sur le nom de famille")
+st.caption("Usage académique uniquement — le numéro est pseudo‑aléatoire et non officiel")
 
 left, right = st.columns([1.1, 0.9])
 
@@ -166,14 +192,15 @@ with left:
 
     st.markdown("---")
     st.subheader("Adresse et codes (champs libres)")
-    # **CHANGEMENT** : Code postal et Ville sont des champs texte libres
     zip_input = st.text_input("Code postal (ZIP) — champ libre", value="90001")
     city_input = st.text_input("Ville — champ libre", value="Los Angeles")
     address_line = st.text_input("Address Line", value="2570 24TH STREET")
 
     st.markdown("---")
     st.subheader("Permis et dates")
-    license_number = st.text_input("Numéro de permis (pseudo)", value=generate_license_number())
+    # Utilise la nouvelle fonction pour générer le numéro par défaut
+    default_license = generate_license_number_from_name(family_name)
+    license_number = st.text_input("Numéro de permis (pseudo)", value=default_license)
     issue_date = st.date_input("Date d’émission", value=datetime.date.today())
     default_exp = issue_date.replace(year=issue_date.year + 5) - datetime.timedelta(days=15)
     expiration_date = st.date_input("Date d'expiration", value=default_exp)
@@ -186,7 +213,6 @@ with left:
     st.markdown("---")
     st.subheader("Field Office (menu unique, indépendant)")
     field_office_labels = [label for label, code in FIELD_OFFICE_CHOICES]
-    # default to first or try to find Los Angeles (502)
     default_idx = 0
     for i, label in enumerate(field_office_labels):
         if "Los Angeles (502)" in label:
@@ -198,11 +224,16 @@ with left:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.write("")
-    generate = st.button("Générer (pédagogique)")
+    # Bouton pour régénérer le numéro en fonction du nom saisi
+    if st.button("Régénérer le numéro à partir du nom de famille"):
+        license_number = generate_license_number_from_name(family_name)
+        st.success(f"Numéro mis à jour : {license_number}")
+
+    generate = st.button("Collecter les données (pédagogique)")
 
 with right:
     st.markdown('<div class="preview">', unsafe_allow_html=True)
-    st.subheader("Aperçu carte (prévisualisation pédagogique)")
+    st.subheader("Aperçu (prévisualisation pédagogique)")
     st.markdown(f"**NAME:** {given_name} {family_name}")
     st.markdown(f"**SEX:** {sex}    **DOB:** {format_date(dob)}")
     st.markdown(f"**DLN (pseudo):** {license_number}")
@@ -243,7 +274,7 @@ if generate:
     st.success("Données collectées (usage pédagogique).")
     st.json(payload)
 
-    # Simple HTML preview for copy/paste (no official generation)
+    # Aperçu HTML simple (copie/coller)
     card_html = f"""
     <div style="font-family:Arial,Helvetica,sans-serif; width:520px; border-radius:12px; padding:18px;
                 background: linear-gradient(90deg,#0f4c81,#2b7bbf); color:white;">
@@ -263,10 +294,11 @@ if generate:
     st.components.v1.html(card_html, height=220)
 
 # ---------------------------
-# Developer notes
+# Notes développeur
 # ---------------------------
-# - Les champs "Code postal" et "Ville" sont désormais des champs texte libres (st.text_input).
-# - Le dictionnaire ZIP_DB est conservé pour référence/validation si tu veux ajouter une vérification optionnelle.
-# - Le menu Field Office reste un seul menu déroulant indépendant (Région — Ville (Code)).
-# - Ce fichier est pédagogique : il n'essaie pas de créer de documents officiels, ni de codes-barres AAMVA/PDF417.
-# - Pour intégrer la liste complète des ZIP (90001..96162), étends ZIP_DB; garder "office" vide évite tout rattachement automatique.
+# - La fonction generate_license_number_from_name(family_name) applique la règle demandée :
+#   initiale = première lettre du nom de famille (A-Z) ou 'H' par défaut,
+#   puis 8 chiffres alternant pair/impair.
+# - Ce numéro est purement pédagogique et pseudo‑aléatoire.
+# - Si tu veux un autre schéma d'alternance (impair/pair début, longueur différente), je peux l'adapter.
+# - Ne pas utiliser ce code pour produire des documents officiels.
