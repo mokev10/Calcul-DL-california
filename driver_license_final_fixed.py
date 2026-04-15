@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # driver_license_fieldoffice_dropdown.py
-# Interface Streamlit complète — Field Office en menu déroulant indépendant du ZIP/ville
+# Version complète — Field Office via menu déroulant en deux étapes (region -> ville)
+# Field office stocké dans le payload sous forme de code (ex: "502")
 # Fichier complet prêt à copier
 
 import base64
@@ -58,81 +59,100 @@ GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-californ
 LOCAL_ZIPDB_JSON = "zip_db.json"
 
 # -------------------------
-# Field Office list (fourni par l'utilisateur)
+# Field Office map (structure fournie par l'utilisateur)
+# Format: region -> { city_name: code_int }
 # -------------------------
-# Format interne : List of tuples (region, city, code)
-FIELD_OFFICES: List[Tuple[str, str, str]] = [
-    ("Baie de San Francisco", "Corte Madera", "525"),
-    ("Baie de San Francisco", "Daly City", "599"),
-    ("Baie de San Francisco", "El Cerrito", "585"),
-    ("Baie de San Francisco", "Fremont", "643"),
-    ("Baie de San Francisco", "Hayward", "521"),
-    ("Baie de San Francisco", "Los Gatos", "641"),
-    ("Baie de San Francisco", "Novato", "647"),
-    ("Baie de San Francisco", "Oakland (Claremont)", "501"),
-    ("Baie de San Francisco", "Oakland (Coliseum)", "604"),
-    ("Baie de San Francisco", "Pittsburg", "651"),
-    ("Baie de San Francisco", "Pleasanton", "639"),
-    ("Baie de San Francisco", "Redwood City", "542"),
-    ("Baie de San Francisco", "San Francisco", "503"),
-    ("Baie de San Francisco", "San Jose (Alma)", "516"),
-    ("Baie de San Francisco", "San Jose (Driver License Center)", "607"),
-    ("Baie de San Francisco", "San Mateo", "594"),
-    ("Baie de San Francisco", "Santa Clara", "632"),
-    ("Baie de San Francisco", "Vallejo", "538"),
-    ("Grand Los Angeles", "Arleta", "628"),
-    ("Grand Los Angeles", "Bellflower", "610"),
-    ("Grand Los Angeles", "Culver City", "514"),
-    ("Grand Los Angeles", "Glendale", "540"),
-    ("Grand Los Angeles", "Hollywood", "633"),
-    ("Grand Los Angeles", "Inglewood", "544"),
-    ("Grand Los Angeles", "Long Beach", "507"),
-    ("Grand Los Angeles", "Los Angeles (Hope St)", "502"),
-    ("Grand Los Angeles", "Montebello", "531"),
-    ("Grand Los Angeles", "Pasadena", "510"),
-    ("Grand Los Angeles", "Santa Monica", "548"),
-    ("Grand Los Angeles", "Torrance", "592"),
-    ("Grand Los Angeles", "West Covina", "591"),
-    ("Orange County / Sud", "Costa Mesa", "627"),
-    ("Orange County / Sud", "Fullerton", "547"),
-    ("Orange County / Sud", "Laguna Hills", "642"),
-    ("Orange County / Sud", "Santa Ana", "529"),
-    ("Orange County / Sud", "San Clemente", "652"),
-    ("Orange County / Sud", "Westminster", "623"),
-    ("San Diego / Sud", "Chula Vista", "609"),
-    ("San Diego / Sud", "El Cajon", "549"),
-    ("San Diego / Sud", "Oceanside", "593"),
-    ("San Diego / Sud", "San Diego (Clairemont)", "618"),
-    ("San Diego / Sud", "San Diego (Normal St)", "504"),
-    ("San Diego / Sud", "San Marcos", "637"),
-    ("San Diego / Sud", "San Ysidro", "649"),
-    ("Nord de la Californie", "Auburn", "533"),
-    ("Nord de la Californie", "Chico", "534"),
-    ("Nord de la Californie", "Eureka", "522"),
-    ("Nord de la Californie", "Redding", "550"),
-    ("Nord de la Californie", "Roseville", "635"),
-    ("Sacramento", "Sacramento (Broadway)", "500"),
-    ("Sacramento", "Sacramento (South)", "603"),
-    ("Sacramento", "Woodland", "535"),
-    ("Vallée Centrale", "Bakersfield", "511"),
-    ("Vallée Centrale", "Fresno", "505"),
-    ("Vallée Centrale", "Lodi", "595"),
-    ("Vallée Centrale", "Modesto", "536"),
-    ("Vallée Centrale", "Stockton", "517"),
-    ("Vallée Centrale", "Visalia", "519"),
-]
+FIELD_OFFICE_MAP: Dict[str, Dict[str, int]] = {
+    "Baie de San Francisco": {
+        "Corte Madera": 525,
+        "Daly City": 599,
+        "El Cerrito": 585,
+        "Fremont": 643,
+        "Hayward": 521,
+        "Los Gatos": 641,
+        "Novato": 647,
+        "Oakland (Claremont)": 501,
+        "Oakland (Coliseum)": 604,
+        "Pittsburg": 651,
+        "Pleasanton": 639,
+        "Redwood City": 542,
+        "San Francisco": 503,
+        "San Jose (Alma)": 516,
+        "San Jose (Driver License Center)": 607,
+        "San Mateo": 594,
+        "Santa Clara": 632,
+        "Vallejo": 538
+    },
+    "Grand Los Angeles": {
+        "Arleta": 628,
+        "Bellflower": 610,
+        "Culver City": 514,
+        "Glendale": 540,
+        "Hollywood": 633,
+        "Inglewood": 544,
+        "Long Beach": 507,
+        "Los Angeles (Hope St)": 502,
+        "Montebello": 531,
+        "Pasadena": 510,
+        "Santa Monica": 548,
+        "Torrance": 592,
+        "West Covina": 591
+    },
+    "Orange County / Sud": {
+        "Costa Mesa": 627,
+        "Fullerton": 547,
+        "Laguna Hills": 642,
+        "Santa Ana": 529,
+        "San Clemente": 652,
+        "Westminster": 623,
+        "Chula Vista": 609,
+        "El Cajon": 549,
+        "Oceanside": 593,
+        "San Diego (Clairemont)": 618,
+        "San Diego (Normal St)": 504,
+        "San Marcos": 637,
+        "San Ysidro": 649,
+        "Auburn": 533,
+        "Chico": 534,
+        "Eureka": 522,
+        "Redding": 550,
+        "Roseville": 635,
+        "Sacramento (Broadway)": 500,
+        "Sacramento (South)": 603,
+        "Woodland": 535
+    },
+    "Vallée Centrale": {
+        "Bakersfield": 511,
+        "Fresno": 505,
+        "Lodi": 595,
+        "Modesto": 536,
+        "Stockton": 517,
+        "Visalia": 519
+    }
+}
 
-def get_field_office_options() -> List[str]:
-    """
-    Retourne la liste d'options pour le selectbox Field Office.
-    Chaque option est affichée sous la forme : "Région — Ville (Code)"
-    La première option est vide (aucun choix).
-    """
-    opts = [""]  # option vide pour ne rien sélectionner par défaut
-    for region, city, code in FIELD_OFFICES:
-        label = f"{region} — {city} ({code})"
-        opts.append(label)
-    return opts
+def get_region_list() -> List[str]:
+    """Retourne la liste des régions (triée) avec une option vide en premier."""
+    regions = sorted(FIELD_OFFICE_MAP.keys())
+    return [""] + regions
+
+def get_cities_for_region(region: str) -> List[str]:
+    """Retourne la liste des villes pour une région donnée (triée), avec option vide."""
+    if not region or region not in FIELD_OFFICE_MAP:
+        return [""]
+    cities = sorted(FIELD_OFFICE_MAP[region].keys())
+    return [""] + cities
+
+def get_field_office_code(region: str, city: str) -> Optional[str]:
+    """Retourne le code (string) pour la paire region/city, ou None si non sélectionné."""
+    try:
+        if region and city:
+            code = FIELD_OFFICE_MAP[region].get(city)
+            if code is not None:
+                return str(code)
+    except Exception:
+        pass
+    return None
 
 # -------------------------
 # ZIP DB helpers (chargement paresseux)
@@ -190,7 +210,7 @@ def format_date(dt: datetime.date) -> str:
 def generate_random_id() -> str:
     return hashlib.sha1(str(random.random()).encode()).hexdigest()[:10]
 
-# Neutralisation de toute inférence automatique de field_office
+# Neutralisation de toute inférence automatique de field_office (ne sera pas utilisée)
 def infer_field_office(zip_code: str, city: str) -> str:
     return ""
 
@@ -205,8 +225,9 @@ def build_payload(data: Dict[str, str]) -> Dict[str, str]:
     payload["city"] = data.get("city", "")
     payload["state"] = data.get("state", "")
     payload["zip"] = data.get("zip", "")
-    # Field office : valeur fournie par l'utilisateur via le menu déroulant (ou vide)
+    # Field office : stocker le code (string) si sélectionné, sinon vide
     payload["field_office"] = data.get("field_office", "") or ""
+    payload["field_office_label"] = data.get("field_office_label", "") or ""
     payload["license_number"] = data.get("license_number", generate_random_id())
     payload["issue_date"] = data.get("issue_date", format_date(datetime.date.today()))
     payload["expiry_date"] = data.get("expiry_date", format_date(datetime.date.today() + datetime.timedelta(days=365*5)))
@@ -314,7 +335,8 @@ def render_preview_card(payload: Dict[str, str], photo_b64: Optional[str] = None
     addr = payload.get("address", "")
     city = payload.get("city", "")
     zipc = payload.get("zip", "")
-    field_office = payload.get("field_office", "")
+    field_office_label = payload.get("field_office_label", "")
+    field_office_code = payload.get("field_office", "")
     issue = payload.get("issue_date", "")
     expiry = payload.get("expiry_date", "")
     class_ = payload.get("class", "")
@@ -326,6 +348,8 @@ def render_preview_card(payload: Dict[str, str], photo_b64: Optional[str] = None
         photo_html = f'<img src="data:image/png;base64,{photo_b64}" style="width:88px;height:88px;border-radius:8px;object-fit:cover;border:2px solid rgba(255,255,255,0.06)"/>'
     else:
         photo_html = '<div style="width:88px;height:88px;border-radius:8px;background:linear-gradient(135deg,#0ea5a4,#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:700;color:white">IMG</div>'
+
+    fo_display = field_office_label or ("Code: " + field_office_code if field_office_code else "—")
 
     html = f"""
     <div class="preview-card">
@@ -344,7 +368,7 @@ def render_preview_card(payload: Dict[str, str], photo_b64: Optional[str] = None
       </div>
       <div class="license-row">
         <div>FIELD OFFICE</div>
-        <div style="max-width:180px;text-align:right;color:#dbeafe">{field_office or '—'}</div>
+        <div style="max-width:180px;text-align:right;color:#dbeafe">{fo_display}</div>
       </div>
       <div class="license-row" style="margin-top:10px">
         <div>ISSUE: {issue}</div>
@@ -365,7 +389,7 @@ def main():
       <div class="logo">DL</div>
       <div>
         <div class="title">Générateur officiel de permis Californien</div>
-        <div class="subtitle">Field Office via menu déroulant — non lié au ZIP/ville</div>
+        <div class="subtitle">Field Office via menu déroulant (region → ville) — indépendant du ZIP/ville</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -377,10 +401,10 @@ def main():
     pdf417_scale = st.sidebar.slider("Échelle PDF417", min_value=1, max_value=6, value=3)
     enable_aamva = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)", value=False)
     st.sidebar.markdown("---")
-    st.sidebar.markdown("Le champ Field Office est un menu déroulant indépendant du ZIP/ville.")
+    st.sidebar.markdown("Le champ Field Office est sélectionné manuellement via région puis ville. Il n'est pas inféré depuis le ZIP/ville.")
 
     zip_db = get_zip_db()
-    field_office_options = get_field_office_options()
+    regions = get_region_list()
 
     with st.form("dl_form", clear_on_submit=False):
         left, right = st.columns([2,1])
@@ -414,11 +438,16 @@ def main():
                 st.markdown(f"<div class='small-muted'>Ville détectée: <strong>{detected_city}</strong> · État: <strong>{detected_state}</strong></div>", unsafe_allow_html=True)
             city = st.text_input("Ville (si ZIP inconnu ou correction)", value=detected_city)
             state = st.text_input("État", value=detected_state or "CA")
-            # Field office via menu déroulant (indépendant)
-            st.markdown("<div style='margin-top:8px' class='small-muted'>Field Office (sélectionnez manuellement) :</div>", unsafe_allow_html=True)
-            field_office_choice = st.selectbox("Field Office", options=field_office_options, index=0)
-            # stocker la valeur brute sélectionnée (label)
-            field_office = field_office_choice or ""
+
+            # Field Office : region -> city select (indépendant du ZIP/ville)
+            st.markdown("<div style='margin-top:8px' class='small-muted'>Field Office (sélectionnez la région puis la ville) :</div>", unsafe_allow_html=True)
+            selected_region = st.selectbox("Région Field Office", options=regions, index=0)
+            cities = get_cities_for_region(selected_region)
+            selected_city = st.selectbox("Ville Field Office", options=cities, index=0)
+            # obtenir le code correspondant (ou None)
+            fo_code = get_field_office_code(selected_region, selected_city)
+            # label lisible pour l'aperçu
+            fo_label = f"{selected_region} — {selected_city} ({fo_code})" if selected_region and selected_city and fo_code else ""
             st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown('<div class="card" style="margin-top:12px">', unsafe_allow_html=True)
@@ -466,7 +495,8 @@ def main():
                 "city": city or "",
                 "state": state or "",
                 "zip": zip_code or "",
-                "field_office": field_office or "",
+                "field_office": fo_code or "",
+                "field_office_label": fo_label or "",
                 "license_number": license_number.strip() or generate_random_id(),
                 "issue_date": issue_date or format_date(datetime.date.today()),
                 "expiry_date": expiry_date or format_date(datetime.date.today() + datetime.timedelta(days=365*5)),
@@ -507,8 +537,9 @@ def main():
             "city": normalize_name(city),
             "state": normalize_name(state),
             "zip": zip_code.strip(),
-            # Field office : valeur sélectionnée dans le menu déroulant (ou vide)
-            "field_office": field_office,
+            # Field office : stocker le code (string) et le label lisible
+            "field_office": fo_code or "",
+            "field_office_label": fo_label or "",
             "height": height,
             "weight": weight,
             "eye_color": eye_color,
@@ -536,7 +567,7 @@ def main():
             except Exception:
                 pass
 
-        st.success("Génération terminée — le Field Office utilisé est celui sélectionné dans le menu déroulant.")
+        st.success("Génération terminée — le Field Office utilisé est le code sélectionné dans le menu déroulant.")
         st.subheader("Payload / Données")
         st.json(payload)
 
