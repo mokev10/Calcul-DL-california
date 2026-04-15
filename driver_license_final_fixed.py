@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Version complète prête à coller
-# - Ajout d'un bouton d'en-tête pour basculer Dark Mode / Light Mode
-# - Intégration des icônes fournies
-# - Injection CSS via components.html (hauteur 0) pour éviter l'affichage du CSS en clair
-# - Aucune modification de la logique métier (liaison ZIP <-> Ville, Field Office indépendant, génération AAMVA/PDF417/PDF)
-# - Toutes les clés Streamlit restent uniques
+# - Correction: évite l'erreur liée à st.experimental_rerun en l'encadrant
+# - Ajout d'un fallback si st.experimental_rerun n'est pas disponible
+# - Bouton d'en-tête pour basculer Dark/Light mode (icônes intégrées)
+# - CSS injecté via components.html (hauteur 0) pour éviter l'affichage du CSS en clair
+# - Liaison bidirectionnelle ZIP <-> Ville conservée
+# - Field Office indépendant
+# - Placeholder "Choisir une option"
+# - Aucune modification de la logique métier autre que la gestion sûre du rerun
 
 import base64
 import datetime
@@ -459,26 +462,26 @@ if enable_validator and not _AAMVA_UTILS_AVAILABLE:
 # -------------------------
 # Header with theme toggle (icons integrated)
 # -------------------------
-# Build a header row with title on left and theme toggle on right
 header_col1, header_col2 = st.columns([8, 2])
 with header_col1:
     st.markdown("<h2 style='margin:0;padding:0'>Générateur officiel de permis CA</h2>", unsafe_allow_html=True)
 
 with header_col2:
-    # Show current icon and a toggle button
     theme = st.session_state.get("theme", "light")
     icon_url = ICON_DARK if theme == "dark" else ICON_LIGHT
-    # Display icon and a small toggle button
     cols = st.columns([1, 2])
     with cols[0]:
         st.image(icon_url, width=22)
     with cols[1]:
-        # single button to toggle theme
+        # Toggle button: change theme, inject CSS, try to rerun safely
         if st.button("Basculer thème", key="ui_toggle_theme"):
             st.session_state["theme"] = "dark" if st.session_state.get("theme", "light") == "light" else "light"
             inject_theme_css()
-            # force rerun to apply immediately
-            st.experimental_rerun()
+            # Try to rerun; if not available or raises, show a friendly message instead of crashing
+            try:
+                st.experimental_rerun()
+            except Exception:
+                st.success("Thème changé. Si l'interface ne s'actualise pas automatiquement, rechargez la page (Ctrl+R).")
 
 # -------------------------
 # Callbacks to keep ZIP <-> City linked (bidirectional)
