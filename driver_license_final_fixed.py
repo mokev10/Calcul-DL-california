@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
-# Version complète prête à coller
-# - Bouton d'en-tête pour basculer Dark/Light mode utilisant directement les icônes fournies
-# - Le bouton est un lien qui recharge la page avec un paramètre ?theme=dark ou ?theme=light
-# - Injection CSS via components.html (hauteur 0) pour éviter l'affichage du CSS en clair
-# - Aucune modification de la logique métier (liaison ZIP <-> Ville, Field Office indépendant, génération AAMVA/PDF417/PDF)
-# - Évite l'utilisation de st.experimental_rerun pour prévenir l'erreur précédente
+# Version finale corrigée — injection CSS sûre et toggle thème via icônes (sans texte)
+# - Evite AttributeError sur experimental_get_query_params / experimental_rerun
+# - Icônes fournies utilisées comme contrôles de thème (sans texte)
+# - Fallbacks robustes pour environnements Streamlit variés
+# - Ne modifie pas la logique métier (ZIP <-> Ville, Field Office, génération AAMVA/PDF417/PDF)
 
 import base64
 import datetime
@@ -407,27 +406,30 @@ div[data-testid="stProgressBar"] > div > div {
 """
 
 # -------------------------
-# Inject initial theme into session_state
+# Theme initialization (safe)
 # -------------------------
-# Allow theme selection via query param to avoid experimental_rerun issues.
-params = st.experimental_get_query_params()
+# Try to read query params only if the function exists; otherwise ignore.
+try:
+    params = st.experimental_get_query_params()
+except Exception:
+    params = {}
+
 if "theme" in params:
     qtheme = params.get("theme", ["light"])[0]
     if qtheme in ("light", "dark"):
         st.session_state["theme"] = qtheme
 
 if "theme" not in st.session_state:
-    st.session_state["theme"] = "light"  # default
+    st.session_state["theme"] = "light"
 
 def inject_theme_css():
-    """Inject CSS according to current theme using components.html (height=0)."""
     theme = st.session_state.get("theme", "light")
     css = LIGHT_CSS if theme == "light" else DARK_CSS
     full = f"<style>{css}\n{COMMON_CSS}</style>"
-    # inject invisibly (height=0) to avoid showing raw CSS
+    # inject invisibly (height=0)
     components.html(full, height=0)
 
-# inject at start
+# initial injection
 inject_theme_css()
 
 # -------------------------
@@ -455,45 +457,61 @@ if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
 
 # -------------------------
-# Header with theme toggle (icons integrated as direct clickable icons)
+# Header with theme icons only (clickable)
 # -------------------------
-# Build a header row with title on left and theme icon (clickable) on right.
 header_col1, header_col2 = st.columns([8, 2])
 with header_col1:
     st.markdown("<h2 style='margin:0;padding:0'>Générateur officiel de permis CA</h2>", unsafe_allow_html=True)
 
 with header_col2:
-    # Determine current theme and the target theme for the toggle link
     current_theme = st.session_state.get("theme", "light")
+    # target theme is the one that will be activated when clicking the icon
     target_theme = "dark" if current_theme == "light" else "light"
-    # Choose icon to display: show the icon representing the target theme (so clicking it switches to that mode)
-    # The user requested: "qui c'est light mode donc c'est normal mais quand c'est dark donc c'est le mode sombre"
-    # We'll display the icon of the mode that will be activated when clicked.
     icon_to_show = ICON_DARK if target_theme == "dark" else ICON_LIGHT
 
-    # Build a link that reloads the page with ?theme=target_theme
-    # Preserve other query params if present
-    base_qs = st.experimental_get_query_params()
-    # Build new query string keeping other params except 'theme'
-    new_params = {k: v for k, v in base_qs.items() if k != "theme"}
-    new_params["theme"] = target_theme
-    # Construct query string
-    qs_parts = []
-    for k, vals in new_params.items():
-        for v in vals:
-            qs_parts.append(f"{k}={v}")
-    qs = "&".join(qs_parts)
-    href = f"?{qs}" if qs else f"?theme={target_theme}"
+    # Try to build a query-string link if possible; otherwise fallback to a server-side button
+    can_use_query = True
+    try:
+        # check presence of experimental_get_query_params (already attempted above)
+        _ = st.experimental_get_query_params  # type: ignore
+    except Exception:
+        can_use_query = False
 
-    # Render the clickable icon (no extra text)
-    html_icon = f"""
-    <div class="header-toggle" style="display:flex;justify-content:flex-end;">
-      <a href="{href}" title="Basculer en {target_theme} mode">
-        <img src="{icon_to_show}" alt="theme-toggle" />
-      </a>
-    </div>
-    """
-    st.markdown(html_icon, unsafe_allow_html=True)
+    if can_use_query:
+        # preserve other params if any
+        base_qs = params or {}
+        new_params = {k: v for k, v in base_qs.items() if k != "theme"}
+        new_params["theme"] = target_theme
+        qs_parts = []
+        for k, vals in new_params.items():
+            for v in vals:
+                qs_parts.append(f"{k}={v}")
+        qs = "&".join(qs_parts)
+        href = f"?{qs}" if qs else f"?theme={target_theme}"
+        html_icon = f"""
+        <div class="header-toggle" style="display:flex;justify-content:flex-end;">
+          <a href="{href}" title="Basculer en {target_theme} mode">
+            <img src="{icon_to_show}" alt="theme-toggle" />
+          </a>
+        </div>
+        """
+        st.markdown(html_icon, unsafe_allow_html=True)
+    else:
+        # Fallback: render icon and a tiny invisible button under it that toggles server-side
+        # We render the icon and a labeled button with aria-hidden label (no visible text)
+        html_icon = f"""
+        <div class="header-toggle" style="display:flex;justify-content:flex-end;align-items:center;">
+          <img src="{icon_to_show}" alt="theme-toggle" style="margin-right:8px;" />
+        </div>
+        """
+        st.markdown(html_icon, unsafe_allow_html=True)
+        # Provide a small button (no text) to toggle theme server-side
+        # Use a short label that is visually minimal
+        if st.button(" ", key="ui_toggle_theme_icon"):
+            st.session_state["theme"] = target_theme
+            inject_theme_css()
+            # Inform user to reload if necessary (safe fallback)
+            st.success(f"Thème changé en {target_theme}. Si l'interface ne s'actualise pas, rechargez la page (Ctrl+R).")
 
 # -------------------------
 # Callbacks to keep ZIP <-> City linked (bidirectional)
@@ -518,6 +536,8 @@ def on_city_change():
 # -------------------------
 # Main UI form (ZIP and City linked; Field Office independent)
 # -------------------------
+st.title("")  # title already rendered above
+
 ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
 fn = st.text_input("Prénom", "ROSA", key="ui_fn")
 sex = st.selectbox("Sexe", ["M", "F"], key="ui_sex")
