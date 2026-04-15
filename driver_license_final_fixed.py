@@ -1,15 +1,16 @@
-# theme_module_final.py
-# Module complet à coller en tout début de votre script Streamlit (avant tout widget)
+# theme_module_final_stable.py
+# Module complet et autonome à coller en tout début de votre script Streamlit (avant tout widget).
 # - State-aware (st.session_state), initialisé sur 'dark'
-# - Injection CSS via st.markdown(unsafe_allow_html=True) avec :root (--bg-color, --text-color, --border-color)
-# - Ciblage explicite .stApp, .stButton, .stTextInput, .stSelectbox, section[data-testid="stSidebar"]
+# - Injection CSS sûre via st.markdown(unsafe_allow_html=True) avec :root (--bg-color, --text-color, --border-color)
+# - Ciblage explicite des sélecteurs .stApp, .stButton, .stTextInput, .stSelectbox, section[data-testid="stSidebar"]
 # - Toggle sans texte : icône seule (Icons8) appliquée au bouton via CSS background-image
-# - Robust toggle flow : pas d'appel direct à st.rerun() dans le callback (évite le "no-op"); rerun déclenché en dehors du callback si nécessaire
+# - Pas d'appel à st.rerun() dans le callback (Streamlit rerun automatique après interaction)
+# - Utilise f-strings avec doubles accolades pour éviter les KeyError / erreurs de formatage
 
 import streamlit as st
 
 # -------------------------
-# Assets (constantes strictes)
+# Assets (constantes strictes demandées)
 # -------------------------
 ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
 ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
@@ -20,20 +21,15 @@ ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/exter
 if "theme" not in st.session_state:
     st.session_state["theme"] = "dark"  # valeur par défaut demandée
 
-# Flag utilisé pour demander un rerun en dehors du callback (évite st.rerun() dans callback)
-if "theme_pending_rerun" not in st.session_state:
-    st.session_state["theme_pending_rerun"] = False
-
 # -------------------------
-# Toggle callback (ne fait que muter l'état)
+# Toggle callback (mutates state only)
 # -------------------------
 def toggle_theme_callback():
     """
-    Callback minimal : inverse le thème et marque qu'un rerun est souhaité.
-    Ne fait PAS appel à st.rerun() directement (évite le no-op dans certains environnements).
+    Callback minimal : inverse le thème.
+    Ne fait PAS appel à st.rerun() ni à st.experimental_rerun() — Streamlit relancera le script automatiquement.
     """
     st.session_state["theme"] = "light" if st.session_state["theme"] == "dark" else "dark"
-    st.session_state["theme_pending_rerun"] = True
 
 # -------------------------
 # CSS injection (Atomic :root + targeted selectors)
@@ -41,9 +37,9 @@ def toggle_theme_callback():
 def inject_theme_css():
     """
     Injecte le CSS dynamique via st.markdown(unsafe_allow_html=True).
-    Utilise f-strings et double-accolades pour inclure des blocs CSS littéraux.
+    Utilise f-strings et double-accolades {{ }} pour inclure des blocs CSS littéraux.
     Définit :root variables (--bg-color, --text-color, --border-color).
-    Cible explicitement les sélecteurs Streamlit demandés.
+    Cible explicitement .stApp, .stButton, .stTextInput, .stSelectbox, section[data-testid="stSidebar"].
     Le bouton toggle est ciblé via button[title="theme-toggle"] (le help du bouton).
     """
     theme = st.session_state.get("theme", "dark")
@@ -53,17 +49,16 @@ def inject_theme_css():
         text = "#e6eef8"
         border = "rgba(255,255,255,0.06)"
         accent = "#60a5fa"
-        # icon shown on the button is the target mode (light) so user understands action
-        toggle_icon = ICON_LIGHT
+        toggle_icon = ICON_LIGHT  # montrer l'icône du mode cible (light)
     else:
         bg = "#f5f7fa"
         card = "#ffffff"
         text = "#0f172a"
         border = "#e6eef8"
         accent = "#2563eb"
-        toggle_icon = ICON_DARK
+        toggle_icon = ICON_DARK  # montrer l'icône du mode cible (dark)
 
-    # Build CSS with f-string; use double braces {{ }} to include literal braces in CSS blocks
+    # Note: dans un f-string, pour inclure une accolade littérale on écrit '{{' ou '}}'.
     css = f"""
     <style>
     :root {{
@@ -74,18 +69,18 @@ def inject_theme_css():
       --accent-color: {accent};
     }}
 
-    /* Apply background and text color to Streamlit app container only */
+    /* Appliquer le fond et la couleur du texte à la zone principale Streamlit uniquement */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {{
       background-color: var(--bg-color) !important;
       color: var(--text-color) !important;
     }}
 
-    /* Ensure markdown and text inherit readable color */
+    /* Markdown / textes */
     .stMarkdown, .stText, [data-testid="stMarkdownContainer"], .css-1d391kg {{
       color: var(--text-color) !important;
     }}
 
-    /* Card utility */
+    /* Cartes utilitaires */
     .card {{
       background-color: var(--card-bg) !important;
       color: var(--text-color) !important;
@@ -94,7 +89,7 @@ def inject_theme_css():
       padding: 12px !important;
     }}
 
-    /* Buttons: target Streamlit button elements explicitly */
+    /* Boutons Streamlit (général) */
     .stButton>button, .stDownloadButton>button {{
       background: linear-gradient(135deg, var(--accent-color), #1e40af) !important;
       color: #ffffff !important;
@@ -105,7 +100,7 @@ def inject_theme_css():
       box-shadow: none !important;
     }}
 
-    /* Text inputs: ensure background, text and border override */
+    /* Inputs textuels */
     .stTextInput>div>div>input,
     .stNumberInput>div>div>input,
     textarea {{
@@ -116,7 +111,7 @@ def inject_theme_css():
       padding: 8px 10px !important;
     }}
 
-    /* Selectbox: visible select control */
+    /* Selectbox */
     .stSelectbox>div>div>select, select {{
       background-color: var(--card-bg) !important;
       color: var(--text-color) !important;
@@ -126,7 +121,7 @@ def inject_theme_css():
       text-overflow: ellipsis !important;
     }}
 
-    /* Sidebar explicit targeting */
+    /* Sidebar ciblée */
     section[data-testid="stSidebar"] {{
       background: linear-gradient(180deg,#071033,#0f172a) !important;
       color: var(--text-color) !important;
@@ -136,14 +131,14 @@ def inject_theme_css():
       color: var(--text-color) !important;
     }}
 
-    /* Prevent vertical text rendering issues: force horizontal flow */
+    /* Forcer flux horizontal (évite texte vertical) */
     .stApp, .stApp * {{
       writing-mode: horizontal-tb !important;
       -webkit-writing-mode: horizontal-tb !important;
       transform: none !important;
     }}
 
-    /* Header toggle container (flex alignment) */
+    /* Conteneur flex pour le toggle (alignement à droite) */
     .header-toggle-container {{
       display: flex !important;
       justify-content: flex-end !important;
@@ -151,8 +146,8 @@ def inject_theme_css():
       gap: 8px !important;
     }}
 
-    /* Style the specific toggle button by title attribute (help text) so other buttons are unaffected.
-       The button will have title="theme-toggle". We set the icon as background-image so the button shows only the icon. */
+    /* Cibler uniquement le bouton toggle via son title (help) pour éviter d'impacter d'autres boutons.
+       Le bouton aura title="theme-toggle". On applique l'icône en background-image. */
     button[title="theme-toggle"] {{
       width: 36px !important;
       height: 36px !important;
@@ -169,7 +164,7 @@ def inject_theme_css():
       cursor: pointer !important;
     }}
 
-    /* Focus outline for accessibility */
+    /* Focus visible pour accessibilité */
     button[title="theme-toggle"]:focus {{
       outline: 2px solid var(--accent-color) !important;
       outline-offset: 2px !important;
@@ -181,28 +176,11 @@ def inject_theme_css():
     }}
     </style>
     """
-    # Inject CSS into the DOM
+    # Injection sûre
     st.markdown(css, unsafe_allow_html=True)
 
-# Inject CSS now (before widgets)
+# Inject initial CSS BEFORE rendering widgets
 inject_theme_css()
-
-# -------------------------
-# If a toggle was requested in a previous run, trigger a rerun now (outside callback)
-# This avoids calling st.rerun() inside the callback (which can be a no-op).
-# -------------------------
-if st.session_state.get("theme_pending_rerun", False):
-    # Clear the flag and attempt a rerun using the most compatible API
-    st.session_state["theme_pending_rerun"] = False
-    try:
-        rerun_fn = getattr(st, "rerun", None)
-        if callable(rerun_fn):
-            rerun_fn()
-        else:
-            st.experimental_rerun()
-    except Exception:
-        # If rerun is not permitted in this environment, rely on the injected CSS and subsequent interactions.
-        pass
 
 # -------------------------
 # Header & Toggle UI (st.columns([0.9, 0.1]) as requested)
@@ -215,15 +193,21 @@ with left_col:
     )
 
 with right_col:
-    # Place the toggle inside a flex container (CSS ensures alignment)
+    # Conteneur flex (CSS gère l'alignement)
     st.markdown('<div class="header-toggle-container"></div>', unsafe_allow_html=True)
-    # The button label is intentionally empty; help parameter sets title="theme-toggle" for CSS targeting
-    # Use on_click to mutate state only (no direct rerun inside callback)
-    if st.button("", key="__theme_toggle_button__", help="theme-toggle", on_click=toggle_theme_callback):
-        # Some Streamlit versions call on_click synchronously and then continue; we do not call rerun here.
-        pass
+    # Bouton sans texte ; help="theme-toggle" permet de cibler le bouton en CSS (title attribute)
+    # on_click ne fait que muter le state ; Streamlit relancera le script automatiquement après l'interaction.
+    st.button("", key="__theme_toggle_button__", help="theme-toggle", on_click=toggle_theme_callback)
 
 # -------------------------
-# From here, continue with the rest of your application code.
-# The theme module above is self-contained and safe to place at the very top of your script.
+# NOTE SUR LE FLUX
+# -------------------------
+# - Le callback toggle_theme_callback inverse st.session_state["theme"] uniquement.
+# - Streamlit redémarre le script automatiquement après l'interaction, donc inject_theme_css()
+#   sera ré-exécuté en début de script avec la nouvelle valeur de st.session_state["theme"].
+# - Aucun appel à st.rerun() n'est nécessaire ni effectué dans le callback (évite le "no-op").
+#
+# -------------------------
+# À partir d'ici, collez le reste de votre application (formulaires, génération PDF, etc.).
+# Le module de thème est autonome et doit rester en tête du fichier.
 # -------------------------
