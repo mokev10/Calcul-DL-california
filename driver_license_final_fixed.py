@@ -1,38 +1,36 @@
-# THEME TOGGLE SAFE BLOCK — Coller intégralement en haut du script (avant tout widget)
-# - Gestion du thème via st.session_state
-# - Injection CSS ciblée et sûre (évite sélecteurs trop larges)
-# - Compatibilité st.button, st.text_input, st.selectbox
-# - Toggle discret en en-tête utilisant les icônes fournies
+# THEME TOGGLE SAFE BLOCK — Coller en tout début du script (avant tout widget)
+# - Injection CSS ciblée et sûre (n'écrase pas tout le DOM)
+# - st.session_state pour persister le thème
+# - Toggle discret en en-tête avec icônes fournies
+# - Affiche un en-tête visible immédiatement pour vérifier le rendu
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 # Icônes fournies
 ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
 ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
 
-# Initialisation du thème dans la session
+# Initialisation du thème
 if "theme" not in st.session_state:
-    st.session_state["theme"] = "light"  # valeur par défaut
+    st.session_state["theme"] = "light"
 
 def toggle_theme():
-    """Basculer le thème et réinjecter le CSS. Essayer de rerun si possible."""
     st.session_state["theme"] = "dark" if st.session_state["theme"] == "light" else "light"
     inject_theme_css(st.session_state["theme"])
     try:
         st.experimental_rerun()
     except Exception:
-        # fallback non bloquant : on met un petit flag query param si possible
+        # fallback non bloquant : afficher un petit message
+        st.toast = getattr(st, "toast", None)
         try:
-            st.experimental_set_query_params(_theme_changed=st.session_state["theme"])
+            st.success(f"Thème changé en {st.session_state['theme']}. Rechargez la page si nécessaire (Ctrl+R).")
         except Exception:
             pass
 
 def inject_theme_css(theme: str) -> None:
     """
-    Injecte du CSS ciblé et sûr.
-    - Ne pas utiliser des sélecteurs globaux qui affectent tout le DOM.
-    - Appliquer le fond sur .stApp et cibler explicitement widgets et markdown.
+    Injection CSS ciblée et sûre.
+    Appeler AVANT la création des widgets pour garantir l'application.
     """
     if theme == "dark":
         vars_css = """
@@ -59,26 +57,16 @@ def inject_theme_css(theme: str) -> None:
         }
         """
 
-    # CSS ciblé — évite d'écraser tout le DOM
+    # CSS ciblé — n'utilise pas html, body global pour éviter de masquer l'UI
     common_css = r"""
-    /* Appliquer le fond uniquement à la zone principale Streamlit */
-    .stApp, .main, [data-testid="stAppViewContainer"] {
+    /* Appliquer le fond à la zone Streamlit principale */
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
       background: var(--bg) !important;
-    }
-
-    /* Conteneurs personnalisés (cartes) */
-    .card {
-      background: var(--card-bg) !important;
-      color: var(--text) !important;
-      border: 1px solid var(--control-border) !important;
-      border-radius: 10px !important;
-      padding: 12px !important;
-    }
-
-    /* Markdown / textes explicatifs */
-    .stMarkdown, .stText, .css-1d391kg, [data-testid="stMarkdownContainer"] {
       color: var(--text) !important;
     }
+
+    /* Titres / markdown */
+    .stMarkdown, .stText, [data-testid="stMarkdownContainer"] { color: var(--text) !important; }
 
     /* Inputs textuels */
     .stTextInput>div>div>input,
@@ -89,7 +77,6 @@ def inject_theme_css(theme: str) -> None:
       border: 1px solid var(--control-border) !important;
       border-radius: 8px !important;
       padding: 8px 10px !important;
-      box-shadow: none !important;
     }
 
     /* Selectbox visible */
@@ -99,80 +86,60 @@ def inject_theme_css(theme: str) -> None:
       border: 1px solid var(--control-border) !important;
       border-radius: 8px !important;
       padding: 6px 8px !important;
-      text-overflow: ellipsis !important;
     }
 
-    /* Placeholder / options */
-    .stSelectbox select option, select option {
-      color: var(--text) !important;
-      background: var(--control-bg) !important;
-    }
-
-    /* Boutons Streamlit */
+    /* Boutons */
     .stButton>button, .stDownloadButton>button {
       background: linear-gradient(135deg,var(--accent),#1e40af) !important;
       color: #ffffff !important;
-      border: none !important;
       border-radius: 8px !important;
       padding: 8px 12px !important;
+      border: none !important;
       font-weight: 600 !important;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.08) !important;
     }
 
-    /* Sidebar (force lisibilité) */
-    section[data-testid="stSidebar"] {
-      background: linear-gradient(180deg,#071033,#0f172a) !important;
-      color: var(--text) !important;
-    }
-    section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] .css-1d391kg {
-      color: var(--text) !important;
-    }
+    /* Sidebar (lisibilité) */
+    section[data-testid="stSidebar"] { background: linear-gradient(180deg,#071033,#0f172a) !important; color: var(--text) !important; }
 
     /* Expander / panels */
-    .stExpander {
-      background: var(--card-bg) !important;
-      border-radius: 8px !important;
-      border: 1px solid var(--control-border) !important;
-    }
+    .stExpander { background: var(--card-bg) !important; border-radius: 8px !important; border: 1px solid var(--control-border) !important; }
 
-    /* Aperçu SVG / PDF417 */
-    [data-testid="stMarkdownContainer"] > div > div > svg {
-      max-width: 100% !important;
-      height: auto !important;
-      display: block !important;
-      margin: 8px auto !important;
-    }
+    /* Aperçu SVG */
+    [data-testid="stMarkdownContainer"] > div > div > svg { max-width:100% !important; height:auto !important; display:block !important; margin:8px auto !important; }
 
     /* Header toggle area */
     .header-toggle { display:flex; justify-content:flex-end; align-items:center; gap:8px; }
-    .header-toggle img.theme-icon { width:22px; height:22px; border-radius:6px; display:inline-block; }
+    .header-toggle img { width:22px; height:22px; border-radius:6px; }
 
-    /* Small screens */
     @media (max-width:800px) {
-      .card { width:92% !important; padding:10px !important; }
-      .header-toggle img.theme-icon { width:20px; height:20px; }
+      .header-toggle img { width:20px; height:20px; }
     }
     """
 
     full_css = f"<style>{vars_css}\n{common_css}</style>"
-    # Injection invisible (height=0) pour ne pas afficher le CSS brut
-    components.html(full_css, height=0)
+    # Injection via st.markdown (plus sûre pour éviter certains comportements de components.html)
+    st.markdown(full_css, unsafe_allow_html=True)
 
 # Injecter le CSS initial AVANT la création des widgets
 inject_theme_css(st.session_state["theme"])
 
-# --- Toggle discret en en-tête (icône cliquable) ---
-# Placer ce bloc juste après l'injection CSS et avant vos widgets principaux
-header_col_left, header_col_right = st.columns([9, 1])
-with header_col_left:
-    # Optionnel : titre principal (laisser vide si vous préférez)
-    pass
-with header_col_right:
-    current = st.session_state["theme"]
-    # Affiche l'icône du mode cible (cliquer active ce mode)
-    target = "dark" if current == "light" else "light"
-    icon_to_show = ICON_DARK if target == "dark" else ICON_LIGHT
-    # Affiche l'image (icône) et un bouton discret pour déclencher la bascule côté serveur
-    st.image(icon_to_show, width=22)
-    if st.button(" ", key="__theme_toggle_button__", help=f"Basculer en {target} mode"):
+# Affichage immédiat d'un en-tête visible pour vérifier que l'UI est rendue
+# (Si tu ne vois pas ce titre, l'app est bloquée avant d'arriver ici)
+st.markdown(
+    f"""
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-weight:700;font-size:18px;color:var(--text)">Générateur officiel de permis CA</div>
+      <div class="header-toggle">
+        <img src="{ICON_DARK if st.session_state['theme']=='light' else ICON_LIGHT}" alt="theme" />
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Toggle discret (bouton Streamlit minimal) — placer après l'en-tête si tu veux un contrôle actif
+cols = st.columns([9,1])
+with cols[1]:
+    # bouton minimal ; label " " pour rester discret
+    if st.button(" ", key="__theme_toggle_button__", help="Basculer thème"):
         toggle_theme()
