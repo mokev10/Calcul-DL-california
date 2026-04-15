@@ -1,145 +1,192 @@
-# THEME TOGGLE SAFE BLOCK — Coller en tout début du script (avant tout widget)
-# - Injection CSS ciblée et sûre (n'écrase pas tout le DOM)
-# - st.session_state pour persister le thème
-# - Toggle discret en en-tête avec icônes fournies
-# - Affiche un en-tête visible immédiatement pour vérifier le rendu
+# THEME MODULE — Atomic UI, State-Aware Dark/Light toggle for Streamlit
+# Coller intégralement en haut de votre script (avant tout widget Streamlit)
+# - ICON_DARK and ICON_LIGHT declared as requested
+# - Injection CSS via st.markdown(unsafe_allow_html=True) with :root variables (--bg-color, --text-color, --card-bg, --border-color)
+# - Targets: .stApp, .stButton, .stTextInput, .stSelectbox, section[data-testid="stSidebar"]
+# - Layout: st.columns([0.9, 0.1]) with flex container for toggle
+# - State persisted in st.session_state initialized to 'dark'
+# - Callback toggles state and attempts st.rerun() (with safe fallback)
+# - Fournit un bloc complet, prêt à coller sans coupure
 
 import streamlit as st
 
-# Icônes fournies
-ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
-ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
+# Configuration des Assets (constantes strictes demandées)
+ICON_DARK = "https://icons8.com"
+ICON_LIGHT = "https://icons8.com"
 
-# Initialisation du thème
+# --- State initialization (persist theme in session_state) ---
 if "theme" not in st.session_state:
-    st.session_state["theme"] = "light"
+    st.session_state["theme"] = "dark"  # initialize on 'dark' as requested
 
-def toggle_theme():
-    st.session_state["theme"] = "dark" if st.session_state["theme"] == "light" else "light"
-    inject_theme_css(st.session_state["theme"])
-    try:
-        st.experimental_rerun()
-    except Exception:
-        # fallback non bloquant : afficher un petit message
-        st.toast = getattr(st, "toast", None)
-        try:
-            st.success(f"Thème changé en {st.session_state['theme']}. Rechargez la page si nécessaire (Ctrl+R).")
-        except Exception:
-            pass
-
+# --- CSS injection function (uses :root variables exactly as specified) ---
 def inject_theme_css(theme: str) -> None:
     """
-    Injection CSS ciblée et sûre.
-    Appeler AVANT la création des widgets pour garantir l'application.
+    Inject dynamic :root variables and targeted CSS rules.
+    Must be called BEFORE rendering widgets to maximize effect.
     """
     if theme == "dark":
-        vars_css = """
+        root_vars = """
         :root{
-          --bg: #0b1220;
+          --bg-color: #0b1220;
+          --text-color: #e6eef8;
           --card-bg: #0f172a;
-          --text: #e6eef8;
-          --muted: #9aa6bf;
-          --accent: #60a5fa;
-          --control-bg: #0f172a;
-          --control-border: rgba(255,255,255,0.06);
+          --border-color: rgba(255,255,255,0.06);
         }
         """
     else:
-        vars_css = """
+        root_vars = """
         :root{
-          --bg: #f5f7fa;
+          --bg-color: #f5f7fa;
+          --text-color: #0f172a;
           --card-bg: #ffffff;
-          --text: #0f172a;
-          --muted: #6b7280;
-          --accent: #2563eb;
-          --control-bg: #ffffff;
-          --control-border: #e6eef8;
+          --border-color: #e6eef8;
         }
         """
 
-    # CSS ciblé — n'utilise pas html, body global pour éviter de masquer l'UI
-    common_css = r"""
-    /* Appliquer le fond à la zone Streamlit principale */
+    css = r"""
+    /* Root variables injected dynamically */
+    {root_vars}
+
+    /* Apply background and text color to Streamlit app container only */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
-      background: var(--bg) !important;
-      color: var(--text) !important;
+      background-color: var(--bg-color) !important;
+      color: var(--text-color) !important;
     }
 
-    /* Titres / markdown */
-    .stMarkdown, .stText, [data-testid="stMarkdownContainer"] { color: var(--text) !important; }
+    /* Ensure markdown and text inherit readable color */
+    .stMarkdown, .stText, [data-testid="stMarkdownContainer"], .css-1d391kg {
+      color: var(--text-color) !important;
+    }
 
-    /* Inputs textuels */
+    /* Card utility */
+    .card {
+      background-color: var(--card-bg) !important;
+      color: var(--text-color) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 10px !important;
+      padding: 12px !important;
+    }
+
+    /* Buttons: target Streamlit button elements explicitly */
+    .stButton>button, .stDownloadButton>button, .stButton button {
+      background: linear-gradient(135deg, var(--text-color), #1e40af) !important;
+      color: var(--bg-color) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: 8px !important;
+      padding: 8px 12px !important;
+      font-weight: 600 !important;
+      box-shadow: none !important;
+    }
+
+    /* Text inputs: ensure background, text and border override */
     .stTextInput>div>div>input,
     .stNumberInput>div>div>input,
     textarea {
-      background: var(--control-bg) !important;
-      color: var(--text) !important;
-      border: 1px solid var(--control-border) !important;
+      background-color: var(--card-bg) !important;
+      color: var(--text-color) !important;
+      border: 1px solid var(--border-color) !important;
       border-radius: 8px !important;
       padding: 8px 10px !important;
     }
 
-    /* Selectbox visible */
+    /* Selectbox: visible select control */
     .stSelectbox>div>div>select, select {
-      background: var(--control-bg) !important;
-      color: var(--text) !important;
-      border: 1px solid var(--control-border) !important;
+      background-color: var(--card-bg) !important;
+      color: var(--text-color) !important;
+      border: 1px solid var(--border-color) !important;
       border-radius: 8px !important;
       padding: 6px 8px !important;
+      text-overflow: ellipsis !important;
     }
 
-    /* Boutons */
-    .stButton>button, .stDownloadButton>button {
-      background: linear-gradient(135deg,var(--accent),#1e40af) !important;
-      color: #ffffff !important;
-      border-radius: 8px !important;
-      padding: 8px 12px !important;
-      border: none !important;
-      font-weight: 600 !important;
+    /* Sidebar explicit targeting */
+    section[data-testid="stSidebar"] {
+      background: linear-gradient(180deg,#071033,#0f172a) !important;
+      color: var(--text-color) !important;
+      border-right: 1px solid var(--border-color) !important;
+    }
+    section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] .css-1d391kg {
+      color: var(--text-color) !important;
     }
 
-    /* Sidebar (lisibilité) */
-    section[data-testid="stSidebar"] { background: linear-gradient(180deg,#071033,#0f172a) !important; color: var(--text) !important; }
-
-    /* Expander / panels */
-    .stExpander { background: var(--card-bg) !important; border-radius: 8px !important; border: 1px solid var(--control-border) !important; }
-
-    /* Aperçu SVG */
-    [data-testid="stMarkdownContainer"] > div > div > svg { max-width:100% !important; height:auto !important; display:block !important; margin:8px auto !important; }
-
-    /* Header toggle area */
-    .header-toggle { display:flex; justify-content:flex-end; align-items:center; gap:8px; }
-    .header-toggle img { width:22px; height:22px; border-radius:6px; }
-
-    @media (max-width:800px) {
-      .header-toggle img { width:20px; height:20px; }
+    /* Prevent vertical text rendering issues: force horizontal flow */
+    .stApp, .stApp * {
+      writing-mode: horizontal-tb !important;
+      -webkit-writing-mode: horizontal-tb !important;
+      transform: none !important;
     }
-    """
 
-    full_css = f"<style>{vars_css}\n{common_css}</style>"
-    # Injection via st.markdown (plus sûre pour éviter certains comportements de components.html)
-    st.markdown(full_css, unsafe_allow_html=True)
+    /* Flex container for header toggle (keeps icon aligned right) */
+    .header-toggle-container {
+      display: flex !important;
+      justify-content: flex-end !important;
+      align-items: center !important;
+      gap: 8px !important;
+    }
 
-# Injecter le CSS initial AVANT la création des widgets
+    /* Icon styling */
+    .theme-icon {
+      width: 22px !important;
+      height: 22px !important;
+      border-radius: 6px !important;
+      object-fit: contain !important;
+      display: inline-block !important;
+    }
+
+    /* Small screens adjustments */
+    @media (max-width: 800px) {
+      .theme-icon { width: 20px !important; height: 20px !important; }
+    }
+    """.format(root_vars=root_vars)
+
+    # Use st.markdown with unsafe_allow_html to inject CSS into the DOM
+    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+
+# --- Toggle callback that mutates state and triggers rerun ---
+def _toggle_and_rerun():
+    # flip theme
+    st.session_state["theme"] = "light" if st.session_state["theme"] == "dark" else "dark"
+    # re-inject CSS for immediate effect
+    inject_theme_css(st.session_state["theme"])
+    # attempt to rerun to ensure full re-render; try st.rerun() first as requested, fallback to experimental_rerun
+    try:
+        # Some Streamlit versions expose st.rerun; call it if available
+        rerun_fn = getattr(st, "rerun", None)
+        if callable(rerun_fn):
+            rerun_fn()
+            return
+    except Exception:
+        pass
+    try:
+        st.experimental_rerun()
+    except Exception:
+        # If rerun is unavailable, do nothing further; injected CSS will apply for subsequent interactions.
+        return
+
+
+# Inject initial CSS immediately (before widgets)
 inject_theme_css(st.session_state["theme"])
 
-# Affichage immédiat d'un en-tête visible pour vérifier que l'UI est rendue
-# (Si tu ne vois pas ce titre, l'app est bloquée avant d'arriver ici)
-st.markdown(
-    f"""
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <div style="font-weight:700;font-size:18px;color:var(--text)">Générateur officiel de permis CA</div>
-      <div class="header-toggle">
-        <img src="{ICON_DARK if st.session_state['theme']=='light' else ICON_LIGHT}" alt="theme" />
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# --- Header layout: use st.columns([0.9, 0.1]) to isolate toggle on the right ---
+left_col, right_col = st.columns([0.9, 0.1])
+with left_col:
+    # Render the app title (kept minimal to verify UI rendering)
+    st.markdown(
+        '<div style="font-weight:700;font-size:18px;color:var(--text-color)">Générateur officiel de permis CA</div>',
+        unsafe_allow_html=True,
+    )
 
-# Toggle discret (bouton Streamlit minimal) — placer après l'en-tête si tu veux un contrôle actif
-cols = st.columns([9,1])
-with cols[1]:
-    # bouton minimal ; label " " pour rester discret
-    if st.button(" ", key="__theme_toggle_button__", help="Basculer thème"):
-        toggle_theme()
+with right_col:
+    # Encapsulate toggle in a flex container (ensures right alignment)
+    st.markdown('<div class="header-toggle-container">', unsafe_allow_html=True)
+    # Display the icon image (represents the target mode visually)
+    # We show the icon corresponding to the mode that will be activated when clicked
+    target_mode = "light" if st.session_state["theme"] == "dark" else "dark"
+    icon_to_show = ICON_LIGHT if target_mode == "light" else ICON_DARK
+    # Use st.image for the icon and place the button directly next to it
+    st.image(icon_to_show, width=22)
+    # Minimal label button for an "epuré" look; label is intentionally empty string
+    if st.button("", key="__theme_switch_button__", help=f"Basculer en {target_mode} mode"):
+        _toggle_and_rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
