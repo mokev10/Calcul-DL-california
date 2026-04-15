@@ -13,8 +13,25 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="Permis CA", layout="wide", initial_sidebar_state="collapsed")
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Permis CA", layout="wide")
+
+# ReportLab (PDF)
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+    _REPORTLAB_AVAILABLE = True
+except Exception:
+    _REPORTLAB_AVAILABLE = False
+
+# pdf417gen
+_PDF417_AVAILABLE = False
+try:
+    from pdf417gen import encode, render_svg
+    _PDF417_AVAILABLE = True
+except Exception:
+    _PDF417_AVAILABLE = False
 
 # --- GESTION DU THÈME ---
 if 'theme' not in st.session_state:
@@ -23,7 +40,7 @@ if 'theme' not in st.session_state:
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-# --- LOGIQUE CSS DYNAMIQUE ---
+# ---------- CSS DYNAMIQUE ----------
 LIGHT_VARS = """
 :root {
   --bg: #f5f7fa;
@@ -44,75 +61,77 @@ DARK_VARS = """
   --muted: #9aa6bf;
   --accent: #60a5fa;
   --control-bg: #0f172a;
-  --control-border: rgba(255,255,255,0.06);
+  --control-border: rgba(255,255,255,0.1);
   --photo-bg: #1e293b;
 }
 """
 
 COMMON_CSS = """
 <style>
-html, body, [data-testid="stAppViewContainer"] {
+/* Global App Container */
+.stApp {
     background-color: var(--bg) !important;
     color: var(--text) !important;
 }
 
-/* Card Style */
+/* Card Container */
 .card {
-    width: 100%;
-    max-width: 520px;
+    width: 520px;
     margin: 18px auto;
     padding: 20px;
     border-radius: 12px;
     background: var(--card-bg);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
     border: 1px solid var(--control-border);
     color: var(--text);
 }
 
-/* Photo Placeholder */
+/* Photo Box */
 .photo {
     width: 96px;
     height: 120px;
     background: var(--photo-bg);
     border-radius: 10px;
     border: 1px dashed var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-/* Widgets Streamlit */
-.stTextInput input, .stSelectbox select, .stNumberInput input {
+/* Labels and Values */
+.label { opacity: 0.7; font-size: 11px; color: var(--muted); }
+.value { font-weight: 600; color: var(--text); }
+
+/* Inputs / Selects / Widgets */
+input[type="text"], input[type="number"], select, .stTextInput div div, .stSelectbox div div {
     background-color: var(--control-bg) !important;
     color: var(--text) !important;
     border: 1px solid var(--control-border) !important;
+    border-radius: 8px !important;
 }
 
+/* Buttons */
 .stButton button {
     background: linear-gradient(135deg, var(--accent), #1e40af) !important;
     color: white !important;
     border: none !important;
-    width: 100%;
+    border-radius: 8px !important;
+    transition: 0.3s;
 }
 
-[data-testid="stSidebar"] {
+/* Sidebar */
+section[data-testid="stSidebar"] {
     background-color: var(--card-bg) !important;
 }
 </style>
 """
 
-# Injection des styles
+# Injection CSS
 theme_vars = DARK_VARS if st.session_state.theme == 'dark' else LIGHT_VARS
 st.markdown(f"<style>{theme_vars}</style>", unsafe_allow_html=True)
 st.markdown(COMMON_CSS, unsafe_allow_html=True)
 
-# --- ENTÊTE ET TOGGLE ---
-col_t1, col_t2 = st.columns([0.9, 0.1])
-with col_t2:
-    icon = "☀️" if st.session_state.theme == "dark" else "🌙"
-    st.button(icon, on_click=toggle_theme)
-
-with col_t1:
-    st.title("Système de Permis Californie")
-
-# --- BASE DE DONNÉES ZIP ---
+# ---------- DATA ----------
 ZIP_DB = {
     "94925": {"city": "Corte Madera", "state": "CA"},
     "95818": {"city": "Sacramento", "state": "CA"},
@@ -120,49 +139,59 @@ ZIP_DB = {
     "90001": {"city": "Los Angeles", "state": "CA"},
 }
 
-# --- FORMULAIRE ---
-st.subheader("Informations du titulaire")
-col1, col2 = st.columns(2)
+# ---------- HEADER & TOGGLE ----------
+col_head, col_switch = st.columns([0.85, 0.15])
+with col_switch:
+    label = "🌙 Dark" if st.session_state.theme == "light" else "☀️ Light"
+    st.button(label, on_click=toggle_theme)
 
-with col1:
-    last_name = st.text_input("Nom de famille", "DOE")
-    first_name = st.text_input("Prénom", "JOHN")
-    zip_code = st.text_input("Code ZIP", "94102")
+with col_head:
+    st.title("California Driver License System")
 
-with col2:
-    dob = st.date_input("Date de naissance", datetime.date(1990, 1, 1))
-    sex = st.selectbox("Sexe", ["M", "F", "X"])
-    eye_color = st.selectbox("Yeux", ["BRN", "BLU", "GRN", "HAZ"])
+# ---------- FORMULAIRE ----------
+with st.expander("📝 Informations du Titulaire", expanded=True):
+    c1, c2 = st.columns(2)
+    with c1:
+        last_name = st.text_input("Nom", "DOE")
+        first_name = st.text_input("Prénom", "JOHN")
+        zip_input = st.text_input("Code ZIP", "94102")
+    with c2:
+        dob = st.date_input("Date de naissance", datetime.date(1995, 5, 20))
+        sex = st.selectbox("Sexe", ["M", "F", "X"])
+        eyes = st.selectbox("Yeux", ["BRN", "BLU", "GRN", "HAZ"])
 
-# --- APERÇU ---
+# ---------- APERÇU DE LA CARTE ----------
 st.markdown("---")
-st.subheader("Aperçu de la carte")
-
-city_info = ZIP_DB.get(zip_code, {"city": "UNKNOWN", "state": "CA"})
+city_data = ZIP_DB.get(zip_input, {"city": "UNKNOWN", "state": "CA"})
 
 st.markdown(f"""
 <div class="card">
-    <div style="display: flex; justify-content: space-between;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
-            <div class="photo"></div>
-            <p style="font-size:10px; text-align:center; margin-top:5px;">PHOTO</p>
+            <div class="photo">
+                <span style="font-size: 10px; color: var(--muted);">PHOTO</span>
+            </div>
         </div>
         <div style="flex-grow: 1; margin-left: 20px;">
-            <h2 style="margin:0; color:var(--accent);">CALIFORNIA</h2>
-            <p style="margin:0; font-weight:bold; font-size:1.2em;">DL {random.randint(1000000, 9999999)}</p>
-            <div style="margin-top:10px;">
-                <span class="label">LN:</span> <span class="value">{last_name}</span><br>
-                <span class="label">FN:</span> <span class="value">{first_name}</span><br>
+            <h2 style="margin:0; color:var(--accent); font-family: sans-serif; letter-spacing: 2px;">CALIFORNIA</h2>
+            <p style="margin:0; font-weight:bold; font-size:1.1em; color: var(--text);">DL {random.randint(1000000, 9999999)}</p>
+            
+            <div style="margin-top:12px; line-height: 1.4;">
+                <span class="label">LN:</span> <span class="value">{last_name.upper()}</span><br>
+                <span class="label">FN:</span> <span class="value">{first_name.upper()}</span><br>
                 <span class="label">DOB:</span> <span class="value">{dob}</span><br>
                 <span class="label">SEX:</span> <span class="value">{sex}</span> | 
-                <span class="label">EYES:</span> <span class="value">{eye_color}</span>
+                <span class="label">EYES:</span> <span class="value">{eyes}</span>
             </div>
-            <div style="margin-top:10px; font-size:0.9em; opacity:0.8;">
-                {city_info['city']}, {city_info['state']} {zip_code}
+            
+            <div style="margin-top:10px; font-size:0.85em; text-transform: uppercase;">
+                {city_data['city']}, {city_data['state']} {zip_input}
             </div>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-st.success(f"Mode actuel : {st.session_state.theme.upper()}")
+# ---------- FOOTER / STATUS ----------
+st.markdown("---")
+st.caption(f"Système opérationnel | Mode : {st.session_state.theme.upper()} | PDF Engine : {'OK' if _REPORTLAB_AVAILABLE else 'Missing'}")
