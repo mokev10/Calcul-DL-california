@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-# driver_license_final_fixed_final.py
-# Version finale complète — restauration des listes ZIP / villes / field offices,
-# correction de la SyntaxError sur le bloc HTML (f-string multi-ligne),
-# fallback comté -> Field Office, et UI stable.
-# Remplace entièrement ton ancien fichier par celui-ci (copier-coller).
+# driver_license_final_fixed.py
+# Version restaurée complète — toutes les listes ZIP, villes et field offices rétablies
+# Colle ce fichier en remplacement complet de celui qui a été modifié.
 
 import base64
 import datetime
@@ -35,7 +33,7 @@ try:
 except Exception:
     _PDF417_AVAILABLE = False
 
-# AAMVA utils (optionnel)
+# AAMVA utils (validation + builder continu)
 try:
     from aamva_utils import (
         validate_aamva_payload,
@@ -51,15 +49,12 @@ except Exception:
 
 GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
-# Page config (doit être appelé tôt)
-st.set_page_config(page_title="PERMIS CALIFORNIA", layout="wide")
+st.set_page_config(page_title="Permis CALIFORNIA", layout="wide")
 
-# ---------- Assets ----------
 IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
 IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
 
-# ---------- ZIP_DB (restored / extended sample) ----------
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
     "95818": {"city": "Sacramento", "state": "CA", "office": ""},
@@ -688,7 +683,6 @@ ZIP_DB: Dict[str, Dict[str, str]] = {
     "92299": {"city": "Indio", "state": "CA", "office": ""},
 }
 
-# ---------- Try to fetch extended ZIP DB (non bloquant) ----------
 def fetch_github_zipdb(url: str) -> Optional[str]:
     try:
         resp = requests.get(url, timeout=8)
@@ -737,7 +731,6 @@ if fetched:
     if parsed:
         ZIP_DB.update(parsed)
 
-# ---------- Field offices mapping (restored) ----------
 field_offices = {
     "Baie de San Francisco": {
         "Corte Madera": 525, "Daly City": 599, "El Cerrito": 585, "Fremont": 643,
@@ -770,31 +763,59 @@ for region, cities in field_offices.items():
     for city, code in cities.items():
         FIELD_OFFICE_MAP[city.upper()] = f"{region} — {city} ({code})"
 
-# ---------- County fallback data (embarquée) ----------
-ZIP_TO_COUNTY: Dict[str, str] = {
-    "90650": "Los Angeles",  # Norwalk example
-    "94015": "San Mateo",
-    "94102": "San Francisco",
-    "94601": "Alameda",
-    "90001": "Los Angeles",
-    "92101": "San Diego",
-    "94925": "Marin",
-    "95818": "Sacramento",
-    "92843": "Orange",
-}
+def infer_field_office(city: str) -> str:
+    key = (city or "").strip().upper()
+    if not key:
+        return ""
+    if key in FIELD_OFFICE_MAP:
+        return FIELD_OFFICE_MAP[key]
+    for label in FIELD_OFFICE_MAP.values():
+        if key in label.upper():
+            return label
+    return ""
 
-COUNTY_TO_FIELD_OFFICE: Dict[str, str] = {
-    "Los Angeles": "Grand Los Angeles — Los Angeles (502)",
-    "San Francisco": "Baie de San Francisco — San Francisco (503)",
-    "San Mateo": "Baie de San Francisco — San Mateo (594)",
-    "Alameda": "Baie de San Francisco — Oakland (501)",
-    "Marin": "Baie de San Francisco — Corte Madera (525)",
-    "Sacramento": "Vallée Centrale — Sacramento (505)",
-    "San Diego": "Sud Californie — San Diego (707)",
-    "Orange": "Orange County / Sud — Anaheim (547)",
-}
+def build_zip_city_field_office(zip_db: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, List[str]]]:
+    mapping: Dict[str, Dict[str, List[str]]] = {}
+    for zip_code, info in zip_db.items():
+        z = re.sub(r"\D", "", str(zip_code))[:5]
+        if len(z) != 5:
+            continue
+        city = (info.get("city") or "").strip().title()
+        office = (info.get("office") or "").strip() or infer_field_office(city)
 
-# ---------- Utilities ----------
+        if not city:
+            continue
+
+        entry = mapping.setdefault(z, {"cities": [], "field_offices": []})
+        if city not in entry["cities"]:
+            entry["cities"].append(city)
+        if office and office not in entry["field_offices"]:
+            entry["field_offices"].append(office)
+
+    if not mapping:
+        mapping["94015"] = {
+            "cities": ["Daly City"],
+            "field_offices": ["Baie de San Francisco — Daly City (599)"],
+        }
+
+    for z, entry in mapping.items():
+        if not entry["cities"]:
+            entry["cities"] = ["Unknown City"]
+        if not entry["field_offices"]:
+            entry["field_offices"] = ["Unknown Field Office"]
+
+    return dict(sorted(mapping.items(), key=lambda kv: int(kv[0])))
+
+ZIP_CITY_FIELD_OFFICE = build_zip_city_field_office(ZIP_DB)
+
+CITY_TO_ZIPS: Dict[str, List[str]] = {}
+OFFICE_TO_ZIPS: Dict[str, List[str]] = {}
+for zip_code, row in ZIP_CITY_FIELD_OFFICE.items():
+    for city in row["cities"]:
+        CITY_TO_ZIPS.setdefault(city, []).append(zip_code)
+    for office in row["field_offices"]:
+        OFFICE_TO_ZIPS.setdefault(office, []).append(zip_code)
+
 def normalize_city(value: str) -> str:
     return (value or "").strip().title()
 
@@ -821,100 +842,14 @@ def rletter(rng: random.Random, initial: str) -> str:
 def next_sequence(rng: random.Random) -> str:
     return str(rng.randint(10, 99))
 
-# ---------- Infer field office with county fallback ----------
-def fetch_county_from_nominatim(query: str) -> Optional[str]:
-    try:
-        url = "https://nominatim.openstreetmap.org/search"
-        params = {"q": query, "format": "json", "addressdetails": 1, "limit": 1}
-        headers = {"User-Agent": "PermisCA-App/1.0 (+https://example.com)"}
-        resp = requests.get(url, params=params, headers=headers, timeout=4)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data:
-            return None
-        addr = data[0].get("address", {})
-        county = addr.get("county") or addr.get("state_district") or addr.get("region")
-        if county:
-            return re.sub(r"\s*County\s*$", "", county).strip()
-    except Exception:
-        return None
-    return None
+def build_aamva_tags(fields: Dict[str, str]) -> str:
+    enriched = dict(fields)
+    enriched.setdefault("DAG", "2570 24TH STREET")
+    enriched.setdefault("DAI", "OAKLAND")
+    enriched.setdefault("DAJ", "CA")
+    enriched.setdefault("DAK", "94601")
+    return build_aamva_payload_continuous(enriched)
 
-def get_county_for_zip_or_city(zip_code: str = "", city: str = "") -> Optional[str]:
-    z = normalize_zip(zip_code)
-    if z and z in ZIP_TO_COUNTY:
-        return ZIP_TO_COUNTY[z]
-    if z:
-        county = fetch_county_from_nominatim(z + ", CA")
-        if county:
-            ZIP_TO_COUNTY[z] = county
-            return county
-    c = normalize_city(city)
-    if c:
-        county = fetch_county_from_nominatim(f"{c}, CA")
-        if county:
-            if z:
-                ZIP_TO_COUNTY[z] = county
-            return county
-    return None
-
-def infer_field_office(city: str, zip_code: str = "") -> str:
-    key = (city or "").strip().upper()
-    if key:
-        if key in FIELD_OFFICE_MAP:
-            return FIELD_OFFICE_MAP[key]
-        for label in FIELD_OFFICE_MAP.values():
-            if key in label.upper():
-                return label
-    county = get_county_for_zip_or_city(zip_code=zip_code, city=city)
-    if county:
-        mapped = COUNTY_TO_FIELD_OFFICE.get(county)
-        if mapped:
-            return mapped
-        return f"{county} County — (Field Office non répertorié)"
-    return "Unknown Field Office"
-
-# ---------- Build ZIP_CITY_FIELD_OFFICE using fallback ----------
-def build_zip_city_field_office(zip_db: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, List[str]]]:
-    mapping: Dict[str, Dict[str, List[str]]] = {}
-    for zip_code, info in zip_db.items():
-        z = re.sub(r"\D", "", str(zip_code))[:5]
-        if len(z) != 5:
-            continue
-        city = (info.get("city") or "").strip().title()
-        office = (info.get("office") or "").strip()
-        if not city:
-            continue
-        if not office:
-            office = infer_field_office(city, zip_code=z)
-        entry = mapping.setdefault(z, {"cities": [], "field_offices": []})
-        if city not in entry["cities"]:
-            entry["cities"].append(city)
-        if office and office not in entry["field_offices"]:
-            entry["field_offices"].append(office)
-    if not mapping:
-        mapping["94015"] = {
-            "cities": ["Daly City"],
-            "field_offices": ["Baie de San Francisco — Daly City (599)"],
-        }
-    for z, entry in mapping.items():
-        if not entry["cities"]:
-            entry["cities"] = ["Unknown City"]
-        if not entry["field_offices"]:
-            entry["field_offices"] = ["Unknown Field Office"]
-    return dict(sorted(mapping.items(), key=lambda kv: int(kv[0])))
-
-ZIP_CITY_FIELD_OFFICE = build_zip_city_field_office(ZIP_DB)
-
-CITY_TO_ZIPS: Dict[str, List[str]] = {}
-OFFICE_TO_ZIPS: Dict[str, List[str]] = {}
-for zip_code, row in ZIP_CITY_FIELD_OFFICE.items():
-    for city in row["cities"]:
-        CITY_TO_ZIPS.setdefault(city, []).append(zip_code)
-    for office in row["field_offices"]:
-        OFFICE_TO_ZIPS.setdefault(office, []).append(zip_code)
-
-# ---------- Minimal UI CSS ----------
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -925,7 +860,6 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- Sidebar controls ----------
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6, key="sb_columns")
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2, key="sb_ecc")
@@ -947,7 +881,6 @@ enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)"
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
 
-# ---------- Update helpers ----------
 def update_from_zip() -> None:
     zip_code = normalize_zip(st.session_state.get("ui_zip", ""))
     row = ZIP_CITY_FIELD_OFFICE.get(zip_code)
@@ -978,8 +911,7 @@ def update_from_office() -> None:
     cities = row.get("cities") or ["Unknown City"]
     st.session_state["ui_city"] = cities[0]
 
-# ---------- Main UI ----------
-st.title("PERMIS CALIFORNIA")
+st.title("Générateur officiel de permis Californien")
 
 ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
 fn = st.text_input("Prénom", "ROSA", key="ui_fn")
@@ -993,7 +925,6 @@ with col1:
 with col2:
     h2 = st.number_input("Pouces", 0, 11, 10, key="ui_h2")
     eyes = st.text_input("Yeux", "BRN", key="ui_eyes")
-
 hair = st.text_input("Cheveux", "BRN", key="ui_hair")
 cls = st.text_input("Classe", "C", key="ui_cls")
 rstr = st.text_input("Restrictions", "NONE", key="ui_rstr")
@@ -1053,7 +984,6 @@ st.selectbox(
 
 generate = st.button("Générer la carte", key="ui_generate")
 
-# ---------- Validation & helpers ----------
 def validate_inputs() -> List[str]:
     errors: List[str] = []
     if not st.session_state.get("ui_ln", "").strip():
@@ -1135,7 +1065,6 @@ def generate_pdf417_svg(data_bytes: bytes, columns: int, security_level: int, sc
     except Exception:
         return str(svg_tree)
 
-# ---------- Generation flow ----------
 if generate:
     errors = validate_inputs()
     if errors:
@@ -1161,7 +1090,6 @@ if generate:
     office_sel = st.session_state["ui_office"]
     address_sel = st.session_state["ui_address_line"].strip()
 
-    # sécurité: remplir ville automatiquement depuis ZIP avant génération
     row = ZIP_CITY_FIELD_OFFICE.get(zip_sel, {})
     if not city_sel and row.get("cities"):
         city_sel = normalize_city(row["cities"][0])
@@ -1229,7 +1157,6 @@ if generate:
     else:
         photo_html = f"<div class='photo'><img src='{photo_src}' alt='photo par défaut'/></div>"
 
-    # --- Corrected multi-line f-string block (no escaped triple quotes) ---
     html = f"""
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -1249,7 +1176,6 @@ if generate:
         </div>
     </div>
     """
-
     st.markdown(html, unsafe_allow_html=True)
 
     if enable_validator and _AAMVA_UTILS_AVAILABLE:
@@ -1326,3 +1252,6 @@ if generate:
             st.error("Erreur génération PDF : " + str(exc))
             if not _REPORTLAB_AVAILABLE:
                 st.info("reportlab non installé : export PDF non disponible.")
+
+
+
