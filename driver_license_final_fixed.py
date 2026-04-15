@@ -671,5 +671,3 @@ if generate:
             st.error("Erreur génération PDF : " + str(exc))
             if not _REPORTLAB_AVAILABLE:
                 st.info("reportlab non installé : export PDF non disponible.")
-
-
