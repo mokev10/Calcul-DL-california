@@ -3,12 +3,12 @@
 # - Injection CSS dynamique (:root variables) pour light / dark
 # - Sélecteurs ciblés pour st.button, st.text_input, st.selectbox (lisibilité)
 # - Toggle discret en en-tête utilisant les icônes fournies (liens)
-# - Prêt à copier-coller, bloc complet et autonome
+# - Bloc autonome, prêt à copier-coller
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Icônes fournies (utiliser ces URLs pour l'icône du toggle)
+# Icônes fournies (URLs)
 ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
 ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
 
@@ -24,7 +24,7 @@ def toggle_theme():
     try:
         st.experimental_rerun()
     except Exception:
-        # Si rerun indisponible, on met un petit flag query param (non bloquant)
+        # fallback non bloquant : définir un petit flag query param si possible
         try:
             st.experimental_set_query_params(_theme_changed=st.session_state["theme"])
         except Exception:
@@ -61,7 +61,6 @@ def inject_theme_css(theme: str) -> None:
         }
         """
 
-    # CSS complet et explicite pour widgets courants (st.button, st.text_input, st.selectbox)
     common_css = r"""
     /* Global */
     html, body, [class*="css"] { background: var(--bg) !important; color: var(--text) !important; font-family: Inter, sans-serif !important; }
@@ -146,25 +145,19 @@ def inject_theme_css(theme: str) -> None:
 # --- Injecter le CSS initial AVANT la création des widgets ---
 inject_theme_css(st.session_state["theme"])
 
-# --- Interface de contrôle discrète (icône seule en en-tête) ---
-# Placez ce bloc juste après l'injection CSS et avant vos widgets principaux
+# --- Interface de contrôle discrète (icône + bouton) ---
+# Placer ce bloc juste après l'injection CSS et avant vos widgets principaux
 header_col_left, header_col_right = st.columns([9, 1])
 with header_col_left:
     # Optionnel : titre principal (laisser vide si vous préférez)
     pass
 with header_col_right:
     current = st.session_state["theme"]
-    # On affiche l'icône correspondant au mode qui sera activé au clic (affiche l'icône du mode cible)
+    # Affiche l'icône du mode cible (cliquer active ce mode)
     target = "dark" if current == "light" else "light"
     icon_to_show = ICON_DARK if target == "dark" else ICON_LIGHT
-    # Rendu de l'icône cliquable : image + bouton invisible pour déclencher toggle côté serveur
-    st.markdown(f'''
-        <div class="header-toggle">
-          <a href="javascript:void(0)" onclick="document.getElementById('__theme_toggle_button__').click();" title="Basculer en {target} mode">
-            <img src="{icon_to_show}" class="theme-icon" alt="theme-toggle" />
-          </a>
-        </div>
-        ''', unsafe_allow_html=True)
-    # Bouton Streamlit invisible (label minimal) pour déclencher la fonction Python côté serveur
-    if st.button(" ", key="__theme_toggle_button__", help="Basculer thème"):
+    # Afficher l'icône et un bouton discret à côté pour déclencher le toggle côté serveur
+    st.image(icon_to_show, width=22)
+    # Bouton discret (label minimal) pour déclencher la bascule côté serveur
+    if st.button(" ", key="__theme_toggle_button__", help=f"Basculer en {target} mode"):
         toggle_theme()
