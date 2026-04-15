@@ -53,12 +53,11 @@ input, select, textarea, .stTextInput div div, .stSelectbox div div, .stNumberIn
 </style>
 """, unsafe_allow_html=True)
 
-# --- LOGIQUE BASE DE DONNÉES ZIP (CORRIGÉE) ---
+# --- LOGIQUE ZIP DB (COMPLÈTE) ---
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     db = {}
     if not text:
         return db
-    # On nettoie les lignes pour éviter l'erreur de syntaxe
     lines =
     i = 0
     while i + 2 < len(lines):
@@ -77,13 +76,14 @@ c_title, c_tk = st.columns([0.9, 0.1])
 with c_title: 
     st.title("California Driver License System")
 with c_tk: 
-    st.button("☀️" if st.session_state.theme == "dark" else "🌙", on_click=toggle_theme)
+    icon = "☀️" if st.session_state.theme == "dark" else "🌙"
+    st.button(icon, on_click=toggle_theme)
 
 # --- CHAMPS DE SAISIE ---
 field_offices = ["Grand Los Angeles — Los Angeles (502)", "San Francisco (503)", "Sacramento (501)"]
 selected_office = st.selectbox("Field Office", field_offices)
 
-# BOUTON GÉNÉRER (Restauré)
+# BOUTON GÉNÉRER
 if st.button("Générer la carte"):
     st.toast("Carte mise à jour", icon="✅")
 
@@ -105,18 +105,18 @@ st.markdown(f"""
 <div class="card">
     <div style="display: flex; justify-content: space-between;">
         <div style="display: flex;">
-            <div style="width:100px; height:120px; background:var(--bg); border:1px dashed var(--muted); border-radius:8px; display:flex; align-items:center; justify-content:center;">
+            <div style="width:110px; height:130px; background:var(--bg); border:1px dashed var(--muted); border-radius:8px; display:flex; align-items:center; justify-content:center;">
                 <span style="font-size:10px; color:var(--muted);">PHOTO</span>
             </div>
             <div style="margin-left:20px;">
                 <p style="margin:0; font-size:10px; opacity:0.6;">Nom</p>
-                <p style="margin:0 0 5px 0; font-weight:bold; color:var(--text);">{last_name.upper()}</p>
+                <p style="margin:0 0 5px 0; font-weight:bold;">{last_name.upper()}</p>
                 <p style="margin:0; font-size:10px; opacity:0.6;">Prénom</p>
-                <p style="margin:0 0 5px 0; font-weight:bold; color:var(--text);">{first_name.upper()}</p>
+                <p style="margin:0 0 5px 0; font-weight:bold;">{first_name.upper()}</p>
                 <p style="margin:0; font-size:10px; opacity:0.6;">Adresse</p>
-                <p style="margin:0 0 5px 0; color:var(--text);">{address.upper()}</p>
+                <p style="margin:0 0 5px 0;">{address.upper()}</p>
                 <p style="margin:0; font-size:10px; opacity:0.6;">Ville / ZIP</p>
-                <p style="margin:0; color:var(--text);">{city_zip.upper()}</p>
+                <p style="margin:0;">{city_zip.upper()}</p>
             </div>
         </div>
         <div style="text-align: right; color: var(--accent); font-weight: bold; font-size: 1.2em;">{dl_number}</div>
