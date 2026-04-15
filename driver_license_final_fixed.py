@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Version complète prête à coller
-# - Supprime la liaison automatique entre Code postal, Ville et Field Office
+# - Liaison bidirectionnelle entre Code postal <-> Ville
+# - Field Office reste indépendant
 # - Préserve la logique, les règles, les menus déroulants et le CSS UI/UX
 # - Clés Streamlit uniques pour éviter les duplications
 
@@ -165,20 +166,23 @@ for region, cities in field_offices.items():
         FIELD_OFFICE_MAP[city.upper()] = f"{region} — {city} ({code})"
 
 # -------------------------
-# Build independent option lists (no linkage)
+# Build mapping for ZIP <-> City linkage
 # -------------------------
-# ZIP options: sorted list of ZIP_DB keys
-zip_options = sorted(ZIP_DB.keys())
+# ZIP -> cities (list)
+ZIP_TO_CITIES: Dict[str, List[str]] = {}
+# City -> zips (list)
+CITY_TO_ZIPS: Dict[str, List[str]] = {}
 
-# City options: unique cities from ZIP_DB (sorted)
-city_options = sorted({(info.get("city") or "").title() for info in ZIP_DB.values() if info.get("city")})
+for z, info in ZIP_DB.items():
+    city = (info.get("city") or "").strip().title()
+    if city:
+        ZIP_TO_CITIES.setdefault(z, []).append(city)
+        CITY_TO_ZIPS.setdefault(city, []).append(z)
 
-# Field office options: flattened labels from FIELD_OFFICE_MAP plus any offices present in ZIP_DB
-office_options_from_db = sorted({info.get("office") for info in ZIP_DB.values() if info.get("office")})
-field_office_labels = sorted(set(FIELD_OFFICE_MAP.values()))
-office_options = sorted(set(office_options_from_db) | set(field_office_labels))
-if not office_options:
-    office_options = ["Unknown Field Office"]
+# Ensure at least one mapping exists
+if not ZIP_TO_CITIES:
+    ZIP_TO_CITIES["94015"] = ["Daly City"]
+    CITY_TO_ZIPS["Daly City"] = ["94015"]
 
 # -------------------------
 # Utility functions
@@ -216,10 +220,6 @@ def next_sequence(rng: random.Random) -> str:
 
 
 def build_aamva_tags(fields: Dict[str, str]) -> str:
-    """
-    Backward-compatible helper used by tests.
-    Produces a continuous ANSI/DL payload.
-    """
     enriched = dict(fields)
     enriched.setdefault("DAG", "2570 24TH STREET")
     enriched.setdefault("DAI", "OAKLAND")
@@ -227,7 +227,6 @@ def build_aamva_tags(fields: Dict[str, str]) -> str:
     enriched.setdefault("DAK", "94601")
     if _AAMVA_UTILS_AVAILABLE:
         return build_aamva_payload_continuous(enriched)
-    # fallback simple concatenation
     ordered = ["DAQ", "DCS", "DAC", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"]
     return "@ANSI 636014080102DL" + "".join(f"{tag}{enriched.get(tag,'')}" for tag in ordered if enriched.get(tag))
 
@@ -352,7 +351,34 @@ if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
 
 # -------------------------
-# Main UI form (menus indépendants)
+# Callbacks to keep ZIP <-> City linked (bidirectional)
+# -------------------------
+def on_zip_change():
+    # When ZIP changes, set city to the first city associated with that ZIP (if any)
+    z = normalize_zip(st.session_state.get("ui_zip", ""))
+    if not z:
+        return
+    cities = ZIP_TO_CITIES.get(z, [])
+    if cities:
+        st.session_state["ui_city"] = cities[0]
+    else:
+        # if no mapping, keep current city unchanged
+        pass
+
+def on_city_change():
+    # When City changes, set ZIP to the first ZIP associated with that city (if any)
+    city = normalize_city(st.session_state.get("ui_city", ""))
+    if not city:
+        return
+    zips = CITY_TO_ZIPS.get(city, [])
+    if zips:
+        st.session_state["ui_zip"] = zips[0]
+    else:
+        # if no mapping, keep current zip unchanged
+        pass
+
+# -------------------------
+# Main UI form (ZIP and City linked; Field Office independent)
 # -------------------------
 st.title("Générateur officiel de permis CA")
 
@@ -375,11 +401,23 @@ endorse = st.text_input("Endorsements", "NONE", key="ui_endorse")
 iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 address_line = st.text_input("Address Line", "2570 24TH STREET", key="ui_address_line")
 
-# Ensure session defaults exist (independent dropdowns)
+# Build options lists
+zip_options = sorted(ZIP_TO_CITIES.keys())
+city_options = sorted(CITY_TO_ZIPS.keys())
+office_options_from_db = sorted({info.get("office") for info in ZIP_DB.values() if info.get("office")})
+field_office_labels = sorted(set(FIELD_OFFICE_MAP.values()))
+office_options = sorted(set(office_options_from_db) | set(field_office_labels))
+if not office_options:
+    office_options = ["Unknown Field Office"]
+
+# Ensure session defaults exist
 if "ui_zip" not in st.session_state or st.session_state["ui_zip"] not in zip_options:
     st.session_state["ui_zip"] = zip_options[0] if zip_options else ""
+# initialize city based on zip mapping
+initial_zip = st.session_state["ui_zip"]
+initial_cities = ZIP_TO_CITIES.get(initial_zip, [])
 if "ui_city" not in st.session_state or st.session_state["ui_city"] not in city_options:
-    st.session_state["ui_city"] = city_options[0] if city_options else ""
+    st.session_state["ui_city"] = initial_cities[0] if initial_cities else (city_options[0] if city_options else "")
 if "ui_office" not in st.session_state or st.session_state["ui_office"] not in office_options:
     st.session_state["ui_office"] = office_options[0] if office_options else ""
 
@@ -390,16 +428,25 @@ with col_zip:
         options=zip_options,
         index=zip_options.index(st.session_state["ui_zip"]) if st.session_state["ui_zip"] in zip_options else 0,
         key="ui_zip",
-        help="Sélectionnez un code postal (indépendant des autres menus).",
+        on_change=on_zip_change,
+        help="Sélectionnez un code postal — la ville associée sera mise à jour automatiquement."
     )
+
+# Recompute city options after zip change (city list for selected zip)
+selected_zip = st.session_state.get("ui_zip", "")
+cities_for_zip = ZIP_TO_CITIES.get(selected_zip, []) or (city_options if city_options else ["Unknown City"])
+# ensure ui_city is valid for the selected zip
+if st.session_state.get("ui_city") not in cities_for_zip:
+    st.session_state["ui_city"] = cities_for_zip[0]
 
 with col_city:
     st.selectbox(
         "Ville",
-        options=city_options,
-        index=city_options.index(st.session_state["ui_city"]) if st.session_state["ui_city"] in city_options else 0,
+        options=cities_for_zip,
+        index=cities_for_zip.index(st.session_state["ui_city"]) if st.session_state["ui_city"] in cities_for_zip else 0,
         key="ui_city",
-        help="Sélectionnez une ville (indépendante des autres menus).",
+        on_change=on_city_change,
+        help="Sélectionnez une ville — le code postal associé sera mis à jour automatiquement."
     )
 
 st.selectbox(
@@ -441,7 +488,7 @@ def validate_inputs() -> List[str]:
     if not address:
         errors.append("Adresse requise.")
 
-    # NOTE: coherence ZIP -> Ville / Field Office removed intentionally per demande.
+    # NOTE: coherence ZIP <-> Ville is enforced by UI linkage (selection), so no extra validation needed here.
     return errors
 
 
