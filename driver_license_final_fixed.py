@@ -4,6 +4,7 @@
 # - Liaison bidirectionnelle entre Code postal <-> Ville
 # - Field Office reste indépendant
 # - Menus déroulants affichent un placeholder "Choisir une option"
+# - CSS corrigé pour éviter les "codes qui fuient" (overflow)
 # - Préserve la logique, les règles, les menus déroulants et le CSS UI/UX
 # - Clés Streamlit uniques pour éviter les duplications
 
@@ -237,6 +238,7 @@ def build_aamva_tags(fields: Dict[str, str]) -> str:
 
 # -------------------------
 # CSS UI/UX (ne change rien à la logique)
+# - Ajout de règles pour éviter l'overflow des codes dans les selectbox
 # -------------------------
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -279,6 +281,29 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7
   box-shadow:none !important;
   font-size:13px !important;
 }
+
+/* Prevent select overflow and long codes from breaking layout */
+.stSelectbox, .stSelectbox>div, .stSelectbox>div>div {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Truncate long option text inside the visible select control */
+.stSelectbox select {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  display: inline-block !important;
+  max-width: 100% !important;
+}
+
+/* Make placeholder visually distinct */
+.stSelectbox select option:first-child {
+  color: #6b7280;
+  font-style: italic;
+}
+
+/* Focus style */
 .stTextInput>div>div>input:focus, .stSelectbox>div>div>select:focus, textarea:focus {
   outline: none !important;
   box-shadow: 0 6px 18px rgba(37,99,235,0.12) !important;
@@ -324,6 +349,7 @@ div[data-testid="stProgressBar"] > div > div {
 @media (max-width: 800px) {
   .card { width: 92% !important; padding: 14px; }
   .photo { width:84px; height:104px; }
+  .stSelectbox select { font-size: 14px !important; }
 }
 
 /* Minor utility tweaks */
