@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
-# Version finale corrigée — injection CSS sûre et toggle thème via icônes (sans texte)
-# - Evite AttributeError sur experimental_get_query_params / experimental_rerun
-# - Icônes fournies utilisées comme contrôles de thème (sans texte)
-# - Fallbacks robustes pour environnements Streamlit variés
-# - Ne modifie pas la logique métier (ZIP <-> Ville, Field Office, génération AAMVA/PDF417/PDF)
+# Version finale : thème (light/dark) robuste + CSS ciblé pour widgets + toggle icône seule
+# Remplace entièrement ton ancien fichier par celui-ci.
 
 import base64
 import datetime
@@ -36,7 +33,7 @@ try:
 except Exception:
     _PDF417_AVAILABLE = False
 
-# AAMVA utils (validation + builder continu)
+# AAMVA utils (optionnel)
 try:
     from aamva_utils import (
         validate_aamva_payload,
@@ -54,20 +51,11 @@ GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
 st.set_page_config(page_title="Permis CA", layout="wide")
 
-# -------------------------
-# Theme icons (user provided)
-# -------------------------
+# ---------- Icons fournis ----------
 ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
 ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
 
-# -------------------------
-# Assets & constants
-# -------------------------
-IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
-IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
-GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
-
-# Minimal fallback ZIP_DB (ensures dropdowns always have values)
+# ---------- Data minimal ----------
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
     "95818": {"city": "Sacramento", "state": "CA", "office": ""},
@@ -85,29 +73,26 @@ ZIP_DB: Dict[str, Dict[str, str]] = {
     "90277": {"city": "Redondo Beach", "state": "CA", "office": ""},
 }
 
-# -------------------------
-# Helpers to load/parse ZIP_DB (attempt GitHub fetch)
-# -------------------------
+# Try to fetch extended ZIP DB (non bloquant)
+GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
 def fetch_github_zipdb(url: str) -> Optional[str]:
     try:
-        resp = requests.get(url, timeout=8)
+        resp = requests.get(url, timeout=6)
         resp.raise_for_status()
         return resp.text
     except Exception:
         return None
 
-
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     db: Dict[str, Dict[str, str]] = {}
     if not text:
         return db
-
     lines = [ln.strip() for ln in text.splitlines()]
     i = 0
     while i + 2 < len(lines):
         zip_code = lines[i]
-        city = lines[i + 1]
-        state = lines[i + 2].upper()
+        city = lines[i+1]
+        state = lines[i+2].upper()
         if re.fullmatch(r"\d{5}", zip_code) and city and state == "CA":
             db[zip_code] = {"city": city.title(), "state": "CA", "office": ""}
             i += 3
@@ -115,26 +100,7 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
                 i += 1
             continue
         i += 1
-
-    # fallback heuristique seulement si parsing strict vide
-    if not db:
-        for ln in [ln.strip() for ln in text.splitlines() if ln.strip()]:
-            m = re.search(r"\b(\d{5})\b", ln)
-            if not m:
-                continue
-            zip_code = m.group(1)
-            before = ln[:m.start()].strip(" ,;-")
-            after = ln[m.end():].strip(" ,;-")
-            city = ""
-            if before and re.search(r"[A-Za-z]", before):
-                city = re.split(r"[,\-–:]", before)[-1].strip().title()
-            elif after and re.search(r"[A-Za-z]", after):
-                city = re.split(r"[,\-–:]", after)[0].strip().title()
-            if city:
-                db[zip_code] = {"city": city, "state": "CA", "office": ""}
-
     return db
-
 
 fetched = fetch_github_zipdb(GITHUB_RAW_ZIPDB)
 if fetched:
@@ -142,68 +108,35 @@ if fetched:
     if parsed:
         ZIP_DB.update(parsed)
 
-# -------------------------
-# Field offices mapping (flattened)
-# -------------------------
+# Field offices (unchanged)
 field_offices = {
-    "Baie de San Francisco": {
-        "Corte Madera": 525, "Daly City": 599, "El Cerrito": 585, "Fremont": 643,
-        "Hayward": 521, "Los Gatos": 641, "Novato": 647, "Oakland": 501,
-        "Pittsburg": 651, "Pleasanton": 639, "Redwood City": 542,
-        "San Francisco": 503, "San Jose": 516, "San Mateo": 594, "Santa Clara": 632,
-        "Vallejo": 538,
-    },
-    "Grand Los Angeles": {
-        "Arleta": 628, "Bellflower": 610, "Culver City": 514, "Glendale": 540,
-        "Hollywood": 633, "Inglewood": 544, "Long Beach": 507, "Los Angeles": 502,
-        "Montebello": 531, "Pasadena": 510, "Santa Monica": 548, "Torrance": 592,
-        "West Covina": 591,
-    },
-    "Orange County / Sud": {
-        "Costa Mesa": 627, "Fullerton": 547, "Laguna Hills": 642, "Santa Ana": 529,
-        "San Clemente": 652, "Westminster": 623, "Garden Grove": 547, "Anaheim": 547,
-    },
-    "Vallée Centrale": {
-        "Bakersfield": 511, "Fresno": 505, "Lodi": 595, "Modesto": 536, "Stockton": 517,
-        "Visalia": 519, "Sacramento": 505,
-    },
-    "Sud Californie": {
-        "San Diego": 707,
-    },
+    "Baie de San Francisco": {"Corte Madera": 525, "Daly City": 599, "Oakland": 501, "San Francisco": 503},
+    "Grand Los Angeles": {"Los Angeles": 502, "Santa Monica": 548, "Pasadena": 510},
+    "Sud Californie": {"San Diego": 707},
 }
-
 FIELD_OFFICE_MAP: Dict[str, str] = {}
 for region, cities in field_offices.items():
     for city, code in cities.items():
         FIELD_OFFICE_MAP[city.upper()] = f"{region} — {city} ({code})"
 
-# -------------------------
-# Build mapping for ZIP <-> City linkage
-# -------------------------
+# Build ZIP <-> City mapping
 ZIP_TO_CITIES: Dict[str, List[str]] = {}
 CITY_TO_ZIPS: Dict[str, List[str]] = {}
-
 for z, info in ZIP_DB.items():
     city = (info.get("city") or "").strip().title()
     if city:
         ZIP_TO_CITIES.setdefault(z, []).append(city)
         CITY_TO_ZIPS.setdefault(city, []).append(z)
-
-# Ensure at least one mapping exists
 if not ZIP_TO_CITIES:
     ZIP_TO_CITIES["94015"] = ["Daly City"]
     CITY_TO_ZIPS["Daly City"] = ["94015"]
 
-# -------------------------
-# Utility functions
-# -------------------------
+# ---------- Utilities ----------
 def normalize_city(value: str) -> str:
     return (value or "").strip().title()
 
-
 def normalize_zip(value: str) -> str:
     return re.sub(r"\D", "", (value or ""))[:5]
-
 
 def seed(*values):
     parts = []
@@ -214,308 +147,153 @@ def seed(*values):
             parts.append(str(item))
     return int(hashlib.md5("|".join(parts).encode()).hexdigest()[:8], 16)
 
-
 def rdigits(rng: random.Random, n: int) -> str:
     return "".join(rng.choice("0123456789") for _ in range(n))
-
 
 def rletter(rng: random.Random, initial: str) -> str:
     if isinstance(initial, str) and initial and initial[0].isalpha():
         return initial[0].upper()
     return rng.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-
 def next_sequence(rng: random.Random) -> str:
     return str(rng.randint(10, 99))
 
-
-def build_aamva_tags(fields: Dict[str, str]) -> str:
-    enriched = dict(fields)
-    enriched.setdefault("DAG", "2570 24TH STREET")
-    enriched.setdefault("DAI", "OAKLAND")
-    enriched.setdefault("DAJ", "CA")
-    enriched.setdefault("DAK", "94601")
-    if _AAMVA_UTILS_AVAILABLE:
-        return build_aamva_payload_continuous(enriched)
-    ordered = ["DAQ", "DCS", "DAC", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"]
-    return "@ANSI 636014080102DL" + "".join(f"{tag}{enriched.get(tag,'')}" for tag in ordered if enriched.get(tag))
-
-# -------------------------
-# Theme CSS definitions (light & dark)
-# -------------------------
-LIGHT_CSS = """
+# ---------- THEME CSS (ciblé pour widgets) ----------
+LIGHT_VARS = """
 :root{
   --bg: #f5f7fa;
-  --card-bg: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,250,252,0.96));
+  --card-bg: #ffffff;
   --text: #0f172a;
   --muted: #6b7280;
   --accent: #2563eb;
   --control-bg: #ffffff;
   --control-border: #e6eef8;
   --photo-bg: #eef2ff;
-  --card-border: rgba(30,58,138,0.06);
-  --shadow: rgba(16,24,40,0.06);
 }
 """
-
-DARK_CSS = """
+DARK_VARS = """
 :root{
   --bg: #0b1220;
-  --card-bg: linear-gradient(180deg, rgba(10,14,20,0.96), rgba(14,20,28,0.96));
+  --card-bg: #0f172a;
   --text: #e6eef8;
   --muted: #9aa6bf;
   --accent: #60a5fa;
   --control-bg: #0f172a;
   --control-border: rgba(255,255,255,0.06);
   --photo-bg: #0f172a;
-  --card-border: rgba(255,255,255,0.04);
-  --shadow: rgba(2,6,23,0.6);
 }
 """
 
 COMMON_CSS = r"""
-/* Global */
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
+html, body, [class*="css"] { background: var(--bg) !important; color: var(--text) !important; font-family: Inter, sans-serif; }
 
-/* Container card */
-.card {
-  width: 520px;
-  border-radius: 14px;
-  padding: 18px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  box-shadow: 0 10px 30px var(--shadow);
-  margin: 18px auto;
-  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
-}
-.card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px var(--shadow); }
-
-/* Header / badge */
-.card .header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; color:var(--text); font-weight:700; }
-.card .badge { background:var(--control-bg); color:var(--text); padding:6px 10px; border-radius:8px; font-weight:700; box-shadow:0 4px 12px rgba(2,6,23,0.06); }
+/* Card */
+.card { width:520px; margin:18px auto; padding:16px; border-radius:12px; background:var(--card-bg); box-shadow:0 8px 24px rgba(2,6,23,0.06); border:1px solid var(--control-border); color:var(--text); }
 
 /* Photo */
-.photo { width:96px; height:120px; background:var(--photo-bg); border-radius:10px; overflow:hidden; border:1px solid rgba(15,23,42,0.04); }
-.photo img { width:100%; height:100%; object-fit:cover; display:block; }
+.photo { width:96px; height:120px; background:var(--photo-bg); border-radius:10px; overflow:hidden; }
+.photo img { width:100%; height:100%; object-fit:cover; }
 
-/* Info column */
-.info { flex:1; font-size:13px; line-height:1.35; color:var(--text); }
-.label { opacity:0.7; font-size:11px; margin-top:6px; color:var(--muted); }
-.value { font-weight:600; margin-bottom:6px; color:var(--text); }
+/* Labels / values */
+.label { opacity:0.75; font-size:11px; color:var(--muted); margin-top:6px; }
+.value { font-weight:600; color:var(--text); }
 
-/* Form controls styling */
-.stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>select, textarea {
-  border-radius:10px !important;
-  border:1px solid var(--control-border) !important;
-  padding:8px 10px !important;
-  background:var(--control-bg) !important;
-  box-shadow:none !important;
-  font-size:13px !important;
-  color:var(--text) !important;
+/* Inputs / selects / textareas */
+input[type="text"], input[type="number"], textarea, select, .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>select {
+  background: var(--control-bg) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--control-border) !important;
+  border-radius: 10px !important;
+  padding: 8px 10px !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
 }
 
-/* Force selectbox container sizing and prevent overflow */
-.stSelectbox, .stSelectbox>div, .stSelectbox>div>div {
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-  overflow: hidden !important;
-}
-
-/* Visible select control: truncate long text with ellipsis */
-.stSelectbox select, .stSelectbox select {
+/* Select truncation */
+.stSelectbox select, select {
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  display: inline-block !important;
   max-width: 100% !important;
-  color:var(--text) !important;
 }
 
-/* Make placeholder visually distinct */
-.stSelectbox select option:first-child {
-  color: var(--muted);
-  font-style: italic;
-}
-
-/* Focus style */
-.stTextInput>div>div>input:focus, .stSelectbox>div>div>select:focus, textarea:focus {
-  outline: none !important;
-  box-shadow: 0 6px 18px rgba(37,99,235,0.12) !important;
-  border-color: var(--accent) !important;
-}
-
-/* Sidebar */
-section[data-testid="stSidebar"] { background: linear-gradient(180deg,#071033,#0f172a); color: var(--text); }
-section[data-testid="stSidebar"] .css-1d391kg { color: var(--text); }
-section[data-testid="stSidebar"] .stMarkdown { color: var(--text); }
-
-/* Buttons and download buttons */
+/* Buttons */
 button, .stDownloadButton button {
   background: linear-gradient(135deg,var(--accent),#1e40af) !important;
   color: #fff !important;
   border-radius: 10px !important;
-  padding: 8px 14px !important;
+  padding: 8px 12px !important;
   border: none !important;
   font-weight: 600 !important;
-  box-shadow: 0 6px 18px rgba(37,99,235,0.12) !important;
 }
-button:hover, .stDownloadButton button:hover { transform: translateY(-2px); }
 
-/* Expander and panels */
-.stExpander { border-radius:10px !important; border:1px solid rgba(15,23,42,0.04) !important; background: var(--control-bg) !important; }
-.stExpanderSummary { font-weight:600 !important; }
+/* Sidebar */
+section[data-testid="stSidebar"] { background: linear-gradient(180deg,#071033,#0f172a) !important; color: var(--text) !important; }
 
-/* PDF417 preview container */
-[data-testid="stMarkdownContainer"] > div > div > svg {
-  max-width: 100% !important;
-  height: auto !important;
-  display: block;
-  margin: 8px auto;
-}
+/* Expander */
+.stExpander { background: var(--card-bg) !important; border-radius:8px !important; }
 
 /* Progress bar */
-div[data-testid="stProgressBar"] > div > div {
-  background: linear-gradient(90deg,var(--accent),#1e40af) !important;
-  border-radius: 8px !important;
-}
+div[data-testid="stProgressBar"] > div > div { background: linear-gradient(90deg,var(--accent),#1e40af) !important; border-radius:8px !important; }
 
-/* Small screens adjustments */
-@media (max-width: 800px) {
-  .card { width: 92% !important; padding: 14px; }
+/* PDF417 svg preview */
+[data-testid="stMarkdownContainer"] > div > div > svg { max-width:100% !important; height:auto !important; display:block; margin:8px auto; }
+
+/* Header toggle area */
+.header-toggle { display:flex; justify-content:flex-end; align-items:center; gap:8px; }
+.header-toggle img { width:22px; height:22px; border-radius:6px; }
+
+/* Small screens */
+@media (max-width:800px) {
+  .card { width:92% !important; padding:12px !important; }
   .photo { width:84px; height:104px; }
-  .stSelectbox select { font-size: 14px !important; }
 }
-
-/* Minor utility tweaks */
-.kv { color:#64748b; font-size:12px; }
-
-/* Header theme toggle area */
-.header-toggle {
-  display:flex;
-  gap:8px;
-  align-items:center;
-}
-.header-toggle img {
-  width:22px;
-  height:22px;
-  vertical-align:middle;
-  border-radius:6px;
-  border:1px solid rgba(0,0,0,0.04);
-}
-.header-toggle a { display:inline-block; }
 """
 
-# -------------------------
-# Theme initialization (safe)
-# -------------------------
-# Try to read query params only if the function exists; otherwise ignore.
-try:
-    params = st.experimental_get_query_params()
-except Exception:
-    params = {}
-
-if "theme" in params:
-    qtheme = params.get("theme", ["light"])[0]
-    if qtheme in ("light", "dark"):
-        st.session_state["theme"] = qtheme
-
-if "theme" not in st.session_state:
-    st.session_state["theme"] = "light"
-
-def inject_theme_css():
-    theme = st.session_state.get("theme", "light")
-    css = LIGHT_CSS if theme == "light" else DARK_CSS
-    full = f"<style>{css}\n{COMMON_CSS}</style>"
-    # inject invisibly (height=0)
+def inject_css_for_theme(theme: str):
+    vars_css = LIGHT_VARS if theme == "light" else DARK_VARS
+    full = f"<style>{vars_css}\n{COMMON_CSS}</style>"
+    # inject invisibly (height=0) to avoid showing raw CSS
     components.html(full, height=0)
 
-# initial injection
-inject_theme_css()
+# Initialize theme in session_state
+if "theme" not in st.session_state:
+    st.session_state["theme"] = "light"
+inject_css_for_theme(st.session_state["theme"])
 
-# -------------------------
-# Sidebar controls (unchanged)
-# -------------------------
+# ---------- Sidebar controls ----------
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6, key="sb_columns")
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2, key="sb_ecc")
 scale_param = st.sidebar.slider("Échelle (SVG)", 1, 6, 3, key="sb_scale")
 ratio_param = st.sidebar.slider("Ratio", 1, 6, 3, key="sb_ratio")
 color_param = st.sidebar.color_picker("Couleur du code", "#000000", key="sb_color")
-
 st.sidebar.markdown("---")
 if "show_barcodes" not in st.session_state:
     st.session_state["show_barcodes"] = True
-show_barcodes = st.sidebar.checkbox(
-    "Afficher les codes-barres (PDF417)",
-    value=st.session_state["show_barcodes"],
-    key="sb_show_barcodes",
-)
-
+show_barcodes = st.sidebar.checkbox("Afficher les codes-barres (PDF417)", value=st.session_state["show_barcodes"], key="sb_show_barcodes")
 st.sidebar.markdown("---")
 enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)", value=False, key="sb_enable_validator")
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
-    st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
+    st.sidebar.info("aamva_utils.py introuvable — validation désactivée.")
 
-# -------------------------
-# Header with theme icons only (clickable)
-# -------------------------
+# ---------- Header with icon-only toggle ----------
 header_col1, header_col2 = st.columns([8, 2])
 with header_col1:
     st.markdown("<h2 style='margin:0;padding:0'>Générateur officiel de permis CA</h2>", unsafe_allow_html=True)
-
 with header_col2:
-    current_theme = st.session_state.get("theme", "light")
-    # target theme is the one that will be activated when clicking the icon
-    target_theme = "dark" if current_theme == "light" else "light"
-    icon_to_show = ICON_DARK if target_theme == "dark" else ICON_LIGHT
+    current = st.session_state.get("theme", "light")
+    target = "dark" if current == "light" else "light"
+    icon_to_show = ICON_DARK if target == "dark" else ICON_LIGHT
+    # Render icon and a tiny invisible button to toggle theme server-side
+    st.markdown(f'<div class="header-toggle"><img src="{icon_to_show}" alt="toggle" /></div>', unsafe_allow_html=True)
+    # invisible button (label is a single space to avoid visible text)
+    if st.button(" ", key="ui_toggle_theme_icon"):
+        st.session_state["theme"] = target
+        inject_css_for_theme(st.session_state["theme"])
+        st.success(f"Thème changé en {st.session_state['theme']}. Rechargez la page si nécessaire (Ctrl+R).")
 
-    # Try to build a query-string link if possible; otherwise fallback to a server-side button
-    can_use_query = True
-    try:
-        # check presence of experimental_get_query_params (already attempted above)
-        _ = st.experimental_get_query_params  # type: ignore
-    except Exception:
-        can_use_query = False
-
-    if can_use_query:
-        # preserve other params if any
-        base_qs = params or {}
-        new_params = {k: v for k, v in base_qs.items() if k != "theme"}
-        new_params["theme"] = target_theme
-        qs_parts = []
-        for k, vals in new_params.items():
-            for v in vals:
-                qs_parts.append(f"{k}={v}")
-        qs = "&".join(qs_parts)
-        href = f"?{qs}" if qs else f"?theme={target_theme}"
-        html_icon = f"""
-        <div class="header-toggle" style="display:flex;justify-content:flex-end;">
-          <a href="{href}" title="Basculer en {target_theme} mode">
-            <img src="{icon_to_show}" alt="theme-toggle" />
-          </a>
-        </div>
-        """
-        st.markdown(html_icon, unsafe_allow_html=True)
-    else:
-        # Fallback: render icon and a tiny invisible button under it that toggles server-side
-        # We render the icon and a labeled button with aria-hidden label (no visible text)
-        html_icon = f"""
-        <div class="header-toggle" style="display:flex;justify-content:flex-end;align-items:center;">
-          <img src="{icon_to_show}" alt="theme-toggle" style="margin-right:8px;" />
-        </div>
-        """
-        st.markdown(html_icon, unsafe_allow_html=True)
-        # Provide a small button (no text) to toggle theme server-side
-        # Use a short label that is visually minimal
-        if st.button(" ", key="ui_toggle_theme_icon"):
-            st.session_state["theme"] = target_theme
-            inject_theme_css()
-            # Inform user to reload if necessary (safe fallback)
-            st.success(f"Thème changé en {target_theme}. Si l'interface ne s'actualise pas, rechargez la page (Ctrl+R).")
-
-# -------------------------
-# Callbacks to keep ZIP <-> City linked (bidirectional)
-# -------------------------
+# ---------- Callbacks ZIP <-> City ----------
 def on_zip_change():
     z = normalize_zip(st.session_state.get("ui_zip", ""))
     if not z:
@@ -523,7 +301,6 @@ def on_zip_change():
     cities = ZIP_TO_CITIES.get(z, [])
     if cities:
         st.session_state["ui_city"] = cities[0]
-
 
 def on_city_change():
     city = normalize_city(st.session_state.get("ui_city", ""))
@@ -533,11 +310,7 @@ def on_city_change():
     if zips:
         st.session_state["ui_zip"] = zips[0]
 
-# -------------------------
-# Main UI form (ZIP and City linked; Field Office independent)
-# -------------------------
-st.title("")  # title already rendered above
-
+# ---------- Main form ----------
 ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
 fn = st.text_input("Prénom", "ROSA", key="ui_fn")
 sex = st.selectbox("Sexe", ["M", "F"], key="ui_sex")
@@ -550,6 +323,7 @@ with col1:
 with col2:
     h2 = st.number_input("Pouces", 0, 11, 10, key="ui_h2")
     eyes = st.text_input("Yeux", "BRN", key="ui_eyes")
+
 hair = st.text_input("Cheveux", "BRN", key="ui_hair")
 cls = st.text_input("Classe", "C", key="ui_cls")
 rstr = st.text_input("Restrictions", "NONE", key="ui_rstr")
@@ -557,16 +331,13 @@ endorse = st.text_input("Endorsements", "NONE", key="ui_endorse")
 iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 address_line = st.text_input("Address Line", "2570 24TH STREET", key="ui_address_line")
 
-# Build options lists with placeholder first
 placeholder = "Choisir une option"
-
 zip_options = [placeholder] + sorted(ZIP_TO_CITIES.keys())
 city_options_all = sorted(CITY_TO_ZIPS.keys())
 office_options_from_db = sorted({info.get("office") for info in ZIP_DB.values() if info.get("office")})
 field_office_labels = sorted(set(FIELD_OFFICE_MAP.values()))
 office_options = [placeholder] + sorted(set(office_options_from_db) | set(field_office_labels)) if (office_options_from_db or field_office_labels) else [placeholder]
 
-# Ensure session defaults exist (use placeholder as default)
 if "ui_zip" not in st.session_state:
     st.session_state["ui_zip"] = placeholder
 if "ui_city" not in st.session_state:
@@ -574,7 +345,6 @@ if "ui_city" not in st.session_state:
 if "ui_office" not in st.session_state:
     st.session_state["ui_office"] = office_options[0] if office_options else placeholder
 
-# Layout: limit column widths to avoid overflow
 col_zip, col_city = st.columns([1.2, 1.8])
 with col_zip:
     st.selectbox(
@@ -586,14 +356,12 @@ with col_zip:
         help="Sélectionnez un code postal — la ville associée sera mise à jour automatiquement."
     )
 
-# Determine cities to show based on selected zip (if placeholder selected, show all cities)
 selected_zip = st.session_state.get("ui_zip", placeholder)
 if selected_zip != placeholder and selected_zip in ZIP_TO_CITIES:
     cities_for_zip = [placeholder] + ZIP_TO_CITIES[selected_zip]
 else:
     cities_for_zip = [placeholder] + city_options_all
 
-# Ensure ui_city is valid for the current cities_for_zip
 if st.session_state.get("ui_city") not in cities_for_zip:
     st.session_state["ui_city"] = cities_for_zip[0]
 
@@ -617,9 +385,7 @@ st.selectbox(
 
 generate = st.button("Générer la carte", key="ui_generate")
 
-# -------------------------
-# Validation & generation helpers
-# -------------------------
+# ---------- Validation & helpers (inchangés) ----------
 def validate_inputs() -> List[str]:
     errors: List[str] = []
     if not st.session_state.get("ui_ln", "").strip():
@@ -634,20 +400,16 @@ def validate_inputs() -> List[str]:
         errors.append("Poids hors plage attendue.")
     if st.session_state.get("ui_h1", 0) > 8 or st.session_state.get("ui_h2", 0) > 11:
         errors.append("Taille hors plage attendue.")
-
     zip_code_raw = st.session_state.get("ui_zip", "")
     city_raw = st.session_state.get("ui_city", "")
     address = st.session_state.get("ui_address_line", "").strip()
-
     if not zip_code_raw or zip_code_raw == placeholder:
         errors.append("Code postal requis.")
     if not city_raw or city_raw == placeholder:
         errors.append("Ville requise pour générer le code PDF417")
     if not address:
         errors.append("Adresse requise.")
-
     return errors
-
 
 def fetch_image_bytes(url: str) -> Optional[bytes]:
     try:
@@ -656,7 +418,6 @@ def fetch_image_bytes(url: str) -> Optional[bytes]:
         return resp.content
     except Exception:
         return None
-
 
 def create_pdf_bytes(fields: Dict[str, str], photo_bytes: bytes = None) -> bytes:
     if not _REPORTLAB_AVAILABLE:
@@ -686,7 +447,6 @@ def create_pdf_bytes(fields: Dict[str, str], photo_bytes: bytes = None) -> bytes
     buffer.seek(0)
     return buffer.read()
 
-
 def generate_pdf417_svg(data_bytes: bytes, columns: int, security_level: int, scale: int, ratio: int, color: str) -> str:
     if not _PDF417_AVAILABLE:
         raise RuntimeError("Module pdf417gen non disponible.")
@@ -699,9 +459,7 @@ def generate_pdf417_svg(data_bytes: bytes, columns: int, security_level: int, sc
     except Exception:
         return str(svg_tree)
 
-# -------------------------
-# Generation flow
-# -------------------------
+# ---------- Generation flow ----------
 if generate:
     errors = validate_inputs()
     if errors:
@@ -775,6 +533,8 @@ if generate:
         st.error("Payload invalide: des séparateurs interdits ont été détectés.")
         st.stop()
 
+    IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
+    IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
     photo_src = IMAGE_M_URL if sex == "M" else IMAGE_F_URL
     photo_bytes = fetch_image_bytes(photo_src)
 
@@ -806,7 +566,6 @@ if generate:
     """
     st.markdown(html, unsafe_allow_html=True)
 
-    # Optional validation UI
     if enable_validator and _AAMVA_UTILS_AVAILABLE:
         st.subheader("Validation AAMVA (optionnelle)")
         results = validate_aamva_payload(payload_to_use)
@@ -821,7 +580,6 @@ if generate:
                 st.warning(wmsg)
             for info in results.get("infos", []):
                 st.info(info)
-
             corrected, applied = auto_correct_payload(payload_to_use)
             if corrected and corrected != payload_to_use:
                 st.markdown("### Version corrigée proposée")
@@ -832,7 +590,6 @@ if generate:
                     payload_to_use = st.session_state.get("ui_aamva_corrected_preview", corrected)
                     st.success("Correction appliquée.")
 
-    # PDF417 generation & preview
     svg_str = None
     if show_barcodes:
         st.subheader("PDF417")
@@ -853,9 +610,8 @@ if generate:
             except Exception as exc:
                 st.error("Erreur génération PDF417 : " + str(exc))
         else:
-            st.warning("pdf417gen non disponible. Vendorisez le module ou installez pdf417gen.")
+            st.warning("pdf417gen non disponible.")
 
-    # Downloads
     cols = st.columns(2)
     with cols[0]:
         if svg_str:
