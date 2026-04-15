@@ -53,7 +53,7 @@ input, select, textarea, .stTextInput div div, .stSelectbox div div, .stNumberIn
 </style>
 """, unsafe_allow_html=True)
 
-# --- LOGIQUE ZIP DB (VERSION COMPLÈTE) ---
+# --- LOGIQUE ZIP DB (COMPLÈTE) ---
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     db = {}
     if not text:
@@ -85,7 +85,7 @@ selected_office = st.selectbox("Field Office", field_offices)
 
 # BOUTON GÉNÉRER
 if st.button("Générer la carte"):
-    st.toast("Données mises à jour", icon="✅")
+    st.toast("Carte mise à jour", icon="✅")
 
 st.markdown("---")
 
