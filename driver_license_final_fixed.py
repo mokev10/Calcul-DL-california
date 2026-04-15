@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
-# driver_license_modern.py
-# Interface moderne complète — prêt à copier
-# - Field office découplé du ZIP/ville
-# - Aperçu carte stylée (HTML/CSS)
-# - Sidebar pour options PDF417 / AAMVA
-# - Chargement paresseux ZIP DB (local JSON ou GitHub)
-# - Export PDF minimal si reportlab présent
-# - Ne simplifie pas la logique : fichier complet
+# driver_license_fieldoffice_dropdown.py
+# Interface Streamlit complète — Field Office en menu déroulant indépendant du ZIP/ville
+# Fichier complet prêt à copier
 
 import base64
 import datetime
@@ -15,7 +10,7 @@ import io
 import json
 import random
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 import streamlit as st
@@ -63,7 +58,84 @@ GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-californ
 LOCAL_ZIPDB_JSON = "zip_db.json"
 
 # -------------------------
-# Utilitaires et ZIP DB
+# Field Office list (fourni par l'utilisateur)
+# -------------------------
+# Format interne : List of tuples (region, city, code)
+FIELD_OFFICES: List[Tuple[str, str, str]] = [
+    ("Baie de San Francisco", "Corte Madera", "525"),
+    ("Baie de San Francisco", "Daly City", "599"),
+    ("Baie de San Francisco", "El Cerrito", "585"),
+    ("Baie de San Francisco", "Fremont", "643"),
+    ("Baie de San Francisco", "Hayward", "521"),
+    ("Baie de San Francisco", "Los Gatos", "641"),
+    ("Baie de San Francisco", "Novato", "647"),
+    ("Baie de San Francisco", "Oakland (Claremont)", "501"),
+    ("Baie de San Francisco", "Oakland (Coliseum)", "604"),
+    ("Baie de San Francisco", "Pittsburg", "651"),
+    ("Baie de San Francisco", "Pleasanton", "639"),
+    ("Baie de San Francisco", "Redwood City", "542"),
+    ("Baie de San Francisco", "San Francisco", "503"),
+    ("Baie de San Francisco", "San Jose (Alma)", "516"),
+    ("Baie de San Francisco", "San Jose (Driver License Center)", "607"),
+    ("Baie de San Francisco", "San Mateo", "594"),
+    ("Baie de San Francisco", "Santa Clara", "632"),
+    ("Baie de San Francisco", "Vallejo", "538"),
+    ("Grand Los Angeles", "Arleta", "628"),
+    ("Grand Los Angeles", "Bellflower", "610"),
+    ("Grand Los Angeles", "Culver City", "514"),
+    ("Grand Los Angeles", "Glendale", "540"),
+    ("Grand Los Angeles", "Hollywood", "633"),
+    ("Grand Los Angeles", "Inglewood", "544"),
+    ("Grand Los Angeles", "Long Beach", "507"),
+    ("Grand Los Angeles", "Los Angeles (Hope St)", "502"),
+    ("Grand Los Angeles", "Montebello", "531"),
+    ("Grand Los Angeles", "Pasadena", "510"),
+    ("Grand Los Angeles", "Santa Monica", "548"),
+    ("Grand Los Angeles", "Torrance", "592"),
+    ("Grand Los Angeles", "West Covina", "591"),
+    ("Orange County / Sud", "Costa Mesa", "627"),
+    ("Orange County / Sud", "Fullerton", "547"),
+    ("Orange County / Sud", "Laguna Hills", "642"),
+    ("Orange County / Sud", "Santa Ana", "529"),
+    ("Orange County / Sud", "San Clemente", "652"),
+    ("Orange County / Sud", "Westminster", "623"),
+    ("San Diego / Sud", "Chula Vista", "609"),
+    ("San Diego / Sud", "El Cajon", "549"),
+    ("San Diego / Sud", "Oceanside", "593"),
+    ("San Diego / Sud", "San Diego (Clairemont)", "618"),
+    ("San Diego / Sud", "San Diego (Normal St)", "504"),
+    ("San Diego / Sud", "San Marcos", "637"),
+    ("San Diego / Sud", "San Ysidro", "649"),
+    ("Nord de la Californie", "Auburn", "533"),
+    ("Nord de la Californie", "Chico", "534"),
+    ("Nord de la Californie", "Eureka", "522"),
+    ("Nord de la Californie", "Redding", "550"),
+    ("Nord de la Californie", "Roseville", "635"),
+    ("Sacramento", "Sacramento (Broadway)", "500"),
+    ("Sacramento", "Sacramento (South)", "603"),
+    ("Sacramento", "Woodland", "535"),
+    ("Vallée Centrale", "Bakersfield", "511"),
+    ("Vallée Centrale", "Fresno", "505"),
+    ("Vallée Centrale", "Lodi", "595"),
+    ("Vallée Centrale", "Modesto", "536"),
+    ("Vallée Centrale", "Stockton", "517"),
+    ("Vallée Centrale", "Visalia", "519"),
+]
+
+def get_field_office_options() -> List[str]:
+    """
+    Retourne la liste d'options pour le selectbox Field Office.
+    Chaque option est affichée sous la forme : "Région — Ville (Code)"
+    La première option est vide (aucun choix).
+    """
+    opts = [""]  # option vide pour ne rien sélectionner par défaut
+    for region, city, code in FIELD_OFFICES:
+        label = f"{region} — {city} ({code})"
+        opts.append(label)
+    return opts
+
+# -------------------------
+# ZIP DB helpers (chargement paresseux)
 # -------------------------
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     out: Dict[str, Dict[str, str]] = {}
@@ -82,7 +154,6 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     return out
 
 def load_zip_db() -> Dict[str, Dict[str, str]]:
-    # Tentative chargement local JSON
     try:
         with open(LOCAL_ZIPDB_JSON, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -90,7 +161,6 @@ def load_zip_db() -> Dict[str, Dict[str, str]]:
                 return data
     except Exception:
         pass
-    # Tentative fetch distant
     try:
         resp = requests.get(GITHUB_RAW_ZIPDB, timeout=6)
         if resp.status_code == 200:
@@ -99,12 +169,7 @@ def load_zip_db() -> Dict[str, Dict[str, str]]:
                 return parsed
     except Exception:
         pass
-    # Fallback minimal
-    return {
-        "94102": {"city": "San Francisco", "state": "CA", "office": ""},
-        "90001": {"city": "Los Angeles", "state": "CA", "office": ""},
-        "92101": {"city": "San Diego", "state": "CA", "office": ""},
-    }
+    return {"94102": {"city": "San Francisco", "state": "CA", "office": ""}}
 
 _ZIP_DB_CACHE: Optional[Dict[str, Dict[str, str]]] = None
 def get_zip_db() -> Dict[str, Dict[str, str]]:
@@ -113,6 +178,9 @@ def get_zip_db() -> Dict[str, Dict[str, str]]:
         _ZIP_DB_CACHE = load_zip_db()
     return _ZIP_DB_CACHE
 
+# -------------------------
+# Utilitaires
+# -------------------------
 def normalize_name(name: str) -> str:
     return re.sub(r"\s+", " ", name.strip())
 
@@ -137,6 +205,7 @@ def build_payload(data: Dict[str, str]) -> Dict[str, str]:
     payload["city"] = data.get("city", "")
     payload["state"] = data.get("state", "")
     payload["zip"] = data.get("zip", "")
+    # Field office : valeur fournie par l'utilisateur via le menu déroulant (ou vide)
     payload["field_office"] = data.get("field_office", "") or ""
     payload["license_number"] = data.get("license_number", generate_random_id())
     payload["issue_date"] = data.get("issue_date", format_date(datetime.date.today()))
@@ -156,7 +225,6 @@ def build_payload(data: Dict[str, str]) -> Dict[str, str]:
 def generate_pdf_preview(payload: Dict[str, str], photo_bytes: Optional[bytes] = None) -> bytes:
     buffer = io.BytesIO()
     if not _REPORTLAB_AVAILABLE:
-        # Fallback PDF minimal
         buffer.write(b"%PDF-1.4\n% fallback\n")
         buffer.write(b"1 0 obj << /Type /Catalog >> endobj\ntrailer << >>\n%%EOF")
         return buffer.getvalue()
@@ -221,51 +289,26 @@ MODERN_CSS = """
   --accent:#0ea5a4;
   --muted:#94a3b8;
   --glass: rgba(255,255,255,0.03);
-  --card-radius:14px;
+  --card-radius:12px;
 }
 body { background: linear-gradient(180deg,#071029 0%, #0b1220 100%); color: #e6eef8; }
 .stApp { background: transparent; }
-.header {
-  display:flex; align-items:center; gap:16px; margin-bottom:18px;
-}
-.logo {
-  width:56px; height:56px; border-radius:12px; background:linear-gradient(135deg,#06b6d4,#7c3aed); display:flex; align-items:center; justify-content:center; font-weight:700; color:white;
-  box-shadow: 0 6px 18px rgba(12, 74, 110, 0.35);
-}
-.title { font-size:20px; font-weight:700; margin:0; }
-.subtitle { color:var(--muted); font-size:13px; margin-top:2px; }
-
-.card {
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-  border-radius: var(--card-radius);
-  padding:18px;
-  box-shadow: 0 8px 30px rgba(2,6,23,0.6);
-  border: 1px solid rgba(255,255,255,0.03);
-}
-
-.form-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-.field { margin-bottom:10px; }
-.small-muted { color:var(--muted); font-size:12px; }
-
-.preview-card {
-  width:100%; max-width:420px; border-radius:12px; padding:16px; background: linear-gradient(180deg,#0b2a4a,#042033);
-  color:#fff; box-shadow: 0 10px 30px rgba(2,6,23,0.6);
-  border: 1px solid rgba(255,255,255,0.04);
-}
-.license-title { font-weight:800; font-size:14px; color:#cfefff; letter-spacing:1px; }
-.license-number { font-weight:700; font-size:18px; color:var(--accent); margin-top:8px; }
+.header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.logo { width:48px; height:48px; border-radius:10px; background:linear-gradient(135deg,#06b6d4,#7c3aed); display:flex; align-items:center; justify-content:center; font-weight:700; color:white; }
+.title { font-size:18px; font-weight:700; margin:0; }
+.subtitle { color:var(--muted); font-size:12px; margin-top:2px; }
+.card { background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius: var(--card-radius); padding:14px; box-shadow: 0 8px 30px rgba(2,6,23,0.6); border: 1px solid rgba(255,255,255,0.03); }
+.preview-card { width:100%; max-width:420px; border-radius:10px; padding:12px; background: linear-gradient(180deg,#0b2a4a,#042033); color:#fff; box-shadow: 0 10px 30px rgba(2,6,23,0.6); border: 1px solid rgba(255,255,255,0.04); }
+.license-title { font-weight:800; font-size:13px; color:#cfefff; letter-spacing:1px; }
+.license-number { font-weight:700; font-size:16px; color:var(--accent); margin-top:6px; }
 .license-row { display:flex; justify-content:space-between; margin-top:8px; font-size:13px; color:#dbeafe; }
 .badge { background: rgba(255,255,255,0.04); padding:6px 8px; border-radius:8px; font-size:12px; color:var(--muted); }
-.btn-primary {
-  background: linear-gradient(90deg,#06b6d4,#7c3aed); color:white; padding:10px 14px; border-radius:10px; border:none; font-weight:700;
-}
-.small-btn { background: rgba(255,255,255,0.03); color:#dbeafe; padding:8px 10px; border-radius:8px; border:none; }
-.footer-note { color:var(--muted); font-size:12px; margin-top:10px; }
+.btn-primary { background: linear-gradient(90deg,#06b6d4,#7c3aed); color:white; padding:10px 14px; border-radius:10px; border:none; font-weight:700; }
+.small-muted { color:var(--muted); font-size:12px; }
 </style>
 """
 
 def render_preview_card(payload: Dict[str, str], photo_b64: Optional[str] = None) -> str:
-    # Génère HTML de la carte d'aperçu (responsive)
     name = f"{payload.get('last_name','').upper()} {payload.get('first_name','').upper()}"
     lic = payload.get("license_number", "")
     addr = payload.get("address", "")
@@ -280,9 +323,9 @@ def render_preview_card(payload: Dict[str, str], photo_b64: Optional[str] = None
 
     photo_html = ""
     if photo_b64:
-        photo_html = f'<img src="data:image/png;base64,{photo_b64}" style="width:96px;height:96px;border-radius:8px;object-fit:cover;border:2px solid rgba(255,255,255,0.06)"/>'
+        photo_html = f'<img src="data:image/png;base64,{photo_b64}" style="width:88px;height:88px;border-radius:8px;object-fit:cover;border:2px solid rgba(255,255,255,0.06)"/>'
     else:
-        photo_html = '<div style="width:96px;height:96px;border-radius:8px;background:linear-gradient(135deg,#0ea5a4,#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:700;color:white">IMG</div>'
+        photo_html = '<div style="width:88px;height:88px;border-radius:8px;background:linear-gradient(135deg,#0ea5a4,#7c3aed);display:flex;align-items:center;justify-content:center;font-weight:700;color:white">IMG</div>'
 
     html = f"""
     <div class="preview-card">
@@ -293,7 +336,7 @@ def render_preview_card(payload: Dict[str, str], photo_b64: Optional[str] = None
         </div>
         <div style="text-align:right">{photo_html}</div>
       </div>
-      <div style="margin-top:12px;font-weight:700;font-size:14px">{name}</div>
+      <div style="margin-top:10px;font-weight:700;font-size:14px">{name}</div>
       <div style="margin-top:8px;color:#cfefff">{addr}</div>
       <div class="license-row">
         <div>{city} / {zipc}</div>
@@ -307,7 +350,7 @@ def render_preview_card(payload: Dict[str, str], photo_b64: Optional[str] = None
         <div>ISSUE: {issue}</div>
         <div>EXP: {expiry}</div>
       </div>
-      <div class="footer-note">Restrictions: {restrictions or 'NONE'} · Endorsements: {endorsements or 'NONE'}</div>
+      <div style="margin-top:8px;color:#94a3b8;font-size:12px">Restrictions: {restrictions or 'NONE'} · Endorsements: {endorsements or 'NONE'}</div>
     </div>
     """
     return html
@@ -317,13 +360,12 @@ def render_preview_card(payload: Dict[str, str], photo_b64: Optional[str] = None
 # -------------------------
 def main():
     st.markdown(MODERN_CSS, unsafe_allow_html=True)
-    # Header
     st.markdown("""
     <div class="header">
       <div class="logo">DL</div>
       <div>
         <div class="title">Générateur officiel de permis Californien</div>
-        <div class="subtitle">Interface moderne — Field office non inféré, saisie manuelle requise</div>
+        <div class="subtitle">Field Office via menu déroulant — non lié au ZIP/ville</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -335,12 +377,11 @@ def main():
     pdf417_scale = st.sidebar.slider("Échelle PDF417", min_value=1, max_value=6, value=3)
     enable_aamva = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)", value=False)
     st.sidebar.markdown("---")
-    st.sidebar.markdown("**Aide**")
-    st.sidebar.markdown("Le champ Field office n'est pas inféré depuis le ZIP/ville. Saisissez-le manuellement.")
+    st.sidebar.markdown("Le champ Field Office est un menu déroulant indépendant du ZIP/ville.")
 
     zip_db = get_zip_db()
+    field_office_options = get_field_office_options()
 
-    # Form layout
     with st.form("dl_form", clear_on_submit=False):
         left, right = st.columns([2,1])
         with left:
@@ -373,8 +414,11 @@ def main():
                 st.markdown(f"<div class='small-muted'>Ville détectée: <strong>{detected_city}</strong> · État: <strong>{detected_state}</strong></div>", unsafe_allow_html=True)
             city = st.text_input("Ville (si ZIP inconnu ou correction)", value=detected_city)
             state = st.text_input("État", value=detected_state or "CA")
-            # Field office indépendant
-            field_office = st.text_input("Field Office (saisissez manuellement)", value="")
+            # Field office via menu déroulant (indépendant)
+            st.markdown("<div style='margin-top:8px' class='small-muted'>Field Office (sélectionnez manuellement) :</div>", unsafe_allow_html=True)
+            field_office_choice = st.selectbox("Field Office", options=field_office_options, index=0)
+            # stocker la valeur brute sélectionnée (label)
+            field_office = field_office_choice or ""
             st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown('<div class="card" style="margin-top:12px">', unsafe_allow_html=True)
@@ -410,10 +454,8 @@ def main():
 
             submitted = st.form_submit_button("Générer la carte", help="Génère l'aperçu et les fichiers téléchargeables")
         with right:
-            # Aperçu carte
             st.markdown('<div class="card">', unsafe_allow_html=True)
             st.markdown("<h4 style='margin-top:0'>Aperçu</h4>", unsafe_allow_html=True)
-            # Préparer payload minimal pour l'aperçu en temps réel
             preview_data = {
                 "first_name": first_name or "",
                 "last_name": last_name or "",
@@ -447,13 +489,6 @@ def main():
             st.markdown(preview_html, unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # Actions rapides
-            st.markdown('<div style="margin-top:12px">', unsafe_allow_html=True)
-            if st.button("Réinitialiser", key="reset_btn"):
-                # Simple refresh: reload page
-                st.experimental_rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
     # Après soumission : validation et génération
     if submitted:
         errors = validate_inputs(first_name, last_name, dob, zip_code)
@@ -472,7 +507,8 @@ def main():
             "city": normalize_name(city),
             "state": normalize_name(state),
             "zip": zip_code.strip(),
-            "field_office": normalize_name(field_office),
+            # Field office : valeur sélectionnée dans le menu déroulant (ou vide)
+            "field_office": field_office,
             "height": height,
             "weight": weight,
             "eye_color": eye_color,
@@ -500,8 +536,8 @@ def main():
             except Exception:
                 pass
 
-        st.success("Génération terminée — le champ Field office utilisé est celui saisi manuellement.")
-        st.subheader("Payload AAMVA / Données")
+        st.success("Génération terminée — le Field Office utilisé est celui sélectionné dans le menu déroulant.")
+        st.subheader("Payload / Données")
         st.json(payload)
 
         # PDF
