@@ -49,13 +49,14 @@ except Exception:
 
 GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
+# Page config
 st.set_page_config(page_title="Permis CA", layout="wide")
 
 # ---------- Icons fournis ----------
 ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
 ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
 
-# ---------- Data minimal ----------
+# ---------- Minimal ZIP DB ----------
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
     "95818": {"city": "Sacramento", "state": "CA", "office": ""},
@@ -108,7 +109,7 @@ if fetched:
     if parsed:
         ZIP_DB.update(parsed)
 
-# Field offices (unchanged)
+# Field offices mapping
 field_offices = {
     "Baie de San Francisco": {"Corte Madera": 525, "Daly City": 599, "Oakland": 501, "San Francisco": 503},
     "Grand Los Angeles": {"Los Angeles": 502, "Santa Monica": 548, "Pasadena": 510},
@@ -158,7 +159,7 @@ def rletter(rng: random.Random, initial: str) -> str:
 def next_sequence(rng: random.Random) -> str:
     return str(rng.randint(10, 99))
 
-# ---------- THEME CSS (ciblé pour widgets) ----------
+# ---------- THEME CSS (variables + common) ----------
 LIGHT_VARS = """
 :root{
   --bg: #f5f7fa;
@@ -185,6 +186,7 @@ DARK_VARS = """
 """
 
 COMMON_CSS = r"""
+/* Global */
 html, body, [class*="css"] { background: var(--bg) !important; color: var(--text) !important; font-family: Inter, sans-serif; }
 
 /* Card */
@@ -256,7 +258,7 @@ def inject_css_for_theme(theme: str):
     # inject invisibly (height=0) to avoid showing raw CSS
     components.html(full, height=0)
 
-# Initialize theme in session_state
+# Initialize theme in session_state and inject CSS BEFORE widgets
 if "theme" not in st.session_state:
     st.session_state["theme"] = "light"
 inject_css_for_theme(st.session_state["theme"])
@@ -287,11 +289,14 @@ with header_col2:
     icon_to_show = ICON_DARK if target == "dark" else ICON_LIGHT
     # Render icon and a tiny invisible button to toggle theme server-side
     st.markdown(f'<div class="header-toggle"><img src="{icon_to_show}" alt="toggle" /></div>', unsafe_allow_html=True)
-    # invisible button (label is a single space to avoid visible text)
     if st.button(" ", key="ui_toggle_theme_icon"):
         st.session_state["theme"] = target
         inject_css_for_theme(st.session_state["theme"])
-        st.success(f"Thème changé en {st.session_state['theme']}. Rechargez la page si nécessaire (Ctrl+R).")
+        # Try to rerun to force full re-render; if not allowed, ask user to reload
+        try:
+            st.experimental_rerun()
+        except Exception:
+            st.success(f"Thème changé en {st.session_state['theme']}. Rechargez la page si nécessaire (Ctrl+R).")
 
 # ---------- Callbacks ZIP <-> City ----------
 def on_zip_change():
@@ -385,7 +390,7 @@ st.selectbox(
 
 generate = st.button("Générer la carte", key="ui_generate")
 
-# ---------- Validation & helpers (inchangés) ----------
+# ---------- Validation & helpers ----------
 def validate_inputs() -> List[str]:
     errors: List[str] = []
     if not st.session_state.get("ui_ln", "").strip():
