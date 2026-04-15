@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
 # Version complète prête à coller
-# - Liaison bidirectionnelle ZIP <-> Ville
-# - Field Office indépendant
-# - Placeholder "Choisir une option"
-# - CSS injecté via components.html pour éviter qu'il s'affiche comme texte
-# - Aucune modification de la logique métier
+# - Ajout d'un bouton d'en-tête pour basculer Dark Mode / Light Mode
+# - Intégration des icônes fournies
+# - Injection CSS via components.html (hauteur 0) pour éviter l'affichage du CSS en clair
+# - Aucune modification de la logique métier (liaison ZIP <-> Ville, Field Office indépendant, génération AAMVA/PDF417/PDF)
+# - Toutes les clés Streamlit restent uniques
 
 import base64
 import datetime
@@ -54,6 +54,12 @@ except Exception:
 GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
 st.set_page_config(page_title="Permis CA", layout="wide")
+
+# -------------------------
+# Theme icons (user provided)
+# -------------------------
+ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
+ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
 
 # -------------------------
 # Assets & constants
@@ -236,46 +242,77 @@ def build_aamva_tags(fields: Dict[str, str]) -> str:
     return "@ANSI 636014080102DL" + "".join(f"{tag}{enriched.get(tag,'')}" for tag in ordered if enriched.get(tag))
 
 # -------------------------
-# CSS string (kept in a Python variable)
+# Theme CSS definitions (light & dark)
 # -------------------------
-CSS = """
+LIGHT_CSS = """
+:root{
+  --bg: #f5f7fa;
+  --card-bg: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,250,252,0.96));
+  --text: #0f172a;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --control-bg: #ffffff;
+  --control-border: #e6eef8;
+  --photo-bg: #eef2ff;
+  --card-border: rgba(30,58,138,0.06);
+  --shadow: rgba(16,24,40,0.06);
+}
+"""
+
+DARK_CSS = """
+:root{
+  --bg: #0b1220;
+  --card-bg: linear-gradient(180deg, rgba(10,14,20,0.96), rgba(14,20,28,0.96));
+  --text: #e6eef8;
+  --muted: #9aa6bf;
+  --accent: #60a5fa;
+  --control-bg: #0f172a;
+  --control-border: rgba(255,255,255,0.06);
+  --photo-bg: #0f172a;
+  --card-border: rgba(255,255,255,0.04);
+  --shadow: rgba(2,6,23,0.6);
+}
+"""
+
+COMMON_CSS = r"""
 /* Global */
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7fa; color: #0f172a; }
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
 
 /* Container card */
 .card {
   width: 520px;
   border-radius: 14px;
   padding: 18px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,250,252,0.96));
-  border: 1px solid rgba(30,58,138,0.06);
-  box-shadow: 0 10px 30px rgba(16,24,40,0.06);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 10px 30px var(--shadow);
   margin: 18px auto;
-  transition: transform .18s ease, box-shadow .18s ease;
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
 }
-.card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(16,24,40,0.08); }
+.card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px var(--shadow); }
 
 /* Header / badge */
-.card .header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; color:#0f172a; font-weight:700; }
-.card .badge { background:#ffffff; color:#0f172a; padding:6px 10px; border-radius:8px; font-weight:700; box-shadow:0 4px 12px rgba(2,6,23,0.06); }
+.card .header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; color:var(--text); font-weight:700; }
+.card .badge { background:var(--control-bg); color:var(--text); padding:6px 10px; border-radius:8px; font-weight:700; box-shadow:0 4px 12px rgba(2,6,23,0.06); }
 
 /* Photo */
-.photo { width:96px; height:120px; background:#eef2ff; border-radius:10px; overflow:hidden; border:1px solid rgba(15,23,42,0.04); }
+.photo { width:96px; height:120px; background:var(--photo-bg); border-radius:10px; overflow:hidden; border:1px solid rgba(15,23,42,0.04); }
 .photo img { width:100%; height:100%; object-fit:cover; display:block; }
 
 /* Info column */
-.info { flex:1; font-size:13px; line-height:1.35; color:#0b1220; }
-.label { opacity:0.7; font-size:11px; margin-top:6px; }
-.value { font-weight:600; margin-bottom:6px; color:#071033; }
+.info { flex:1; font-size:13px; line-height:1.35; color:var(--text); }
+.label { opacity:0.7; font-size:11px; margin-top:6px; color:var(--muted); }
+.value { font-weight:600; margin-bottom:6px; color:var(--text); }
 
 /* Form controls styling */
 .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>select, textarea {
   border-radius:10px !important;
-  border:1px solid #e6eef8 !important;
+  border:1px solid var(--control-border) !important;
   padding:8px 10px !important;
-  background:#ffffff !important;
+  background:var(--control-bg) !important;
   box-shadow:none !important;
   font-size:13px !important;
+  color:var(--text) !important;
 }
 
 /* Force selectbox container sizing and prevent overflow */
@@ -292,18 +329,12 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7
   text-overflow: ellipsis !important;
   display: inline-block !important;
   max-width: 100% !important;
-}
-
-/* Also target common Streamlit internal classes for different versions */
-.css-1v3fvcr .stSelectbox select, .css-1v3fvcr select {
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  color:var(--text) !important;
 }
 
 /* Make placeholder visually distinct */
 .stSelectbox select option:first-child {
-  color: #6b7280;
+  color: var(--muted);
   font-style: italic;
 }
 
@@ -311,17 +342,17 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7
 .stTextInput>div>div>input:focus, .stSelectbox>div>div>select:focus, textarea:focus {
   outline: none !important;
   box-shadow: 0 6px 18px rgba(37,99,235,0.12) !important;
-  border-color: #2563eb !important;
+  border-color: var(--accent) !important;
 }
 
 /* Sidebar */
-section[data-testid="stSidebar"] { background: linear-gradient(180deg,#0f172a,#1e293b); color: #e6eef8; }
-section[data-testid="stSidebar"] .css-1d391kg { color: #e6eef8; }
-section[data-testid="stSidebar"] .stMarkdown { color: #e6eef8; }
+section[data-testid="stSidebar"] { background: linear-gradient(180deg,#071033,#0f172a); color: var(--text); }
+section[data-testid="stSidebar"] .css-1d391kg { color: var(--text); }
+section[data-testid="stSidebar"] .stMarkdown { color: var(--text); }
 
 /* Buttons and download buttons */
 button, .stDownloadButton button {
-  background: linear-gradient(135deg,#2563eb,#1e40af) !important;
+  background: linear-gradient(135deg,var(--accent),#1e40af) !important;
   color: #fff !important;
   border-radius: 10px !important;
   padding: 8px 14px !important;
@@ -332,7 +363,7 @@ button, .stDownloadButton button {
 button:hover, .stDownloadButton button:hover { transform: translateY(-2px); }
 
 /* Expander and panels */
-.stExpander { border-radius:10px !important; border:1px solid rgba(15,23,42,0.04) !important; background: #fff !important; }
+.stExpander { border-radius:10px !important; border:1px solid rgba(15,23,42,0.04) !important; background: var(--control-bg) !important; }
 .stExpanderSummary { font-weight:600 !important; }
 
 /* PDF417 preview container */
@@ -345,7 +376,7 @@ button:hover, .stDownloadButton button:hover { transform: translateY(-2px); }
 
 /* Progress bar */
 div[data-testid="stProgressBar"] > div > div {
-  background: linear-gradient(90deg,#2563eb,#1e40af) !important;
+  background: linear-gradient(90deg,var(--accent),#1e40af) !important;
   border-radius: 8px !important;
 }
 
@@ -358,13 +389,51 @@ div[data-testid="stProgressBar"] > div > div {
 
 /* Minor utility tweaks */
 .kv { color:#64748b; font-size:12px; }
+
+/* Header theme toggle area */
+.header-toggle {
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.header-toggle img {
+  width:20px;
+  height:20px;
+  vertical-align:middle;
+}
+.header-toggle button {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-weight:600;
+  cursor: pointer;
+  padding:6px 8px;
+  border-radius:8px;
+}
+.header-toggle button:hover {
+  background: rgba(255,255,255,0.04);
+}
 """
 
-# Inject CSS via components.html with height=0 to avoid visible text rendering
-components.html(f"<style>{CSS}</style>", height=0)
+# -------------------------
+# Inject initial theme into session_state
+# -------------------------
+if "theme" not in st.session_state:
+    st.session_state["theme"] = "light"  # default
+
+def inject_theme_css():
+    """Inject CSS according to current theme using components.html (height=0)."""
+    theme = st.session_state.get("theme", "light")
+    css = LIGHT_CSS if theme == "light" else DARK_CSS
+    full = f"<style>{css}\n{COMMON_CSS}</style>"
+    # inject invisibly (height=0) to avoid showing raw CSS
+    components.html(full, height=0)
+
+# inject at start
+inject_theme_css()
 
 # -------------------------
-# Sidebar controls
+# Sidebar controls (unchanged)
 # -------------------------
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6, key="sb_columns")
@@ -386,6 +455,30 @@ st.sidebar.markdown("---")
 enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)", value=False, key="sb_enable_validator")
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
+
+# -------------------------
+# Header with theme toggle (icons integrated)
+# -------------------------
+# Build a header row with title on left and theme toggle on right
+header_col1, header_col2 = st.columns([8, 2])
+with header_col1:
+    st.markdown("<h2 style='margin:0;padding:0'>Générateur officiel de permis CA</h2>", unsafe_allow_html=True)
+
+with header_col2:
+    # Show current icon and a toggle button
+    theme = st.session_state.get("theme", "light")
+    icon_url = ICON_DARK if theme == "dark" else ICON_LIGHT
+    # Display icon and a small toggle button
+    cols = st.columns([1, 2])
+    with cols[0]:
+        st.image(icon_url, width=22)
+    with cols[1]:
+        # single button to toggle theme
+        if st.button("Basculer thème", key="ui_toggle_theme"):
+            st.session_state["theme"] = "dark" if st.session_state.get("theme", "light") == "light" else "light"
+            inject_theme_css()
+            # force rerun to apply immediately
+            st.experimental_rerun()
 
 # -------------------------
 # Callbacks to keep ZIP <-> City linked (bidirectional)
@@ -410,8 +503,6 @@ def on_city_change():
 # -------------------------
 # Main UI form (ZIP and City linked; Field Office independent)
 # -------------------------
-st.title("Générateur officiel de permis CA")
-
 ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
 fn = st.text_input("Prénom", "ROSA", key="ui_fn")
 sex = st.selectbox("Sexe", ["M", "F"], key="ui_sex")
@@ -663,17 +754,17 @@ if generate:
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <div style="font-weight:700">CALIFORNIA USA DRIVER LICENSE</div>
-            <div style="background:white;color:#1e3a8a;padding:4px 8px;border-radius:6px;font-weight:700">{dl}</div>
+            <div style="background:var(--control-bg);color:var(--text);padding:4px 8px;border-radius:6px;font-weight:700">{dl}</div>
         </div>
         <div style="display:flex;gap:12px">
             {photo_html}
             <div style="font-size:12px">
-                <div style="opacity:0.8;font-size:10px">Nom</div><div style="font-weight:700">{ln}</div>
-                <div style="opacity:0.8;font-size:10px">Prénom</div><div style="font-weight:700">{fn}</div>
-                <div style="opacity:0.8;font-size:10px">Address</div><div style="font-weight:700">{address_sel}</div>
-                <div style="opacity:0.8;font-size:10px">Ville / ZIP</div><div style="font-weight:700">{city_sel} / {zip_sel}</div>
-                <div style="opacity:0.8;font-size:10px">Field Office</div><div style="font-weight:700">{office_sel}</div>
-                <div style="opacity:0.8;font-size:10px">ISS / EXP</div><div style="font-weight:700">{iss.strftime('%m/%d/%Y')} / {exp.strftime('%m/%d/%Y')}</div>
+                <div class="label">Nom</div><div class="value">{ln}</div>
+                <div class="label">Prénom</div><div class="value">{fn}</div>
+                <div class="label">Address</div><div class="value">{address_sel}</div>
+                <div class="label">Ville / ZIP</div><div class="value">{city_sel} / {zip_sel}</div>
+                <div class="label">Field Office</div><div class="value">{office_sel}</div>
+                <div class="label">ISS / EXP</div><div class="value">{iss.strftime('%m/%d/%Y')} / {exp.strftime('%m/%d/%Y')}</div>
             </div>
         </div>
     </div>
@@ -720,7 +811,7 @@ if generate:
                     ratio=ratio_param,
                     color=color_param,
                 )
-                svg_html = f"<div style='background:#fff;padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
+                svg_html = f"<div style='background:var(--control-bg);padding:8px;border-radius:6px;margin-top:12px;display:flex;justify-content:center'>{svg_str}</div>"
                 with st.expander("Aperçu PDF417 (SVG)", expanded=True):
                     components.html(svg_html, height=260, scrolling=True)
                     st.download_button("Télécharger PDF417 (SVG)", data=svg_str.encode("utf-8"), file_name="pdf417.svg", mime="image/svg+xml", key="dl_pdf417_svg_main")
