@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# driver_license_fieldoffice_dropdown.py
-# Version complète — Field Office via menu déroulant en deux étapes (region -> ville)
+# driver_license_fieldoffice_single_select.py
+# Version complète — Field Office via UN SEUL menu déroulant (label -> code)
 # Field office stocké dans le payload sous forme de code (ex: "502")
 # Fichier complet prêt à copier
 
@@ -131,28 +131,38 @@ FIELD_OFFICE_MAP: Dict[str, Dict[str, int]] = {
     }
 }
 
-def get_region_list() -> List[str]:
-    """Retourne la liste des régions (triée) avec une option vide en premier."""
-    regions = sorted(FIELD_OFFICE_MAP.keys())
-    return [""] + regions
+# -------------------------
+# Helpers pour construire la liste d'options (label -> code)
+# -------------------------
+def build_field_office_options() -> List[str]:
+    """
+    Construit la liste d'options affichées dans le selectbox.
+    Chaque option est un label "Région — Ville (Code)".
+    La première option est vide (aucune sélection).
+    """
+    opts: List[str] = [""]
+    # Tri des régions pour stabilité
+    for region in sorted(FIELD_OFFICE_MAP.keys()):
+        cities = FIELD_OFFICE_MAP[region]
+        for city in sorted(cities.keys()):
+            code = cities[city]
+            label = f"{region} — {city} ({code})"
+            opts.append(label)
+    return opts
 
-def get_cities_for_region(region: str) -> List[str]:
-    """Retourne la liste des villes pour une région donnée (triée), avec option vide."""
-    if not region or region not in FIELD_OFFICE_MAP:
-        return [""]
-    cities = sorted(FIELD_OFFICE_MAP[region].keys())
-    return [""] + cities
-
-def get_field_office_code(region: str, city: str) -> Optional[str]:
-    """Retourne le code (string) pour la paire region/city, ou None si non sélectionné."""
-    try:
-        if region and city:
-            code = FIELD_OFFICE_MAP[region].get(city)
-            if code is not None:
-                return str(code)
-    except Exception:
-        pass
-    return None
+def parse_label_to_code(label: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Transforme un label "Région — Ville (Code)" en (code_str, label).
+    Retourne (None, "") si label vide ou non parsable.
+    """
+    if not label:
+        return None, ""
+    # Extraire le code entre parenthèses à la fin
+    m = re.search(r"\((\d+)\)\s*$", label)
+    if not m:
+        return None, label
+    code = m.group(1)
+    return code, label
 
 # -------------------------
 # ZIP DB helpers (chargement paresseux)
@@ -389,7 +399,7 @@ def main():
       <div class="logo">DL</div>
       <div>
         <div class="title">Générateur officiel de permis Californien</div>
-        <div class="subtitle">Field Office via menu déroulant (region → ville) — indépendant du ZIP/ville</div>
+        <div class="subtitle">Field Office via UN SEUL menu déroulant — indépendant du ZIP/ville</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
@@ -401,10 +411,10 @@ def main():
     pdf417_scale = st.sidebar.slider("Échelle PDF417", min_value=1, max_value=6, value=3)
     enable_aamva = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)", value=False)
     st.sidebar.markdown("---")
-    st.sidebar.markdown("Le champ Field Office est sélectionné manuellement via région puis ville. Il n'est pas inféré depuis le ZIP/ville.")
+    st.sidebar.markdown("Le champ Field Office est sélectionné manuellement via un seul menu déroulant. Il n'est pas inféré depuis le ZIP/ville.")
 
     zip_db = get_zip_db()
-    regions = get_region_list()
+    fo_options = build_field_office_options()
 
     with st.form("dl_form", clear_on_submit=False):
         left, right = st.columns([2,1])
@@ -439,15 +449,11 @@ def main():
             city = st.text_input("Ville (si ZIP inconnu ou correction)", value=detected_city)
             state = st.text_input("État", value=detected_state or "CA")
 
-            # Field Office : region -> city select (indépendant du ZIP/ville)
-            st.markdown("<div style='margin-top:8px' class='small-muted'>Field Office (sélectionnez la région puis la ville) :</div>", unsafe_allow_html=True)
-            selected_region = st.selectbox("Région Field Office", options=regions, index=0)
-            cities = get_cities_for_region(selected_region)
-            selected_city = st.selectbox("Ville Field Office", options=cities, index=0)
-            # obtenir le code correspondant (ou None)
-            fo_code = get_field_office_code(selected_region, selected_city)
-            # label lisible pour l'aperçu
-            fo_label = f"{selected_region} — {selected_city} ({fo_code})" if selected_region and selected_city and fo_code else ""
+            # Field Office : UN SEUL selectbox (label -> code)
+            st.markdown("<div style='margin-top:8px' class='small-muted'>Field Office (sélectionnez dans la liste) :</div>", unsafe_allow_html=True)
+            selected_label = st.selectbox("Field Office", options=fo_options, index=0)
+            fo_code, fo_label = parse_label_to_code(selected_label)
+            # fo_code is None or string code
             st.markdown("</div>", unsafe_allow_html=True)
 
             st.markdown('<div class="card" style="margin-top:12px">', unsafe_allow_html=True)
