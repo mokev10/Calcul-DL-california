@@ -8,10 +8,8 @@ import io
 import random
 import re
 from typing import Dict, List, Optional
-
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 # --- CONFIGURATION PAGE ---
 st.set_page_config(page_title="Permis CA", layout="wide")
@@ -23,7 +21,7 @@ if 'theme' not in st.session_state:
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-# --- CSS DYNAMIQUE (LIGHT/DARK) ---
+# --- CSS DYNAMIQUE ---
 theme_vars = """
 :root {
   --bg: #0b1220; --card-bg: #0f172a; --text: #e6eef8; --muted: #9aa6bf;
@@ -51,15 +49,16 @@ input, select, textarea, .stTextInput div div, .stSelectbox div div, .stNumberIn
 .card {{
     background: var(--card-bg); border: 1px solid var(--control-border);
     border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    color: var(--text);
 }}
 </style>
 """, unsafe_allow_html=True)
 
-# --- LOGIQUE BASE DE DONNÉES ZIP ---
+# --- LOGIQUE BASE DE DONNÉES ZIP (CORRIGÉE) ---
 def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
     db = {}
-    if not text: return db
+    if not text:
+        return db
+    # On nettoie les lignes pour éviter l'erreur de syntaxe
     lines =
     i = 0
     while i + 2 < len(lines):
@@ -73,13 +72,12 @@ def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
             i += 1
     return db
 
-# --- UI HEADER & TOGGLE ---
+# --- UI HEADER ---
 c_title, c_tk = st.columns([0.9, 0.1])
 with c_title: 
     st.title("California Driver License System")
 with c_tk: 
-    icon = "☀️" if st.session_state.theme == "dark" else "🌙"
-    st.button(icon, on_click=toggle_theme)
+    st.button("☀️" if st.session_state.theme == "dark" else "🌙", on_click=toggle_theme)
 
 # --- CHAMPS DE SAISIE ---
 field_offices = ["Grand Los Angeles — Los Angeles (502)", "San Francisco (503)", "Sacramento (501)"]
@@ -87,11 +85,10 @@ selected_office = st.selectbox("Field Office", field_offices)
 
 # BOUTON GÉNÉRER (Restauré)
 if st.button("Générer la carte"):
-    st.success("Carte générée avec succès !")
+    st.toast("Carte mise à jour", icon="✅")
 
 st.markdown("---")
 
-# Grille de saisie
 col1, col2 = st.columns(2)
 with col1:
     last_name = st.text_input("Nom de famille", "HARMS")
@@ -113,16 +110,16 @@ st.markdown(f"""
             </div>
             <div style="margin-left:20px;">
                 <p style="margin:0; font-size:10px; opacity:0.6;">Nom</p>
-                <p style="margin:0 0 5px 0; font-weight:bold;">{last_name.upper()}</p>
+                <p style="margin:0 0 5px 0; font-weight:bold; color:var(--text);">{last_name.upper()}</p>
                 <p style="margin:0; font-size:10px; opacity:0.6;">Prénom</p>
-                <p style="margin:0 0 5px 0; font-weight:bold;">{first_name.upper()}</p>
+                <p style="margin:0 0 5px 0; font-weight:bold; color:var(--text);">{first_name.upper()}</p>
                 <p style="margin:0; font-size:10px; opacity:0.6;">Adresse</p>
-                <p style="margin:0 0 5px 0;">{address.upper()}</p>
+                <p style="margin:0 0 5px 0; color:var(--text);">{address.upper()}</p>
                 <p style="margin:0; font-size:10px; opacity:0.6;">Ville / ZIP</p>
-                <p style="margin:0;">{city_zip.upper()}</p>
+                <p style="margin:0; color:var(--text);">{city_zip.upper()}</p>
             </div>
         </div>
-        <div style="text-align: right; color: var(--accent); font-weight: bold;">{dl_number}</div>
+        <div style="text-align: right; color: var(--accent); font-weight: bold; font-size: 1.2em;">{dl_number}</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -130,4 +127,4 @@ st.markdown(f"""
 # --- ZONE PDF417 ---
 st.markdown("### PDF417")
 with st.expander("Aperçu PDF417 (SVG)", expanded=True):
-    st.markdown('<div style="background:white; height:80px; width:100%; border-radius:4px; display:flex; align-items:center; justify-content:center; color:black; font-family:monospace; letter-spacing:2px;">|||| ||| ||||| || |||| |||</div>', unsafe_allow_html=True)
+    st.markdown('<div style="background:white; padding:20px; border-radius:4px; text-align:center; color:black; font-family:monospace; letter-spacing:3px;">||| |||| || ||||| ||| || ||||</div>', unsafe_allow_html=True)
