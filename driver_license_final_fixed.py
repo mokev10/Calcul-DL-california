@@ -18,8 +18,8 @@ import streamlit.components.v1 as components
 # -------------------------
 # Configuration des Assets
 # -------------------------
-ICON_DARK = "https://icons8.com"
-ICON_LIGHT = "https://icons8.com"
+ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
+ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
 
 # -------------------------
 # Optional libs detection
