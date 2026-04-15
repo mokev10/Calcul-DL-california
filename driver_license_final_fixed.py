@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
-# Version mise à jour — license_number commence par l'initiale du nom de famille
+# Version : preview affiché seulement après génération + numéro basé sur initiale du nom
 # Usage pédagogique uniquement — NE GÉNÈRE PAS de documents officiels
 
 import datetime
@@ -9,17 +9,7 @@ from typing import Dict, List, Tuple, Optional
 
 import streamlit as st
 
-# Optional imports (ReportLab/pdf417gen/AAMVA utils) preserved if available
-try:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.utils import ImageReader
-    from reportlab.pdfgen import canvas
-    _REPORTLAB_AVAILABLE = True
-except Exception:
-    ImageReader = None
-    _REPORTLAB_AVAILABLE = False
-
-st.set_page_config(page_title="Générateur pédagogique de permis (mise à jour)", layout="wide")
+st.set_page_config(page_title="Générateur pédagogique de permis (preview après génération)", layout="wide")
 
 # ---------------------------
 # Données (extraits)
@@ -112,13 +102,9 @@ def build_field_office_choices(regions: Dict[str, Dict[str, int]]) -> List[Tuple
 FIELD_OFFICE_CHOICES = build_field_office_choices(FIELD_OFFICES_BY_REGION)
 
 # ---------------------------
-# Nouvelle logique de génération du numéro de permis
+# Génération du numéro (initiale + chiffres alternés pair/impair)
 # ---------------------------
 def _initial_from_family_name(family_name: str) -> str:
-    """
-    Retourne la première lettre majuscule du nom de famille si c'est une lettre A-Z,
-    sinon retourne 'H' par défaut.
-    """
     if not family_name:
         return "H"
     first = family_name.strip()[0].upper()
@@ -133,29 +119,27 @@ def _random_odd_digit() -> str:
     return str(random.choice([1,3,5,7,9]))
 
 def generate_license_number_from_name(family_name: str, digits: int = 8) -> str:
-    """
-    Génère un numéro pseudo-aléatoire commençant par l'initiale du nom de famille.
-    Les chiffres suivants alternent pair/impair : position 0 -> pair, position 1 -> impair, etc.
-    Ex: Davis -> 'D' + 8 chiffres alternés -> 'D21291706' (exemple)
-    Usage pédagogique uniquement.
-    """
     initial = _initial_from_family_name(family_name)
     parts: List[str] = []
     for i in range(digits):
-        if i % 2 == 0:
-            parts.append(_random_even_digit())
-        else:
-            parts.append(_random_odd_digit())
+        parts.append(_random_even_digit() if i % 2 == 0 else _random_odd_digit())
     return initial + "".join(parts)
 
-# ---------------------------
-# Helpers UI
-# ---------------------------
 def format_date(d: datetime.date) -> str:
     return d.strftime("%Y/%m/%d")
 
 # ---------------------------
-# UI Streamlit
+# Initialisation session_state
+# ---------------------------
+if "license_number" not in st.session_state:
+    st.session_state["license_number"] = generate_license_number_from_name("HARRIS")
+if "generated" not in st.session_state:
+    st.session_state["generated"] = False
+if "last_payload" not in st.session_state:
+    st.session_state["last_payload"] = None
+
+# ---------------------------
+# UI
 # ---------------------------
 st.markdown(
     """
@@ -168,7 +152,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("Générateur pédagogique de permis — Numéro basé sur le nom de famille")
+st.title("Générateur pédagogique de permis — preview après génération")
 st.caption("Usage académique uniquement — le numéro est pseudo‑aléatoire et non officiel")
 
 left, right = st.columns([1.1, 0.9])
@@ -198,9 +182,8 @@ with left:
 
     st.markdown("---")
     st.subheader("Permis et dates")
-    # Utilise la nouvelle fonction pour générer le numéro par défaut
-    default_license = generate_license_number_from_name(family_name)
-    license_number = st.text_input("Numéro de permis (pseudo)", value=default_license)
+    # license_number lié à st.session_state pour pouvoir le mettre à jour via bouton
+    st.text_input("Numéro de permis (pseudo)", key="license_number")
     issue_date = st.date_input("Date d’émission", value=datetime.date.today())
     default_exp = issue_date.replace(year=issue_date.year + 5) - datetime.timedelta(days=15)
     expiration_date = st.date_input("Date d'expiration", value=default_exp)
@@ -223,82 +206,87 @@ with left:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.write("")
-    # Bouton pour régénérer le numéro en fonction du nom saisi
-    if st.button("Régénérer le numéro à partir du nom de famille"):
-        license_number = generate_license_number_from_name(family_name)
-        st.success(f"Numéro mis à jour : {license_number}")
-
-    generate = st.button("Collecter les données (pédagogique)")
+    # Boutons d'action
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("Régénérer le numéro à partir du nom de famille"):
+            # Met à jour la session_state["license_number"]
+            st.session_state["license_number"] = generate_license_number_from_name(family_name)
+            st.success(f"Numéro régénéré : {st.session_state['license_number']}")
+    with col_b:
+        if st.button("Générer (pédagogique)"):
+            # Construire payload et marquer comme généré
+            payload = {
+                "family_name": family_name,
+                "given_name": given_name,
+                "sex": sex,
+                "dob": format_date(dob),
+                "address_line": address_line,
+                "city": city_input,
+                "zip": zip_input,
+                "license_number": st.session_state["license_number"],
+                "issue_date": format_date(issue_date),
+                "expiration_date": format_date(expiration_date),
+                "restrictions": restrictions,
+                "endorsements": endorsements,
+                "field_office_label": field_office_choice,
+                "field_office_code": selected_field_office_code,
+                "height_ft": height_ft,
+                "height_in": height_in,
+                "weight_lb": weight_lb,
+                "hair": hair,
+                "eyes": eyes,
+            }
+            st.session_state["generated"] = True
+            st.session_state["last_payload"] = payload
+            st.success("Données collectées (usage pédagogique).")
 
 with right:
-    st.markdown('<div class="preview">', unsafe_allow_html=True)
-    st.subheader("Aperçu (prévisualisation pédagogique)")
-    st.markdown(f"**NAME:** {given_name} {family_name}")
-    st.markdown(f"**SEX:** {sex}    **DOB:** {format_date(dob)}")
-    st.markdown(f"**DLN (pseudo):** {license_number}")
-    st.markdown(f"**ADDRESS:** {address_line}")
-    st.markdown(f"**CITY / ZIP:** {city_input} / {zip_input}")
-    st.markdown(f"**FIELD OFFICE:** {field_office_choice}")
-    st.markdown(f"**ISSUE DATE:** {format_date(issue_date)}")
-    st.markdown(f"**EXPIRATION DATE:** {format_date(expiration_date)}")
-    st.markdown(f"**RESTRICTIONS:** {restrictions}    **ENDORSEMENTS:** {endorsements}")
-    st.markdown("</div>", unsafe_allow_html=True)
+    # N'affiche le preview que si l'utilisateur a cliqué sur "Générer"
+    if st.session_state.get("generated", False) and st.session_state.get("last_payload") is not None:
+        payload = st.session_state["last_payload"]
+        st.markdown('<div class="preview">', unsafe_allow_html=True)
+        st.subheader("Aperçu (prévisualisation pédagogique)")
+        st.markdown(f"**NAME:** {payload['given_name']} {payload['family_name']}")
+        st.markdown(f"**SEX:** {payload['sex']}    **DOB:** {payload['dob']}")
+        st.markdown(f"**DLN (pseudo):** {payload['license_number']}")
+        st.markdown(f"**ADDRESS:** {payload['address_line']}")
+        st.markdown(f"**CITY / ZIP:** {payload['city']} / {payload['zip']}")
+        st.markdown(f"**FIELD OFFICE:** {payload['field_office_label']}")
+        st.markdown(f"**ISSUE DATE:** {payload['issue_date']}")
+        st.markdown(f"**EXPIRATION DATE:** {payload['expiration_date']}")
+        st.markdown(f"**RESTRICTIONS:** {payload['restrictions']}    **ENDORSEMENTS:** {payload['endorsements']}")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------------------------
-# Action
-# ---------------------------
-if generate:
-    payload = {
-        "family_name": family_name,
-        "given_name": given_name,
-        "sex": sex,
-        "dob": format_date(dob),
-        "address_line": address_line,
-        "city": city_input,
-        "zip": zip_input,
-        "license_number": license_number,
-        "issue_date": format_date(issue_date),
-        "expiration_date": format_date(expiration_date),
-        "restrictions": restrictions,
-        "endorsements": endorsements,
-        "field_office_label": field_office_choice,
-        "field_office_code": selected_field_office_code,
-        "height_ft": height_ft,
-        "height_in": height_in,
-        "weight_lb": weight_lb,
-        "hair": hair,
-        "eyes": eyes,
-    }
+        st.markdown("---")
+        st.subheader("Payload JSON (pédagogique)")
+        st.json(payload)
 
-    st.success("Données collectées (usage pédagogique).")
-    st.json(payload)
-
-    # Aperçu HTML simple (copie/coller)
-    card_html = f"""
-    <div style="font-family:Arial,Helvetica,sans-serif; width:520px; border-radius:12px; padding:18px;
-                background: linear-gradient(90deg,#0f4c81,#2b7bbf); color:white;">
-      <h2 style="margin:0">CALIFORNIA USA DRIVER LICENSE (PREVIEW)</h2>
-      <div style="margin-top:12px;">
-        <strong>DLN:</strong> {license_number}<br/>
-        <strong>NAME:</strong> {given_name} {family_name}<br/>
-        <strong>ADDRESS:</strong> {address_line}<br/>
-        <strong>CITY / ZIP:</strong> {city_input} / {zip_input}<br/>
-        <strong>FIELD OFFICE:</strong> {field_office_choice}<br/>
-        <strong>ISSUE DATE:</strong> {format_date(issue_date)} &nbsp;&nbsp;
-        <strong>EXP DATE:</strong> {format_date(expiration_date)}
-      </div>
-    </div>
-    """
-    st.markdown("### Carte (HTML preview)")
-    st.components.v1.html(card_html, height=220)
+        st.markdown("---")
+        st.markdown("### Carte (HTML preview)")
+        card_html = f"""
+        <div style="font-family:Arial,Helvetica,sans-serif; width:520px; border-radius:12px; padding:18px;
+                    background: linear-gradient(90deg,#0f4c81,#2b7bbf); color:white;">
+          <h2 style="margin:0">CALIFORNIA USA DRIVER LICENSE (PREVIEW)</h2>
+          <div style="margin-top:12px;">
+            <strong>DLN:</strong> {payload['license_number']}<br/>
+            <strong>NAME:</strong> {payload['given_name']} {payload['family_name']}<br/>
+            <strong>ADDRESS:</strong> {payload['address_line']}<br/>
+            <strong>CITY / ZIP:</strong> {payload['city']} / {payload['zip']}<br/>
+            <strong>FIELD OFFICE:</strong> {payload['field_office_label']}<br/>
+            <strong>ISSUE DATE:</strong> {payload['issue_date']} &nbsp;&nbsp;
+            <strong>EXP DATE:</strong> {payload['expiration_date']}
+          </div>
+        </div>
+        """
+        st.components.v1.html(card_html, height=260)
+    else:
+        # Message informatif quand aucun preview n'est disponible
+        st.info("Aucun aperçu disponible. Cliquez sur « Générer (pédagogique) » pour afficher l'aperçu.")
 
 # ---------------------------
 # Notes développeur
 # ---------------------------
-# - La fonction generate_license_number_from_name(family_name) applique la règle demandée :
-#   initiale = première lettre du nom de famille (A-Z) ou 'H' par défaut,
-#   puis 8 chiffres alternant pair/impair.
-# - Ce numéro est purement pédagogique et pseudo‑aléatoire.
-# - Si tu veux un autre schéma d'alternance (impair/pair début, longueur différente), je peux l'adapter.
-# - Ne pas utiliser ce code pour produire des documents officiels.
+# - L'aperçu (preview + JSON + HTML) n'est affiché que si st.session_state['generated'] == True.
+# - Le champ license_number est stocké dans st.session_state['license_number'] pour permettre la régénération.
+# - Le code reste pédagogique : ne pas utiliser pour produire des documents officiels.
