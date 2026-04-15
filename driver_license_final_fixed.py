@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
+# Version complète prête à coller — préserve la logique existante, clés uniques, CSS UI/UX amélioré.
 
 import base64
 import datetime
@@ -49,10 +50,14 @@ GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
 st.set_page_config(page_title="Permis CA", layout="wide")
 
+# -------------------------
+# Assets & constants
+# -------------------------
 IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
 IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
 
+# Minimal fallback ZIP_DB (ensures dropdowns always have values)
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
     "95818": {"city": "Sacramento", "state": "CA", "office": ""},
@@ -64,7 +69,9 @@ ZIP_DB: Dict[str, Dict[str, str]] = {
     "92843": {"city": "Garden Grove", "state": "CA", "office": ""},
 }
 
-
+# -------------------------
+# Helpers to load/parse ZIP_DB
+# -------------------------
 def fetch_github_zipdb(url: str) -> Optional[str]:
     try:
         resp = requests.get(url, timeout=8)
@@ -119,7 +126,9 @@ if fetched:
     if parsed:
         ZIP_DB.update(parsed)
 
-
+# -------------------------
+# Field offices mapping (flattened)
+# -------------------------
 field_offices = {
     "Baie de San Francisco": {
         "Corte Madera": 525, "Daly City": 599, "El Cerrito": 585, "Fremont": 643,
@@ -152,7 +161,9 @@ for region, cities in field_offices.items():
     for city, code in cities.items():
         FIELD_OFFICE_MAP[city.upper()] = f"{region} — {city} ({code})"
 
-
+# -------------------------
+# Inference & mapping builders
+# -------------------------
 def infer_field_office(city: str) -> str:
     key = (city or "").strip().upper()
     if not key:
@@ -210,7 +221,9 @@ for zip_code, row in ZIP_CITY_FIELD_OFFICE.items():
     for office in row["field_offices"]:
         OFFICE_TO_ZIPS.setdefault(office, []).append(zip_code)
 
-
+# -------------------------
+# Utility functions
+# -------------------------
 def normalize_city(value: str) -> str:
     return (value or "").strip().title()
 
@@ -253,19 +266,111 @@ def build_aamva_tags(fields: Dict[str, str]) -> str:
     enriched.setdefault("DAI", "OAKLAND")
     enriched.setdefault("DAJ", "CA")
     enriched.setdefault("DAK", "94601")
-    return build_aamva_payload_continuous(enriched)
+    if _AAMVA_UTILS_AVAILABLE:
+        return build_aamva_payload_continuous(enriched)
+    # fallback simple concatenation
+    ordered = ["DAQ", "DCS", "DAC", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"]
+    return "@ANSI 636014080102DL" + "".join(f"{tag}{enriched.get(tag,'')}" for tag in ordered if enriched.get(tag))
 
-
+# -------------------------
+# CSS UI/UX (remplacer l'ancien bloc si nécessaire)
+# -------------------------
 st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
-.card { width: 480px; border-radius: 12px; padding: 14px; background: linear-gradient(135deg,#1e3a8a,#2563eb); color: white; box-shadow: 0 8px 24px rgba(0,0,0,0.12); margin: auto; }
-.photo { width:86px; height:106px; background:#e5e7eb; border-radius:8px; overflow:hidden; }
+/* Global */
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7fa; color: #0f172a; }
+
+/* Container card */
+.card {
+  width: 520px;
+  border-radius: 14px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,250,252,0.96));
+  border: 1px solid rgba(30,58,138,0.06);
+  box-shadow: 0 10px 30px rgba(16,24,40,0.06);
+  margin: 18px auto;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(16,24,40,0.08); }
+
+/* Header / badge */
+.card .header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; color:#0f172a; font-weight:700; }
+.card .badge { background:#ffffff; color:#0f172a; padding:6px 10px; border-radius:8px; font-weight:700; box-shadow:0 4px 12px rgba(2,6,23,0.06); }
+
+/* Photo */
+.photo { width:96px; height:120px; background:#eef2ff; border-radius:10px; overflow:hidden; border:1px solid rgba(15,23,42,0.04); }
 .photo img { width:100%; height:100%; object-fit:cover; display:block; }
+
+/* Info column */
+.info { flex:1; font-size:13px; line-height:1.35; color:#0b1220; }
+.label { opacity:0.7; font-size:11px; margin-top:6px; }
+.value { font-weight:600; margin-bottom:6px; color:#071033; }
+
+/* Form controls styling */
+.stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>select, textarea {
+  border-radius:10px !important;
+  border:1px solid #e6eef8 !important;
+  padding:8px 10px !important;
+  background:#ffffff !important;
+  box-shadow:none !important;
+  font-size:13px !important;
+}
+.stTextInput>div>div>input:focus, .stSelectbox>div>div>select:focus, textarea:focus {
+  outline: none !important;
+  box-shadow: 0 6px 18px rgba(37,99,235,0.12) !important;
+  border-color: #2563eb !important;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"] { background: linear-gradient(180deg,#0f172a,#1e293b); color: #e6eef8; }
+section[data-testid="stSidebar"] .css-1d391kg { color: #e6eef8; }
+section[data-testid="stSidebar"] .stMarkdown { color: #e6eef8; }
+
+/* Buttons and download buttons */
+button, .stDownloadButton button {
+  background: linear-gradient(135deg,#2563eb,#1e40af) !important;
+  color: #fff !important;
+  border-radius: 10px !important;
+  padding: 8px 14px !important;
+  border: none !important;
+  font-weight: 600 !important;
+  box-shadow: 0 6px 18px rgba(37,99,235,0.12) !important;
+}
+button:hover, .stDownloadButton button:hover { transform: translateY(-2px); }
+
+/* Expander and panels */
+.stExpander { border-radius:10px !important; border:1px solid rgba(15,23,42,0.04) !important; background: #fff !important; }
+.stExpanderSummary { font-weight:600 !important; }
+
+/* PDF417 preview container */
+[data-testid="stMarkdownContainer"] > div > div > svg {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+  margin: 8px auto;
+}
+
+/* Progress bar */
+div[data-testid="stProgressBar"] > div > div {
+  background: linear-gradient(90deg,#2563eb,#1e40af) !important;
+  border-radius: 8px !important;
+}
+
+/* Small screens adjustments */
+@media (max-width: 800px) {
+  .card { width: 92% !important; padding: 14px; }
+  .photo { width:84px; height:104px; }
+}
+
+/* Minor utility tweaks */
+.kv { color:#64748b; font-size:12px; }
 </style>
 """, unsafe_allow_html=True)
 
+# -------------------------
+# Sidebar controls
+# -------------------------
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6, key="sb_columns")
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2, key="sb_ecc")
@@ -287,7 +392,9 @@ enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)"
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
 
-
+# -------------------------
+# Synchronization callbacks
+# -------------------------
 def update_from_zip() -> None:
     zip_code = normalize_zip(st.session_state.get("ui_zip", ""))
     row = ZIP_CITY_FIELD_OFFICE.get(zip_code)
@@ -320,7 +427,9 @@ def update_from_office() -> None:
     cities = row.get("cities") or ["Unknown City"]
     st.session_state["ui_city"] = cities[0]
 
-
+# -------------------------
+# Main UI form (preserve structure)
+# -------------------------
 st.title("Générateur officiel de permis CA")
 
 ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
@@ -342,6 +451,7 @@ endorse = st.text_input("Endorsements", "NONE", key="ui_endorse")
 iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 address_line = st.text_input("Address Line", "2570 24TH STREET", key="ui_address_line")
 
+# Build options from mapping
 zip_options = list(ZIP_CITY_FIELD_OFFICE.keys()) or ["94015"]
 if "ui_zip" not in st.session_state or st.session_state["ui_zip"] not in ZIP_CITY_FIELD_OFFICE:
     st.session_state["ui_zip"] = zip_options[0]
@@ -395,7 +505,9 @@ st.selectbox(
 
 generate = st.button("Générer la carte", key="ui_generate")
 
-
+# -------------------------
+# Validation & generation helpers
+# -------------------------
 def validate_inputs() -> List[str]:
     errors: List[str] = []
     if not st.session_state.get("ui_ln", "").strip():
@@ -481,7 +593,9 @@ def generate_pdf417_svg(data_bytes: bytes, columns: int, security_level: int, sc
     except Exception:
         return str(svg_tree)
 
-
+# -------------------------
+# Generation flow
+# -------------------------
 if generate:
     errors = validate_inputs()
     if errors:
@@ -558,7 +672,7 @@ if generate:
     else:
         # fallback continu sans séparateurs invisibles
         ordered = ["DAQ", "DCS", "DAC", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"]
-        payload_to_use = "@ANSI 636014080102DL00410288ZA03290015DL" + "".join(
+        payload_to_use = "@ANSI 636014080102DL" + "".join(
             f"{tag}{str(fields.get(tag, '')).strip()}" for tag in ordered if str(fields.get(tag, "")).strip()
         )
 
@@ -597,6 +711,7 @@ if generate:
     """
     st.markdown(html, unsafe_allow_html=True)
 
+    # Optional validation UI
     if enable_validator and _AAMVA_UTILS_AVAILABLE:
         st.subheader("Validation AAMVA (optionnelle)")
         results = validate_aamva_payload(payload_to_use)
@@ -622,6 +737,7 @@ if generate:
                     payload_to_use = st.session_state.get("ui_aamva_corrected_preview", corrected)
                     st.success("Correction appliquée.")
 
+    # PDF417 generation & preview
     svg_str = None
     if show_barcodes:
         st.subheader("PDF417")
@@ -644,6 +760,7 @@ if generate:
         else:
             st.warning("pdf417gen non disponible. Vendorisez le module ou installez pdf417gen.")
 
+    # Downloads
     cols = st.columns(2)
     with cols[0]:
         if svg_str:
