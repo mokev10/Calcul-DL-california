@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-# driver_license_final_by_county.py
-# Version : liaison Field Office déterminée uniquement par le comté (fallback Nominatim),
-# tout en conservant la liaison Ville <-> Code postal.
+# driver_license_no_link_office.py
+# Version : reprend ton code initial mais supprime toute liaison automatique
+# entre Ville/Code postal et Field Office. La relation Ville <-> ZIP est
+# conservée. Le Field Office devient une sélection indépendante.
 # Remplace entièrement ton ancien fichier par celui-ci (copier-coller).
 
 import base64
@@ -57,73 +58,31 @@ IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/exte
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
 
 # ---------- ZIP_DB (extrait/restauré) ----------
+# On conserve la table ZIP -> city pour maintenir la liaison Ville <-> ZIP.
 ZIP_DB: Dict[str, Dict[str, str]] = {
-    "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
-    "95818": {"city": "Sacramento", "state": "CA", "office": ""},
-    "94102": {"city": "San Francisco", "state": "CA", "office": ""},
+    "90650": {"city": "Norwalk", "state": "CA", "office": ""},
     "94015": {"city": "Daly City", "state": "CA", "office": ""},
+    "94102": {"city": "San Francisco", "state": "CA", "office": ""},
     "94601": {"city": "Oakland", "state": "CA", "office": ""},
     "90001": {"city": "Los Angeles", "state": "CA", "office": ""},
     "92101": {"city": "San Diego", "state": "CA", "office": ""},
-    "90650": {"city": "Norwalk", "state": "CA", "office": ""},
-    # ... (tu peux étendre la liste comme avant)
+    "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
+    "95818": {"city": "Sacramento", "state": "CA", "office": ""},
+    # ... étendre si nécessaire
 }
 
-# ---------- Field offices par région (référence) ----------
-# On conserve la table de référence des bureaux par région/city pour information,
-# mais la liaison effective Field Office <- comté se fera via COUNTY_TO_FIELD_OFFICE.
-field_offices = {
-    "Baie de San Francisco": {
-        "Corte Madera": 525, "Daly City": 599, "El Cerrito": 585, "Fremont": 643,
-        "Hayward": 521, "Los Gatos": 641, "Novato": 647, "Oakland": 501,
-        "Pittsburg": 651, "Pleasanton": 639, "Redwood City": 542,
-        "San Francisco": 503, "San Jose": 516, "San Mateo": 594, "Santa Clara": 632,
-        "Vallejo": 538,
-    },
-    "Grand Los Angeles": {
-        "Arleta": 628, "Bellflower": 610, "Culver City": 514, "Glendale": 540,
-        "Hollywood": 633, "Inglewood": 544, "Long Beach": 507, "Los Angeles": 502,
-        "Montebello": 531, "Pasadena": 510, "Santa Monica": 548, "Torrance": 592,
-        "West Covina": 591,
-    },
-    "Orange County / Sud": {
-        "Costa Mesa": 627, "Fullerton": 547, "Laguna Hills": 642, "Santa Ana": 529,
-        "San Clemente": 652, "Westminster": 623, "Garden Grove": 547, "Anaheim": 547,
-    },
-    "Vallée Centrale": {
-        "Bakersfield": 511, "Fresno": 505, "Lodi": 595, "Modesto": 536, "Stockton": 517,
-        "Visalia": 519, "Sacramento": 505,
-    },
-    "Sud Californie": {
-        "San Diego": 707,
-    },
-}
-
-# ---------- County -> Field Office mapping (définitif pour attribution) ----------
-# C'est la table utilisée pour déterminer le Field Office : la clé est le nom du comté.
-COUNTY_TO_FIELD_OFFICE: Dict[str, str] = {
-    "Los Angeles": "Grand Los Angeles — Los Angeles (502)",
-    "San Francisco": "Baie de San Francisco — San Francisco (503)",
-    "San Mateo": "Baie de San Francisco — San Mateo (594)",
-    "Alameda": "Baie de San Francisco — Oakland (501)",
-    "Marin": "Baie de San Francisco — Corte Madera (525)",
-    "Sacramento": "Vallée Centrale — Sacramento (505)",
-    "San Diego": "Sud Californie — San Diego (707)",
-    "Orange": "Orange County / Sud — Anaheim (547)",
-    # Ajoute d'autres comtés si nécessaire
-}
-
-# ---------- Petit cache ZIP -> County embarqué (pour éviter trop d'appels réseau) ----------
-ZIP_TO_COUNTY: Dict[str, str] = {
-    "90650": "Los Angeles",  # exemple Norwalk
-    "94015": "San Mateo",
-    "94102": "San Francisco",
-    "94601": "Alameda",
-    "90001": "Los Angeles",
-    "92101": "San Diego",
-    "94925": "Marin",
-    "95818": "Sacramento",
-}
+# ---------- Field offices list (indépendant) ----------
+# Liste des Field Offices disponibles — indépendante de ZIP/ville.
+FIELD_OFFICE_OPTIONS: List[str] = [
+    "Grand Los Angeles — Los Angeles (502)",
+    "Baie de San Francisco — San Francisco (503)",
+    "Baie de San Francisco — Daly City (599)",
+    "Baie de San Francisco — Oakland (501)",
+    "Vallée Centrale — Sacramento (505)",
+    "Sud Californie — San Diego (707)",
+    "Orange County / Sud — Anaheim (547)",
+    "Unknown Field Office",
+]
 
 # ---------- Utilitaires ----------
 def normalize_city(value: str) -> str:
@@ -152,60 +111,7 @@ def rletter(rng: random.Random, initial: str) -> str:
 def next_sequence(rng: random.Random) -> str:
     return str(rng.randint(10, 99))
 
-# ---------- Récupération du comté via Nominatim (OpenStreetMap) ----------
-def fetch_county_from_nominatim(query: str) -> Optional[str]:
-    try:
-        url = "https://nominatim.openstreetmap.org/search"
-        params = {"q": query, "format": "json", "addressdetails": 1, "limit": 1}
-        headers = {"User-Agent": "PermisCA-App/1.0 (+https://example.com)"}
-        resp = requests.get(url, params=params, headers=headers, timeout=4)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data:
-            return None
-        addr = data[0].get("address", {})
-        county = addr.get("county") or addr.get("state_district") or addr.get("region")
-        if county:
-            # Normaliser : enlever "County" si présent
-            return re.sub(r"\s*County\s*$", "", county).strip()
-    except Exception:
-        return None
-    return None
-
-def get_county_for_zip_or_city(zip_code: str = "", city: str = "") -> Optional[str]:
-    z = normalize_zip(zip_code)
-    if z and z in ZIP_TO_COUNTY:
-        return ZIP_TO_COUNTY[z]
-    if z:
-        county = fetch_county_from_nominatim(z + ", CA")
-        if county:
-            ZIP_TO_COUNTY[z] = county
-            return county
-    c = normalize_city(city)
-    if c:
-        county = fetch_county_from_nominatim(f"{c}, CA")
-        if county:
-            if z:
-                ZIP_TO_COUNTY[z] = county
-            return county
-    return None
-
-# ---------- Nouvelle logique : Field Office déterminé UNIQUEMENT par le comté ----------
-def infer_field_office_by_county(city: str = "", zip_code: str = "") -> str:
-    """
-    Retourne le Field Office en se basant uniquement sur le comté.
-    Ne tient PAS compte d'une correspondance directe ville->field office.
-    """
-    county = get_county_for_zip_or_city(zip_code=zip_code, city=city)
-    if county:
-        mapped = COUNTY_TO_FIELD_OFFICE.get(county)
-        if mapped:
-            return mapped
-        # Si comté trouvé mais non mappé, renvoyer une mention explicite
-        return f"{county} County — (Field Office non répertorié)"
-    return "Unknown Field Office"
-
-# ---------- Parsing du ZIP DB distant (non bloquant) ----------
+# ---------- Parsing distant ZIP DB (non bloquant) ----------
 def fetch_github_zipdb(url: str) -> Optional[str]:
     try:
         resp = requests.get(url, timeout=8)
@@ -254,43 +160,29 @@ if fetched:
     if parsed:
         ZIP_DB.update(parsed)
 
-# ---------- Construire ZIP_CITY_FIELD_OFFICE mais sans lier ville->field office directement ----------
-def build_zip_city_field_office(zip_db: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, List[str]]]:
-    mapping: Dict[str, Dict[str, List[str]]] = {}
+# ---------- Construire mapping ZIP -> cities (on conserve la liaison Ville <-> ZIP) ----------
+def build_zip_city_map(zip_db: Dict[str, Dict[str, str]]) -> Dict[str, List[str]]:
+    mapping: Dict[str, List[str]] = {}
     for zip_code, info in zip_db.items():
         z = re.sub(r"\D", "", str(zip_code))[:5]
         if len(z) != 5:
             continue
         city = (info.get("city") or "").strip().title()
-        # On conserve le champ office dans ZIP_DB mais on ne s'en sert pas pour la liaison principale
-        entry = mapping.setdefault(z, {"cities": [], "field_offices": []})
-        if city and city not in entry["cities"]:
-            entry["cities"].append(city)
-        # Déterminer le field office via le comté (fallback)
-        office = infer_field_office_by_county(city=city, zip_code=z)
-        if office and office not in entry["field_offices"]:
-            entry["field_offices"].append(office)
+        if not city:
+            continue
+        mapping.setdefault(z, []).append(city)
+    # garantir au moins une entrée par défaut
     if not mapping:
-        mapping["94015"] = {
-            "cities": ["Daly City"],
-            "field_offices": ["Baie de San Francisco — Daly City (599)"],
-        }
-    for z, entry in mapping.items():
-        if not entry["cities"]:
-            entry["cities"] = ["Unknown City"]
-        if not entry["field_offices"]:
-            entry["field_offices"] = ["Unknown Field Office"]
+        mapping["94015"] = ["Daly City"]
     return dict(sorted(mapping.items(), key=lambda kv: int(kv[0])))
 
-ZIP_CITY_FIELD_OFFICE = build_zip_city_field_office(ZIP_DB)
+ZIP_TO_CITIES = build_zip_city_map(ZIP_DB)
 
+# Inverses
 CITY_TO_ZIPS: Dict[str, List[str]] = {}
-OFFICE_TO_ZIPS: Dict[str, List[str]] = {}
-for zip_code, row in ZIP_CITY_FIELD_OFFICE.items():
-    for city in row["cities"]:
-        CITY_TO_ZIPS.setdefault(city, []).append(zip_code)
-    for office in row["field_offices"]:
-        OFFICE_TO_ZIPS.setdefault(office, []).append(zip_code)
+for z, cities in ZIP_TO_CITIES.items():
+    for c in cities:
+        CITY_TO_ZIPS.setdefault(c, []).append(z)
 
 # ---------- UI CSS ----------
 st.markdown("""
@@ -325,39 +217,28 @@ enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)"
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — la validation est désactivée automatiquement.")
 
-# ---------- Update helpers ----------
+# ---------- Update helpers (modifiés pour NE PAS lier office) ----------
 def update_from_zip() -> None:
+    """Met à jour uniquement la ville (et conserve le Field Office tel quel)."""
     zip_code = normalize_zip(st.session_state.get("ui_zip", ""))
-    row = ZIP_CITY_FIELD_OFFICE.get(zip_code)
-    if not row:
-        return
-    cities = row.get("cities") or ["Unknown City"]
-    offices = row.get("field_offices") or ["Unknown Field Office"]
-    st.session_state["ui_city"] = cities[0]
-    st.session_state["ui_office"] = offices[0]
+    cities = ZIP_TO_CITIES.get(zip_code, [])
+    if cities:
+        st.session_state["ui_city"] = cities[0]
 
 def update_from_city() -> None:
+    """Met à jour uniquement le ZIP (choisit le premier ZIP associé)."""
     city = normalize_city(st.session_state.get("ui_city", ""))
     zips = CITY_TO_ZIPS.get(city, [])
-    if not zips:
-        return
-    st.session_state["ui_zip"] = zips[0]
-    row = ZIP_CITY_FIELD_OFFICE.get(zips[0], {})
-    offices = row.get("field_offices") or ["Unknown Field Office"]
-    st.session_state["ui_office"] = offices[0]
+    if zips:
+        st.session_state["ui_zip"] = zips[0]
 
 def update_from_office() -> None:
-    office = st.session_state.get("ui_office", "")
-    zips = OFFICE_TO_ZIPS.get(office, [])
-    if not zips:
-        return
-    st.session_state["ui_zip"] = zips[0]
-    row = ZIP_CITY_FIELD_OFFICE.get(zips[0], {})
-    cities = row.get("cities") or ["Unknown City"]
-    st.session_state["ui_city"] = cities[0]
+    """Ne modifie ni la ville ni le ZIP — office est indépendant."""
+    # Intentionnellement vide : la sélection d'office ne doit pas impacter ville/zip.
+    return
 
 # ---------- Main UI ----------
-st.title("Générateur officiel de permis Californien")
+st.title("PERMIS CALIFORNIA — (Field Office indépendant)")
 
 ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
 fn = st.text_input("Prénom", "ROSA", key="ui_fn")
@@ -371,6 +252,7 @@ with col1:
 with col2:
     h2 = st.number_input("Pouces", 0, 11, 10, key="ui_h2")
     eyes = st.text_input("Yeux", "BRN", key="ui_eyes")
+
 hair = st.text_input("Cheveux", "BRN", key="ui_hair")
 cls = st.text_input("Classe", "C", key="ui_cls")
 rstr = st.text_input("Restrictions", "NONE", key="ui_rstr")
@@ -378,14 +260,13 @@ endorse = st.text_input("Endorsements", "NONE", key="ui_endorse")
 iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 address_line = st.text_input("Address Line", "2570 24TH STREET", key="ui_address_line")
 
-zip_options = list(ZIP_CITY_FIELD_OFFICE.keys()) or ["94015"]
-if "ui_zip" not in st.session_state or st.session_state["ui_zip"] not in ZIP_CITY_FIELD_OFFICE:
+zip_options = list(ZIP_TO_CITIES.keys()) or ["94015"]
+if "ui_zip" not in st.session_state or st.session_state["ui_zip"] not in ZIP_TO_CITIES:
     st.session_state["ui_zip"] = zip_options[0]
 
 selected_zip = st.session_state["ui_zip"]
-selected_row = ZIP_CITY_FIELD_OFFICE.get(selected_zip, {"cities": ["Unknown City"], "field_offices": ["Unknown Field Office"]})
-city_options = selected_row.get("cities") or ["Unknown City"]
-office_options = selected_row.get("field_offices") or ["Unknown Field Office"]
+city_options = ZIP_TO_CITIES.get(selected_zip, ["Unknown City"])
+office_options = FIELD_OFFICE_OPTIONS
 
 if "ui_city" not in st.session_state or st.session_state["ui_city"] not in city_options:
     st.session_state["ui_city"] = city_options[0]
@@ -403,13 +284,9 @@ with col_zip:
     )
 
 selected_zip = st.session_state["ui_zip"]
-selected_row = ZIP_CITY_FIELD_OFFICE.get(selected_zip, {"cities": ["Unknown City"], "field_offices": ["Unknown Field Office"]})
-city_options = selected_row.get("cities") or ["Unknown City"]
-office_options = selected_row.get("field_offices") or ["Unknown Field Office"]
+city_options = ZIP_TO_CITIES.get(selected_zip, ["Unknown City"])
 if st.session_state.get("ui_city") not in city_options:
     st.session_state["ui_city"] = city_options[0]
-if st.session_state.get("ui_office") not in office_options:
-    st.session_state["ui_office"] = office_options[0]
 
 with col_city:
     st.selectbox(
@@ -420,8 +297,9 @@ with col_city:
         on_change=update_from_city,
     )
 
+# Field Office : sélection totalement indépendante (aucune liaison automatique)
 st.selectbox(
-    "Field Office",
+    "Field Office (sélection indépendante)",
     options=office_options,
     index=office_options.index(st.session_state["ui_office"]),
     key="ui_office",
@@ -457,12 +335,11 @@ def validate_inputs() -> List[str]:
     if not address:
         errors.append("Adresse requise.")
 
-    # On conserve la cohérence ville <-> ZIP
-    row = ZIP_CITY_FIELD_OFFICE.get(zip_code)
-    if row:
-        allowed = [normalize_city(c) for c in (row.get("cities") or [])]
-        if city not in allowed:
-            errors.append(f"Incohérence ZIP → Ville: {zip_code} n'est pas lié à {city}.")
+    # On conserve la cohérence Ville <-> ZIP : vérifie que la ville est bien listée pour le ZIP.
+    row_cities = ZIP_TO_CITIES.get(zip_code, [])
+    allowed = [normalize_city(c) for c in row_cities]
+    if allowed and city not in allowed:
+        errors.append(f"Incohérence ZIP → Ville: {zip_code} n'est pas lié à {city}.")
     return errors
 
 def fetch_image_bytes(url: str) -> Optional[bytes]:
@@ -536,14 +413,14 @@ if generate:
     iss = st.session_state["ui_iss"]
     zip_sel = normalize_zip(st.session_state["ui_zip"])
     city_sel = normalize_city(st.session_state["ui_city"])
-    # IMPORTANT : office_sel affiché est dérivé du comté uniquement (logique demandée)
-    office_sel = infer_field_office_by_county(city=city_sel, zip_code=zip_sel)
+    # IMPORTANT : Field Office est choisi manuellement par l'utilisateur et n'est pas dérivé
+    office_sel = st.session_state.get("ui_office", FIELD_OFFICE_OPTIONS[0])
     address_sel = st.session_state["ui_address_line"].strip()
 
     # sécurité: remplir ville automatiquement depuis ZIP avant génération
-    row = ZIP_CITY_FIELD_OFFICE.get(zip_sel, {})
-    if not city_sel and row.get("cities"):
-        city_sel = normalize_city(row["cities"][0])
+    row_cities = ZIP_TO_CITIES.get(zip_sel, [])
+    if not city_sel and row_cities:
+        city_sel = normalize_city(row_cities[0])
         st.session_state["ui_city"] = city_sel
 
     if not city_sel:
@@ -559,7 +436,7 @@ if generate:
     except ValueError:
         exp = datetime.date(exp_year, dob.month, min(dob.day, 28))
 
-    # office_code : extraire le code si présent dans la chaîne renvoyée par infer_field_office_by_county
+    # office_code : extraire le code si présent dans la chaîne choisie par l'utilisateur
     m = re.search(r"\((\d{2,3})\)", office_sel or "")
     office_code = int(m.group(1)) if m else 0
     seq = next_sequence(rng).zfill(2)
@@ -609,7 +486,7 @@ if generate:
     else:
         photo_html = f"<div class='photo'><img src='{photo_src}' alt='photo par défaut'/></div>"
 
-    # --- Bloc HTML multi-ligne (f-string) corrigé ---
+    # --- Bloc HTML multi-ligne (f-string) ---
     html = f"""
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -623,7 +500,7 @@ if generate:
                 <div style="opacity:0.8;font-size:10px">Prénom</div><div style="font-weight:700">{fn}</div>
                 <div style="opacity:0.8;font-size:10px">Address</div><div style="font-weight:700">{address_sel}</div>
                 <div style="opacity:0.8;font-size:10px">Ville / ZIP</div><div style="font-weight:700">{city_sel} / {zip_sel}</div>
-                <div style="opacity:0.8;font-size:10px">Field Office (par comté)</div><div style="font-weight:700">{office_sel}</div>
+                <div style="opacity:0.8;font-size:10px">Field Office (sélection indépendante)</div><div style="font-weight:700">{office_sel}</div>
                 <div style="opacity:0.8;font-size:10px">ISS / EXP</div><div style="font-weight:700">{iss.strftime('%m/%d/%Y')} / {exp.strftime('%m/%d/%Y')}</div>
             </div>
         </div>
