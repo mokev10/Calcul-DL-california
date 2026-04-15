@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
-# Version : preview affiché seulement après génération + numéro basé sur initiale du nom
-# Usage pédagogique uniquement — NE GÉNÈRE PAS de documents officiels
+# Version : un seul bouton qui régénère le numéro et génère l'aperçu (usage pédagogique)
 
 import datetime
 import random
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 import streamlit as st
 
-st.set_page_config(page_title="Générateur pédagogique de permis (preview après génération)", layout="wide")
+st.set_page_config(page_title="Générateur pédagogique de permis (un seul bouton)", layout="wide")
 
 # ---------------------------
 # Données (extraits)
@@ -119,6 +118,10 @@ def _random_odd_digit() -> str:
     return str(random.choice([1,3,5,7,9]))
 
 def generate_license_number_from_name(family_name: str, digits: int = 8) -> str:
+    """
+    Retourne : <InitialeMajuscule><digits alternés pair/impair>
+    Ex: Davis -> 'D' + 8 chiffres alternés.
+    """
     initial = _initial_from_family_name(family_name)
     parts: List[str] = []
     for i in range(digits):
@@ -129,7 +132,7 @@ def format_date(d: datetime.date) -> str:
     return d.strftime("%Y/%m/%d")
 
 # ---------------------------
-# Initialisation session_state
+# Session state
 # ---------------------------
 if "license_number" not in st.session_state:
     st.session_state["license_number"] = generate_license_number_from_name("HARRIS")
@@ -152,7 +155,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("Générateur pédagogique de permis — preview après génération")
+st.title("Générateur pédagogique de permis — un seul bouton")
 st.caption("Usage académique uniquement — le numéro est pseudo‑aléatoire et non officiel")
 
 left, right = st.columns([1.1, 0.9])
@@ -182,7 +185,7 @@ with left:
 
     st.markdown("---")
     st.subheader("Permis et dates")
-    # license_number lié à st.session_state pour pouvoir le mettre à jour via bouton
+    # Affiche la valeur stockée dans session_state (modifiable par l'utilisateur si souhaité)
     st.text_input("Numéro de permis (pseudo)", key="license_number")
     issue_date = st.date_input("Date d’émission", value=datetime.date.today())
     default_exp = issue_date.replace(year=issue_date.year + 5) - datetime.timedelta(days=15)
@@ -206,40 +209,35 @@ with left:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Boutons d'action
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("Régénérer le numéro à partir du nom de famille"):
-            # Met à jour la session_state["license_number"]
-            st.session_state["license_number"] = generate_license_number_from_name(family_name)
-            st.success(f"Numéro régénéré : {st.session_state['license_number']}")
-    with col_b:
-        if st.button("Générer (pédagogique)"):
-            # Construire payload et marquer comme généré
-            payload = {
-                "family_name": family_name,
-                "given_name": given_name,
-                "sex": sex,
-                "dob": format_date(dob),
-                "address_line": address_line,
-                "city": city_input,
-                "zip": zip_input,
-                "license_number": st.session_state["license_number"],
-                "issue_date": format_date(issue_date),
-                "expiration_date": format_date(expiration_date),
-                "restrictions": restrictions,
-                "endorsements": endorsements,
-                "field_office_label": field_office_choice,
-                "field_office_code": selected_field_office_code,
-                "height_ft": height_ft,
-                "height_in": height_in,
-                "weight_lb": weight_lb,
-                "hair": hair,
-                "eyes": eyes,
-            }
-            st.session_state["generated"] = True
-            st.session_state["last_payload"] = payload
-            st.success("Données collectées (usage pédagogique).")
+    # --- UN SEUL BOUTON : régénère le numéro à partir du nom ET génère l'aperçu ---
+    if st.button("Générer (pédagogique)"):
+        # Régénérer license_number à partir du nom de famille
+        st.session_state["license_number"] = generate_license_number_from_name(family_name)
+        # Construire payload
+        payload = {
+            "family_name": family_name,
+            "given_name": given_name,
+            "sex": sex,
+            "dob": format_date(dob),
+            "address_line": address_line,
+            "city": city_input,
+            "zip": zip_input,
+            "license_number": st.session_state["license_number"],
+            "issue_date": format_date(issue_date),
+            "expiration_date": format_date(expiration_date),
+            "restrictions": restrictions,
+            "endorsements": endorsements,
+            "field_office_label": field_office_choice,
+            "field_office_code": selected_field_office_code,
+            "height_ft": height_ft,
+            "height_in": height_in,
+            "weight_lb": weight_lb,
+            "hair": hair,
+            "eyes": eyes,
+        }
+        st.session_state["generated"] = True
+        st.session_state["last_payload"] = payload
+        st.success("Numéro régénéré et aperçu généré (usage pédagogique).")
 
 with right:
     # N'affiche le preview que si l'utilisateur a cliqué sur "Générer"
@@ -281,12 +279,12 @@ with right:
         """
         st.components.v1.html(card_html, height=260)
     else:
-        # Message informatif quand aucun preview n'est disponible
-        st.info("Aucun aperçu disponible. Cliquez sur « Générer (pédagogique) » pour afficher l'aperçu.")
+        st.info("Aucun aperçu disponible. Cliquez sur « Générer (pédagogique) » pour régénérer le numéro et afficher l'aperçu.")
 
 # ---------------------------
 # Notes développeur
 # ---------------------------
-# - L'aperçu (preview + JSON + HTML) n'est affiché que si st.session_state['generated'] == True.
-# - Le champ license_number est stocké dans st.session_state['license_number'] pour permettre la régénération.
-# - Le code reste pédagogique : ne pas utiliser pour produire des documents officiels.
+# - Un seul bouton "Générer (pédagogique)" : régénère le numéro à partir du nom de famille et affiche l'aperçu.
+# - Le numéro est stocké dans st.session_state['license_number'] et mis à jour à chaque génération.
+# - L'aperçu (HTML + JSON) n'est visible qu'après génération.
+# - Usage pédagogique uniquement : ne pas utiliser pour produire des documents officiels.
