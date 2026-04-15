@@ -321,7 +321,7 @@ def update_from_office() -> None:
     st.session_state["ui_city"] = cities[0]
 
 
-st.title("Générateur officiel de permis CA")
+st.title("Générateur officiel de permis Californien")
 
 ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
 fn = st.text_input("Prénom", "ROSA", key="ui_fn")
