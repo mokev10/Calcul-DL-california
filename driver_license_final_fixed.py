@@ -1,21 +1,15 @@
 #!/usr/bin/env python3
 # driver_license_final_fixed.py
-# Version mise à jour — interface moderne Streamlit
-# Colle ce fichier en remplacement complet de celui qui a été modifié.
-#
-# The interface collects nom, prénom, sexe, date de naissance, adresse, ZIP, ville, field office (saisi manuellement),
-# caractéristiques physiques, numéro de permis, dates d’émission/expiration, etc.
-# Colle ce fichier en remplacement complet de celui qui a été modifié.
+# Version mise à jour — champs Code postal et Ville en texte libre
+# Interface pédagogique Streamlit — NE GÉNÈRE PAS de permis officiels ni de PDF417
 
 import datetime
-import io
 import random
-import hashlib
 from typing import Dict, List, Tuple, Optional
 
 import streamlit as st
 
-# Optional imports (ReportLab/pdf417gen/AAMVA utils) left as in original file if available
+# Optional imports (ReportLab/pdf417gen/AAMVA utils) preserved if disponibles
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.utils import ImageReader
@@ -25,52 +19,24 @@ except Exception:
     ImageReader = None
     _REPORTLAB_AVAILABLE = False
 
+st.set_page_config(page_title="Générateur pédagogique de permis (interface)", layout="wide")
+
 # ---------------------------
-# ZIP database (partial)
+# ZIP database (extrait)
 # ---------------------------
-# NOTE: keep "office" empty here — field office selection is independent (single dropdown).
+# NOTE: kept for reference/validation if needed; fields "office" intentionally empty.
 ZIP_DB: Dict[str, Dict[str, str]] = {
+    "90001": {"city": "Los Angeles", "state": "CA", "office": ""},
+    "90011": {"city": "Los Angeles", "state": "CA", "office": ""},
+    "94102": {"city": "San Francisco", "state": "CA", "office": ""},
     "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
     "95818": {"city": "Sacramento", "state": "CA", "office": ""},
-    "94102": {"city": "San Francisco", "state": "CA", "office": ""},
-    "94015": {"city": "Daly City", "state": "CA", "office": ""},
-    "94601": {"city": "Oakland", "state": "CA", "office": ""},
-    "90001": {"city": "Los Angeles", "state": "CA", "office": ""},
-    "92101": {"city": "San Diego", "state": "CA", "office": ""},
-    "90272": {"city": "Pacific Palisades", "state": "CA", "office": ""},
-    "90265": {"city": "Malibu", "state": "CA", "office": ""},
-    "90266": {"city": "Malibu", "state": "CA", "office": ""},
-    "90270": {"city": "Maywood", "state": "CA", "office": ""},
-    "90274": {"city": "Palos Verdes Peninsula", "state": "CA", "office": ""},
-    "90275": {"city": "Rancho Palos Verdes", "state": "CA", "office": ""},
-    "90277": {"city": "Redondo Beach", "state": "CA", "office": ""},
-    "90278": {"city": "Redondo Beach", "state": "CA", "office": ""},
-    "90291": {"city": "Venice", "state": "CA", "office": ""},
-    "90292": {"city": "Venice", "state": "CA", "office": ""},
-    "90301": {"city": "Inglewood", "state": "CA", "office": ""},
-    "90401": {"city": "Santa Monica", "state": "CA", "office": ""},
-    "90501": {"city": "Torrance", "state": "CA", "office": ""},
-    "90601": {"city": "Whittier", "state": "CA", "office": ""},
-    "90701": {"city": "Long Beach", "state": "CA", "office": ""},
-    "90802": {"city": "Long Beach", "state": "CA", "office": ""},
-    "91101": {"city": "Pasadena", "state": "CA", "office": ""},
-    "91201": {"city": "Glendale", "state": "CA", "office": ""},
-    "91301": {"city": "Agoura Hills", "state": "CA", "office": ""},
-    "91401": {"city": "Van Nuys", "state": "CA", "office": ""},
-    "91501": {"city": "Burbank", "state": "CA", "office": ""},
-    "91601": {"city": "North Hollywood", "state": "CA", "office": ""},
-    "91701": {"city": "Azusa", "state": "CA", "office": ""},
-    "91710": {"city": "Chino", "state": "CA", "office": ""},
-    "91730": {"city": "Duarte", "state": "CA", "office": ""},
-    "91901": {"city": "Chula Vista", "state": "CA", "office": ""},
-    "92003": {"city": "Carlsbad", "state": "CA", "office": ""},
-    # ... (extend as needed; keep office empty)
+    # ... étendre jusqu'à 96162 si nécessaire
 }
 
 # ---------------------------
 # Field offices (single dropdown)
 # ---------------------------
-# Provided mapping: region -> {city: code}
 FIELD_OFFICES_BY_REGION: Dict[str, Dict[str, int]] = {
     "Baie de San Francisco": {
         "Corte Madera": 525,
@@ -140,7 +106,6 @@ FIELD_OFFICES_BY_REGION: Dict[str, Dict[str, int]] = {
     },
 }
 
-# Build a single flat list for the single dropdown (region — city (code))
 def build_field_office_choices(regions: Dict[str, Dict[str, int]]) -> List[Tuple[str, int]]:
     choices: List[Tuple[str, int]] = []
     for region, cities in regions.items():
@@ -149,82 +114,43 @@ def build_field_office_choices(regions: Dict[str, Dict[str, int]]) -> List[Tuple
             choices.append((label, code))
     return choices
 
-
 FIELD_OFFICE_CHOICES = build_field_office_choices(FIELD_OFFICES_BY_REGION)
 
-
 # ---------------------------
-# Helper utilities
+# Helpers
 # ---------------------------
 def generate_license_number() -> str:
-    """Generate a pseudo license number (not real)."""
     return "H" + "".join(str(random.randint(0, 9)) for _ in range(8))
-
 
 def format_date(d: datetime.date) -> str:
     return d.strftime("%Y/%m/%d")
 
-
-def get_city_from_zip(zip_code: str) -> Optional[str]:
-    entry = ZIP_DB.get(zip_code)
-    return entry["city"] if entry else None
-
-
 # ---------------------------
-# Streamlit UI
+# Minimal CSS for a modern look
 # ---------------------------
-st.set_page_config(page_title="Générateur officiel de permis Californien", layout="wide")
-
-# Minimal modern CSS
 st.markdown(
     """
     <style>
-    .app-header {
-        display:flex;
-        align-items:center;
-        gap:16px;
-    }
-    .card {
-        background: linear-gradient(180deg, #ffffff 0%, #f3f6fb 100%);
-        border-radius:12px;
-        padding:18px;
-        box-shadow: 0 6px 18px rgba(20,30,60,0.08);
-    }
-    .left-col { max-width: 520px; }
-    .field-label { font-weight:600; color:#233; margin-bottom:6px; }
-    .muted { color:#6b7280; font-size:13px; }
-    .preview-card {
-        background: linear-gradient(90deg,#0f4c81,#2b7bbf);
-        color: white;
-        border-radius:12px;
-        padding:18px;
-        min-height:220px;
-    }
-    .small { font-size:12px; color:#e6eefc; }
+      .card { background: linear-gradient(180deg,#fff,#f7fbff); padding:16px; border-radius:10px; box-shadow:0 6px 18px rgba(20,30,60,0.06); }
+      .preview { background: linear-gradient(90deg,#0f4c81,#2b7bbf); color:#fff; padding:16px; border-radius:10px; }
+      .muted { color:#6b7280; font-size:13px; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# Header
-with st.container():
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown('<div class="app-header"><h1 style="margin:0">Générateur officiel de permis Californien</h1></div>', unsafe_allow_html=True)
-        st.markdown('<div class="muted">Interface moderne — remplissez les champs et générez la carte</div>', unsafe_allow_html=True)
-    with col2:
-        st.image("https://img.icons8.com/fluency/48/000000/id-card.png", width=48)
+# ---------------------------
+# UI
+# ---------------------------
+st.title("Générateur pédagogique de permis — Interface")
+st.caption("Usage académique uniquement — ne génère pas de documents officiels")
 
-st.write("")
+left, right = st.columns([1.1, 0.9])
 
-# Main layout
-left_col, right_col = st.columns([1.1, 0.9])
-
-with left_col:
-    st.markdown('<div class="card left-col">', unsafe_allow_html=True)
-
+with left:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Saisie utilisateur")
-    # Personal info
+
     family_name = st.text_input("Nom de famille", value="HARRIS")
     given_name = st.text_input("Prénom", value="ROSA")
     sex = st.selectbox("Sexe", options=["M", "F", "X"], index=0)
@@ -239,24 +165,16 @@ with left_col:
     eyes = st.text_input("Yeux", value="BRN")
 
     st.markdown("---")
-    st.subheader("Adresse et codes")
-    # ZIP dropdown (from ZIP_DB keys)
-    zip_options = sorted(ZIP_DB.keys())
-    zip_selected = st.selectbox("Code postal (ZIP)", options=zip_options, index=zip_options.index("90001") if "90001" in zip_options else 0)
-    # City dropdown: show the city corresponding to selected ZIP, but allow manual override by selecting from all unique cities
-    # Build unique city list
-    unique_cities = sorted({v["city"] for v in ZIP_DB.values()})
-    # Preselect city based on zip
-    city_default = get_city_from_zip(zip_selected) or unique_cities[0]
-    city_selected = st.selectbox("Ville", options=unique_cities, index=unique_cities.index(city_default) if city_default in unique_cities else 0)
-
+    st.subheader("Adresse et codes (champs libres)")
+    # **CHANGEMENT** : Code postal et Ville sont des champs texte libres
+    zip_input = st.text_input("Code postal (ZIP) — champ libre", value="90001")
+    city_input = st.text_input("Ville — champ libre", value="Los Angeles")
     address_line = st.text_input("Address Line", value="2570 24TH STREET")
 
     st.markdown("---")
     st.subheader("Permis et dates")
-    license_number = st.text_input("Numéro de permis", value=generate_license_number())
+    license_number = st.text_input("Numéro de permis (pseudo)", value=generate_license_number())
     issue_date = st.date_input("Date d’émission", value=datetime.date.today())
-    # default expiration 5 years minus a few days
     default_exp = issue_date.replace(year=issue_date.year + 5) - datetime.timedelta(days=15)
     expiration_date = st.date_input("Date d'expiration", value=default_exp)
 
@@ -266,38 +184,30 @@ with left_col:
     endorsements = st.text_input("Endorsements", value="NONE")
 
     st.markdown("---")
-    st.subheader("Field Office (sélectionnez dans le menu unique)")
-    # Single dropdown for field office (region — city (code))
+    st.subheader("Field Office (menu unique, indépendant)")
     field_office_labels = [label for label, code in FIELD_OFFICE_CHOICES]
-    # Try to default to "Grand Los Angeles — Los Angeles (502)" if present
+    # default to first or try to find Los Angeles (502)
     default_idx = 0
     for i, label in enumerate(field_office_labels):
         if "Los Angeles (502)" in label:
             default_idx = i
             break
     field_office_choice = st.selectbox("Field Office (sélection unique)", options=field_office_labels, index=default_idx)
-    # Extract code from selection
-    selected_field_office_code = None
-    for label, code in FIELD_OFFICE_CHOICES:
-        if label == field_office_choice:
-            selected_field_office_code = code
-            break
+    selected_field_office_code = next((code for label, code in FIELD_OFFICE_CHOICES if label == field_office_choice), None)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Generate button
     st.write("")
-    generate = st.button("Générer la carte", type="primary")
+    generate = st.button("Générer (pédagogique)")
 
-with right_col:
-    st.markdown('<div class="card preview-card">', unsafe_allow_html=True)
-    st.subheader("Aperçu carte")
-    # Live preview
+with right:
+    st.markdown('<div class="preview">', unsafe_allow_html=True)
+    st.subheader("Aperçu carte (prévisualisation pédagogique)")
     st.markdown(f"**NAME:** {given_name} {family_name}")
     st.markdown(f"**SEX:** {sex}    **DOB:** {format_date(dob)}")
-    st.markdown(f"**DLN:** {license_number}")
+    st.markdown(f"**DLN (pseudo):** {license_number}")
     st.markdown(f"**ADDRESS:** {address_line}")
-    st.markdown(f"**CITY / ZIP:** {city_selected} / {zip_selected}")
+    st.markdown(f"**CITY / ZIP:** {city_input} / {zip_input}")
     st.markdown(f"**FIELD OFFICE:** {field_office_choice}")
     st.markdown(f"**ISSUE DATE:** {format_date(issue_date)}")
     st.markdown(f"**EXPIRATION DATE:** {format_date(expiration_date)}")
@@ -305,18 +215,17 @@ with right_col:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------
-# Generation logic
+# Action
 # ---------------------------
 if generate:
-    # Build a payload (example) — independent field office selection
     payload = {
         "family_name": family_name,
         "given_name": given_name,
         "sex": sex,
         "dob": format_date(dob),
         "address_line": address_line,
-        "city": city_selected,
-        "zip": zip_selected,
+        "city": city_input,
+        "zip": zip_input,
         "license_number": license_number,
         "issue_date": format_date(issue_date),
         "expiration_date": format_date(expiration_date),
@@ -331,20 +240,19 @@ if generate:
         "eyes": eyes,
     }
 
-    # Show confirmation and payload
-    st.success("Carte générée (aperçu ci-dessous).")
+    st.success("Données collectées (usage pédagogique).")
     st.json(payload)
 
-    # Optionally: create a simple printable card as HTML for copy/paste or PDF generation
+    # Simple HTML preview for copy/paste (no official generation)
     card_html = f"""
     <div style="font-family:Arial,Helvetica,sans-serif; width:520px; border-radius:12px; padding:18px;
                 background: linear-gradient(90deg,#0f4c81,#2b7bbf); color:white;">
-      <h2 style="margin:0">CALIFORNIA USA DRIVER LICENSE</h2>
+      <h2 style="margin:0">CALIFORNIA USA DRIVER LICENSE (PREVIEW)</h2>
       <div style="margin-top:12px;">
         <strong>DLN:</strong> {license_number}<br/>
         <strong>NAME:</strong> {given_name} {family_name}<br/>
         <strong>ADDRESS:</strong> {address_line}<br/>
-        <strong>CITY / ZIP:</strong> {city_selected} / {zip_selected}<br/>
+        <strong>CITY / ZIP:</strong> {city_input} / {zip_input}<br/>
         <strong>FIELD OFFICE:</strong> {field_office_choice}<br/>
         <strong>ISSUE DATE:</strong> {format_date(issue_date)} &nbsp;&nbsp;
         <strong>EXP DATE:</strong> {format_date(expiration_date)}
@@ -355,12 +263,10 @@ if generate:
     st.components.v1.html(card_html, height=220)
 
 # ---------------------------
-# Notes for developers (kept in-file)
+# Developer notes
 # ---------------------------
-# - Field office selection is intentionally independent from ZIP_DB and city selection.
-# - ZIP_DB entries keep "office" empty to avoid automatic linking.
-# - FIELD_OFFICES_BY_REGION contains the region -> (city -> code) mapping; a single dropdown is built from it.
-# - To extend ZIP_DB to cover 90001..96162, append entries to ZIP_DB; keep "office" empty.
-# - To change the default field office, modify the default_idx logic above.
-#
-# End of file.
+# - Les champs "Code postal" et "Ville" sont désormais des champs texte libres (st.text_input).
+# - Le dictionnaire ZIP_DB est conservé pour référence/validation si tu veux ajouter une vérification optionnelle.
+# - Le menu Field Office reste un seul menu déroulant indépendant (Région — Ville (Code)).
+# - Ce fichier est pédagogique : il n'essaie pas de créer de documents officiels, ni de codes-barres AAMVA/PDF417.
+# - Pour intégrer la liste complète des ZIP (90001..96162), étends ZIP_DB; garder "office" vide évite tout rattachement automatique.
