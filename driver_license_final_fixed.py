@@ -4,7 +4,7 @@
 # - Liaison bidirectionnelle ZIP <-> Ville
 # - Field Office indépendant
 # - Placeholder "Choisir une option"
-# - CSS renforcé pour empêcher tout overflow / "codes qui fuient"
+# - CSS injecté via components.html pour éviter qu'il s'affiche comme texte
 # - Aucune modification de la logique métier
 
 import base64
@@ -236,11 +236,9 @@ def build_aamva_tags(fields: Dict[str, str]) -> str:
     return "@ANSI 636014080102DL" + "".join(f"{tag}{enriched.get(tag,'')}" for tag in ordered if enriched.get(tag))
 
 # -------------------------
-# CSS UI/UX (renforcé pour overflow)
+# CSS string (kept in a Python variable)
 # -------------------------
-st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
+CSS = """
 /* Global */
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7fa; color: #0f172a; }
 
@@ -309,11 +307,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; background: #f5f7
   font-style: italic;
 }
 
-/* Add tooltip-like full text on hover for visible select (works in many browsers) */
-.stSelectbox select:hover {
-  cursor: default;
-}
-
 /* Focus style */
 .stTextInput>div>div>input:focus, .stSelectbox>div>div>select:focus, textarea:focus {
   outline: none !important;
@@ -365,8 +358,10 @@ div[data-testid="stProgressBar"] > div > div {
 
 /* Minor utility tweaks */
 .kv { color:#64748b; font-size:12px; }
-</style>
-""", unsafe_allow_html=True)
+"""
+
+# Inject CSS via components.html with height=0 to avoid visible text rendering
+components.html(f"<style>{CSS}</style>", height=0)
 
 # -------------------------
 # Sidebar controls
