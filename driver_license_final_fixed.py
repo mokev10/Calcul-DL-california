@@ -1,40 +1,38 @@
-# THEME TOGGLE BLOCK — Coller intégralement en haut de votre script Streamlit (avant tout widget)
+# THEME TOGGLE SAFE BLOCK — Coller intégralement en haut du script (avant tout widget)
 # - Gestion du thème via st.session_state
-# - Injection CSS dynamique (:root variables) pour light / dark
-# - Sélecteurs ciblés pour st.button, st.text_input, st.selectbox (lisibilité)
-# - Toggle discret en en-tête utilisant les icônes fournies (liens)
-# - Bloc autonome, prêt à copier-coller
+# - Injection CSS ciblée et sûre (évite sélecteurs trop larges)
+# - Compatibilité st.button, st.text_input, st.selectbox
+# - Toggle discret en en-tête utilisant les icônes fournies
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Icônes fournies (URLs)
+# Icônes fournies
 ICON_DARK = "https://img.icons8.com/external-inkubators-glyph-inkubators/24/external-night-mode-ecommerce-user-interface-inkubators-glyph-inkubators.png"
 ICON_LIGHT = "https://img.icons8.com/external-flat-icons-inmotus-design/24/external-bright-printer-control-ui-elements-flat-icons-inmotus-design.png"
 
-# --- Initialisation de l'état du thème ---
+# Initialisation du thème dans la session
 if "theme" not in st.session_state:
     st.session_state["theme"] = "light"  # valeur par défaut
 
-# --- Fonction pour basculer le thème ---
 def toggle_theme():
+    """Basculer le thème et réinjecter le CSS. Essayer de rerun si possible."""
     st.session_state["theme"] = "dark" if st.session_state["theme"] == "light" else "light"
     inject_theme_css(st.session_state["theme"])
-    # Essayer de forcer un rerun pour appliquer immédiatement (protégé)
     try:
         st.experimental_rerun()
     except Exception:
-        # fallback non bloquant : définir un petit flag query param si possible
+        # fallback non bloquant : on met un petit flag query param si possible
         try:
             st.experimental_set_query_params(_theme_changed=st.session_state["theme"])
         except Exception:
             pass
 
-# --- Fonction d'injection CSS dynamique (variables :root + règles ciblées) ---
 def inject_theme_css(theme: str) -> None:
     """
-    Injecte du CSS complet adapté au thème.
-    Appeler AVANT la création des widgets pour garantir l'application.
+    Injecte du CSS ciblé et sûr.
+    - Ne pas utiliser des sélecteurs globaux qui affectent tout le DOM.
+    - Appliquer le fond sur .stApp et cibler explicitement widgets et markdown.
     """
     if theme == "dark":
         vars_css = """
@@ -61,77 +59,95 @@ def inject_theme_css(theme: str) -> None:
         }
         """
 
+    # CSS ciblé — évite d'écraser tout le DOM
     common_css = r"""
-    /* Global */
-    html, body, [class*="css"] { background: var(--bg) !important; color: var(--text) !important; font-family: Inter, sans-serif !important; }
+    /* Appliquer le fond uniquement à la zone principale Streamlit */
+    .stApp, .main, [data-testid="stAppViewContainer"] {
+      background: var(--bg) !important;
+    }
 
-    /* Card / container personnalisé */
-    .card { background: var(--card-bg) !important; color: var(--text) !important; border: 1px solid var(--control-border) !important; border-radius: 10px !important; padding: 12px !important; }
+    /* Conteneurs personnalisés (cartes) */
+    .card {
+      background: var(--card-bg) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--control-border) !important;
+      border-radius: 10px !important;
+      padding: 12px !important;
+    }
 
-    /* Inputs / selects / textareas : forcer lisibilité */
-    input[type="text"], input[type="number"], textarea, select,
-    .stTextInput>div>div>input, .stNumberInput>div>div>input, .stSelectbox>div>div>select {
+    /* Markdown / textes explicatifs */
+    .stMarkdown, .stText, .css-1d391kg, [data-testid="stMarkdownContainer"] {
+      color: var(--text) !important;
+    }
+
+    /* Inputs textuels */
+    .stTextInput>div>div>input,
+    .stNumberInput>div>div>input,
+    textarea {
       background: var(--control-bg) !important;
       color: var(--text) !important;
       border: 1px solid var(--control-border) !important;
       border-radius: 8px !important;
       padding: 8px 10px !important;
       box-shadow: none !important;
-      caret-color: var(--text) !important;
     }
 
-    /* Placeholder and option colors */
-    input::placeholder, textarea::placeholder, select::placeholder, .stSelectbox select option {
-      color: var(--muted) !important;
+    /* Selectbox visible */
+    .stSelectbox>div>div>select, select {
       background: var(--control-bg) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--control-border) !important;
+      border-radius: 8px !important;
+      padding: 6px 8px !important;
+      text-overflow: ellipsis !important;
     }
 
-    /* Select truncation */
-    .stSelectbox select, select {
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-      max-width: 100% !important;
+    /* Placeholder / options */
+    .stSelectbox select option, select option {
       color: var(--text) !important;
       background: var(--control-bg) !important;
     }
 
-    /* Buttons Streamlit : couleur d'accent et texte lisible */
+    /* Boutons Streamlit */
     .stButton>button, .stDownloadButton>button {
       background: linear-gradient(135deg,var(--accent),#1e40af) !important;
       color: #ffffff !important;
       border: none !important;
       border-radius: 8px !important;
       padding: 8px 12px !important;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.08) !important;
       font-weight: 600 !important;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.08) !important;
     }
 
-    /* Focus visible pour accessibilité */
-    .stTextInput>div>div>input:focus, .stSelectbox>div>div>select:focus, textarea:focus {
-      outline: none !important;
-      box-shadow: 0 6px 18px rgba(37,99,235,0.12) !important;
-      border-color: var(--accent) !important;
+    /* Sidebar (force lisibilité) */
+    section[data-testid="stSidebar"] {
+      background: linear-gradient(180deg,#071033,#0f172a) !important;
+      color: var(--text) !important;
     }
-
-    /* Sidebar styling (force lisibilité) */
-    section[data-testid="stSidebar"] { background: linear-gradient(180deg,#071033,#0f172a) !important; color: var(--text) !important; }
-    section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] .css-1d391kg { color: var(--text) !important; }
+    section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] .css-1d391kg {
+      color: var(--text) !important;
+    }
 
     /* Expander / panels */
-    .stExpander { background: var(--card-bg) !important; border-radius: 8px !important; border: 1px solid var(--control-border) !important; }
+    .stExpander {
+      background: var(--card-bg) !important;
+      border-radius: 8px !important;
+      border: 1px solid var(--control-border) !important;
+    }
 
-    /* Progress bar */
-    div[data-testid="stProgressBar"] > div > div { background: linear-gradient(90deg,var(--accent),#1e40af) !important; border-radius:8px !important; }
+    /* Aperçu SVG / PDF417 */
+    [data-testid="stMarkdownContainer"] > div > div > svg {
+      max-width: 100% !important;
+      height: auto !important;
+      display: block !important;
+      margin: 8px auto !important;
+    }
 
-    /* PDF417 / SVG preview */
-    [data-testid="stMarkdownContainer"] > div > div > svg { max-width: 100% !important; height: auto !important; display: block !important; margin: 8px auto !important; }
-
-    /* Header toggle area (icône) */
+    /* Header toggle area */
     .header-toggle { display:flex; justify-content:flex-end; align-items:center; gap:8px; }
     .header-toggle img.theme-icon { width:22px; height:22px; border-radius:6px; display:inline-block; }
 
-    /* Small screens adjustments */
+    /* Small screens */
     @media (max-width:800px) {
       .card { width:92% !important; padding:10px !important; }
       .header-toggle img.theme-icon { width:20px; height:20px; }
@@ -142,10 +158,10 @@ def inject_theme_css(theme: str) -> None:
     # Injection invisible (height=0) pour ne pas afficher le CSS brut
     components.html(full_css, height=0)
 
-# --- Injecter le CSS initial AVANT la création des widgets ---
+# Injecter le CSS initial AVANT la création des widgets
 inject_theme_css(st.session_state["theme"])
 
-# --- Interface de contrôle discrète (icône + bouton) ---
+# --- Toggle discret en en-tête (icône cliquable) ---
 # Placer ce bloc juste après l'injection CSS et avant vos widgets principaux
 header_col_left, header_col_right = st.columns([9, 1])
 with header_col_left:
@@ -156,8 +172,7 @@ with header_col_right:
     # Affiche l'icône du mode cible (cliquer active ce mode)
     target = "dark" if current == "light" else "light"
     icon_to_show = ICON_DARK if target == "dark" else ICON_LIGHT
-    # Afficher l'icône et un bouton discret à côté pour déclencher le toggle côté serveur
+    # Affiche l'image (icône) et un bouton discret pour déclencher la bascule côté serveur
     st.image(icon_to_show, width=22)
-    # Bouton discret (label minimal) pour déclencher la bascule côté serveur
     if st.button(" ", key="__theme_toggle_button__", help=f"Basculer en {target} mode"):
         toggle_theme()
