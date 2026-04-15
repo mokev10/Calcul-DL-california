@@ -3,6 +3,7 @@
 # Version complète prête à coller
 # - Liaison bidirectionnelle entre Code postal <-> Ville
 # - Field Office reste indépendant
+# - Menus déroulants affichent un placeholder "Choisir une option"
 # - Préserve la logique, les règles, les menus déroulants et le CSS UI/UX
 # - Clés Streamlit uniques pour éviter les duplications
 
@@ -70,11 +71,17 @@ ZIP_DB: Dict[str, Dict[str, str]] = {
     "94601": {"city": "Oakland", "state": "CA", "office": ""},
     "90001": {"city": "Los Angeles", "state": "CA", "office": ""},
     "92101": {"city": "San Diego", "state": "CA", "office": ""},
-    "92843": {"city": "Garden Grove", "state": "CA", "office": ""},
+    "90272": {"city": "Pacific Palisades", "state": "CA", "office": ""},
+    "90265": {"city": "Malibu", "state": "CA", "office": ""},
+    "90266": {"city": "Malibu", "state": "CA", "office": ""},
+    "90270": {"city": "Maywood", "state": "CA", "office": ""},
+    "90274": {"city": "Palos Verdes Peninsula", "state": "CA", "office": ""},
+    "90275": {"city": "Rancho Palos Verdes", "state": "CA", "office": ""},
+    "90277": {"city": "Redondo Beach", "state": "CA", "office": ""},
 }
 
 # -------------------------
-# Helpers to load/parse ZIP_DB
+# Helpers to load/parse ZIP_DB (attempt GitHub fetch)
 # -------------------------
 def fetch_github_zipdb(url: str) -> Optional[str]:
     try:
@@ -168,9 +175,7 @@ for region, cities in field_offices.items():
 # -------------------------
 # Build mapping for ZIP <-> City linkage
 # -------------------------
-# ZIP -> cities (list)
 ZIP_TO_CITIES: Dict[str, List[str]] = {}
-# City -> zips (list)
 CITY_TO_ZIPS: Dict[str, List[str]] = {}
 
 for z, info in ZIP_DB.items():
@@ -354,28 +359,21 @@ if enable_validator and not _AAMVA_UTILS_AVAILABLE:
 # Callbacks to keep ZIP <-> City linked (bidirectional)
 # -------------------------
 def on_zip_change():
-    # When ZIP changes, set city to the first city associated with that ZIP (if any)
     z = normalize_zip(st.session_state.get("ui_zip", ""))
     if not z:
         return
     cities = ZIP_TO_CITIES.get(z, [])
     if cities:
         st.session_state["ui_city"] = cities[0]
-    else:
-        # if no mapping, keep current city unchanged
-        pass
+
 
 def on_city_change():
-    # When City changes, set ZIP to the first ZIP associated with that city (if any)
     city = normalize_city(st.session_state.get("ui_city", ""))
     if not city:
         return
     zips = CITY_TO_ZIPS.get(city, [])
     if zips:
         st.session_state["ui_zip"] = zips[0]
-    else:
-        # if no mapping, keep current zip unchanged
-        pass
 
 # -------------------------
 # Main UI form (ZIP and City linked; Field Office independent)
@@ -401,25 +399,23 @@ endorse = st.text_input("Endorsements", "NONE", key="ui_endorse")
 iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 address_line = st.text_input("Address Line", "2570 24TH STREET", key="ui_address_line")
 
-# Build options lists
-zip_options = sorted(ZIP_TO_CITIES.keys())
-city_options = sorted(CITY_TO_ZIPS.keys())
+# Build options lists with placeholder first
+placeholder = "Choisir une option"
+
+zip_options = [placeholder] + sorted(ZIP_TO_CITIES.keys())
+city_options_all = sorted(CITY_TO_ZIPS.keys())
+# For city select we will show cities relevant to selected zip (or all if none)
 office_options_from_db = sorted({info.get("office") for info in ZIP_DB.values() if info.get("office")})
 field_office_labels = sorted(set(FIELD_OFFICE_MAP.values()))
-office_options = sorted(set(office_options_from_db) | set(field_office_labels))
-if not office_options:
-    office_options = ["Unknown Field Office"]
+office_options = [placeholder] + sorted(set(office_options_from_db) | set(field_office_labels)) if (office_options_from_db or field_office_labels) else [placeholder]
 
-# Ensure session defaults exist
-if "ui_zip" not in st.session_state or st.session_state["ui_zip"] not in zip_options:
-    st.session_state["ui_zip"] = zip_options[0] if zip_options else ""
-# initialize city based on zip mapping
-initial_zip = st.session_state["ui_zip"]
-initial_cities = ZIP_TO_CITIES.get(initial_zip, [])
-if "ui_city" not in st.session_state or st.session_state["ui_city"] not in city_options:
-    st.session_state["ui_city"] = initial_cities[0] if initial_cities else (city_options[0] if city_options else "")
-if "ui_office" not in st.session_state or st.session_state["ui_office"] not in office_options:
-    st.session_state["ui_office"] = office_options[0] if office_options else ""
+# Ensure session defaults exist (use placeholder as default)
+if "ui_zip" not in st.session_state:
+    st.session_state["ui_zip"] = placeholder
+if "ui_city" not in st.session_state:
+    st.session_state["ui_city"] = placeholder
+if "ui_office" not in st.session_state:
+    st.session_state["ui_office"] = office_options[0] if office_options else placeholder
 
 col_zip, col_city = st.columns([2, 3])
 with col_zip:
@@ -432,10 +428,14 @@ with col_zip:
         help="Sélectionnez un code postal — la ville associée sera mise à jour automatiquement."
     )
 
-# Recompute city options after zip change (city list for selected zip)
-selected_zip = st.session_state.get("ui_zip", "")
-cities_for_zip = ZIP_TO_CITIES.get(selected_zip, []) or (city_options if city_options else ["Unknown City"])
-# ensure ui_city is valid for the selected zip
+# Determine cities to show based on selected zip (if placeholder selected, show all cities)
+selected_zip = st.session_state.get("ui_zip", placeholder)
+if selected_zip != placeholder and selected_zip in ZIP_TO_CITIES:
+    cities_for_zip = [placeholder] + ZIP_TO_CITIES[selected_zip]
+else:
+    cities_for_zip = [placeholder] + city_options_all
+
+# Ensure ui_city is valid for the current cities_for_zip
 if st.session_state.get("ui_city") not in cities_for_zip:
     st.session_state["ui_city"] = cities_for_zip[0]
 
@@ -477,18 +477,18 @@ def validate_inputs() -> List[str]:
     if st.session_state.get("ui_h1", 0) > 8 or st.session_state.get("ui_h2", 0) > 11:
         errors.append("Taille hors plage attendue.")
 
-    zip_code = normalize_zip(st.session_state.get("ui_zip", ""))
-    city = normalize_city(st.session_state.get("ui_city", ""))
+    zip_code_raw = st.session_state.get("ui_zip", "")
+    city_raw = st.session_state.get("ui_city", "")
     address = st.session_state.get("ui_address_line", "").strip()
 
-    if not zip_code:
+    if not zip_code_raw or zip_code_raw == placeholder:
         errors.append("Code postal requis.")
-    if not city:
+    if not city_raw or city_raw == placeholder:
         errors.append("Ville requise pour générer le code PDF417")
     if not address:
         errors.append("Adresse requise.")
 
-    # NOTE: coherence ZIP <-> Ville is enforced by UI linkage (selection), so no extra validation needed here.
+    # UI en force garantit la cohérence ZIP <-> Ville ; pas d'autre vérification nécessaire.
     return errors
 
 
