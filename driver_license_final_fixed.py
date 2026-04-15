@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-# driver_license_final_fixed.py
-# Version complète : intégration fallback comté -> Field Office + cache ZIP->county
-# Remplace entièrement ton ancien fichier par celui-ci.
+# driver_license_final_fixed_debug.py
+# Version complète et autonome — évite les appels réseau bloquants au démarrage.
+# - Comportement : pas d'appels Nominatim / GitHub au chargement du module.
+# - Résolution comté -> Field Office effectuée à la demande (lazy), via un bouton "Résoudre Field Office".
+# - Fournit des logs de diagnostic visibles dans l'UI pour repérer pourquoi l'interface pourrait rester blanche.
+# - Remplace entièrement ton script précédent ; coller tel quel.
 
 import base64
 import datetime
@@ -49,15 +52,19 @@ except Exception:
 
 GS = AAMVA_GS if AAMVA_GS is not None else "\x1E"
 
-# Page config
+# Page config (doit être appelé tôt)
 st.set_page_config(page_title="Permis CALIFORNIA", layout="wide")
 
-# ---------- Assets ----------
+# -------------------------
+# Assets et constantes
+# -------------------------
 IMAGE_M_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah-22.png"
 IMAGE_F_URL = "https://img.icons8.com/external-avatar-andi-nur-abdillah/200/external-avatar-business-avatar-avatar-andi-nur-abdillah.png"
 GITHUB_RAW_ZIPDB = "https://raw.githubusercontent.com/mokev10/Calcul-DL-california/main/ZIP_DB.txt"
 
-# ---------- Minimal ZIP DB (embarqué) ----------
+# -------------------------
+# Base ZIP embarquée (petite) — utilisée immédiatement, pas d'appel réseau bloquant
+# -------------------------
 ZIP_DB: Dict[str, Dict[str, str]] = {
     "94925": {"city": "Corte Madera", "state": "CA", "office": ""},
     "95818": {"city": "Sacramento", "state": "CA", "office": ""},
@@ -69,41 +76,9 @@ ZIP_DB: Dict[str, Dict[str, str]] = {
     "92843": {"city": "Garden Grove", "state": "CA", "office": ""},
 }
 
-# Try to fetch extended ZIP DB (non bloquant)
-def fetch_github_zipdb(url: str) -> Optional[str]:
-    try:
-        resp = requests.get(url, timeout=6)
-        resp.raise_for_status()
-        return resp.text
-    except Exception:
-        return None
-
-def parse_zipdb_text(text: str) -> Dict[str, Dict[str, str]]:
-    db: Dict[str, Dict[str, str]] = {}
-    if not text:
-        return db
-    lines = [ln.strip() for ln in text.splitlines()]
-    i = 0
-    while i + 2 < len(lines):
-        zip_code = lines[i]
-        city = lines[i+1]
-        state = lines[i+2].upper()
-        if re.fullmatch(r"\d{5}", zip_code) and city and state == "CA":
-            db[zip_code] = {"city": city.title(), "state": "CA", "office": ""}
-            i += 3
-            while i < len(lines) and not lines[i]:
-                i += 1
-            continue
-        i += 1
-    return db
-
-fetched = fetch_github_zipdb(GITHUB_RAW_ZIPDB)
-if fetched:
-    parsed = parse_zipdb_text(fetched)
-    if parsed:
-        ZIP_DB.update(parsed)
-
-# ---------- Field offices mapping (existing) ----------
+# -------------------------
+# Field offices connus (exemples)
+# -------------------------
 field_offices = {
     "Baie de San Francisco": {"Corte Madera": 525, "Daly City": 599, "Oakland": 501, "San Francisco": 503},
     "Grand Los Angeles": {"Los Angeles": 502, "Santa Monica": 548, "Pasadena": 510},
@@ -114,8 +89,10 @@ for region, cities in field_offices.items():
     for city, code in cities.items():
         FIELD_OFFICE_MAP[city.upper()] = f"{region} — {city} ({code})"
 
-# ---------- County fallback data (embarquée) ----------
-# Extend this mapping with zips you know to avoid network calls
+# -------------------------
+# ZIP -> County embarqué (cache local minimal)
+# Étendre cette table pour éviter les appels réseau
+# -------------------------
 ZIP_TO_COUNTY: Dict[str, str] = {
     "90650": "Los Angeles",  # Norwalk example
     "94015": "San Mateo",
@@ -128,7 +105,6 @@ ZIP_TO_COUNTY: Dict[str, str] = {
     "92843": "Orange",
 }
 
-# Map county -> preferred Field Office label (adapt to your nomenclature)
 COUNTY_TO_FIELD_OFFICE: Dict[str, str] = {
     "Los Angeles": "Grand Los Angeles — Los Angeles (502)",
     "San Francisco": "Baie de San Francisco — San Francisco (503)",
@@ -140,19 +116,9 @@ COUNTY_TO_FIELD_OFFICE: Dict[str, str] = {
     "Orange": "Orange County / Sud — Anaheim (547)",
 }
 
-# ---------- Build ZIP <-> City mapping (initial) ----------
-ZIP_TO_CITIES: Dict[str, List[str]] = {}
-CITY_TO_ZIPS: Dict[str, List[str]] = {}
-for z, info in ZIP_DB.items():
-    city = (info.get("city") or "").strip().title()
-    if city:
-        ZIP_TO_CITIES.setdefault(z, []).append(city)
-        CITY_TO_ZIPS.setdefault(city, []).append(z)
-if not ZIP_TO_CITIES:
-    ZIP_TO_CITIES["94015"] = ["Daly City"]
-    CITY_TO_ZIPS["Daly City"] = ["94015"]
-
-# ---------- Utilities ----------
+# -------------------------
+# Helpers utilitaires
+# -------------------------
 def normalize_city(value: str) -> str:
     return (value or "").strip().title()
 
@@ -179,10 +145,53 @@ def rletter(rng: random.Random, initial: str) -> str:
 def next_sequence(rng: random.Random) -> str:
     return str(rng.randint(10, 99))
 
-# ---------- County resolution helpers ----------
+# -------------------------
+# Construction initiale ZIP -> cities / field_offices (SANS Nominatim)
+# - Si office manquant, on place "Unknown Field Office" et on marque pour résolution lazy.
+# -------------------------
+def build_zip_city_field_office_initial(zip_db: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, List[str]]]:
+    mapping: Dict[str, Dict[str, List[str]]] = {}
+    for zip_code, info in zip_db.items():
+        z = re.sub(r"\D", "", str(zip_code))[:5]
+        if len(z) != 5:
+            continue
+        city = (info.get("city") or "").strip().title()
+        office = (info.get("office") or "").strip()
+        if not city:
+            continue
+        entry = mapping.setdefault(z, {"cities": [], "field_offices": [], "needs_resolution": False})
+        if city not in entry["cities"]:
+            entry["cities"].append(city)
+        if office:
+            if office not in entry["field_offices"]:
+                entry["field_offices"].append(office)
+        else:
+            # marque pour résolution ultérieure via comté
+            entry["needs_resolution"] = True
+            if "Unknown Field Office" not in entry["field_offices"]:
+                entry["field_offices"].append("Unknown Field Office")
+    # fallback minimal
+    if not mapping:
+        mapping["94015"] = {"cities": ["Daly City"], "field_offices": ["Baie de San Francisco — Daly City (599)"], "needs_resolution": False}
+    return dict(sorted(mapping.items(), key=lambda kv: int(kv[0])))
+
+ZIP_CITY_FIELD_OFFICE = build_zip_city_field_office_initial(ZIP_DB)
+
+# Rebuild CITY_TO_ZIPS and OFFICE_TO_ZIPS
+CITY_TO_ZIPS: Dict[str, List[str]] = {}
+OFFICE_TO_ZIPS: Dict[str, List[str]] = {}
+for zip_code, row in ZIP_CITY_FIELD_OFFICE.items():
+    for city in row["cities"]:
+        CITY_TO_ZIPS.setdefault(city, []).append(zip_code)
+    for office in row["field_offices"]:
+        OFFICE_TO_ZIPS.setdefault(office, []).append(zip_code)
+
+# -------------------------
+# Non-blocking Nominatim helper (used only on-demand)
+# -------------------------
 def fetch_county_from_nominatim(query: str) -> Optional[str]:
     """
-    Non-blocking Nominatim lookup for county. Use as fallback only.
+    Appel Nominatim en fallback. Timeout court. Utiliser uniquement à la demande.
     """
     try:
         url = "https://nominatim.openstreetmap.org/search"
@@ -203,43 +212,32 @@ def fetch_county_from_nominatim(query: str) -> Optional[str]:
 
 def get_county_for_zip_or_city(zip_code: str = "", city: str = "") -> Optional[str]:
     """
-    Return county for zip or city:
-    1) check local ZIP_TO_COUNTY
-    2) fallback to Nominatim on zip, then city
-    Cache successful Nominatim results into ZIP_TO_COUNTY to reduce calls.
+    Résolution comté :
+    1) Cherche dans ZIP_TO_COUNTY embarqué.
+    2) Sinon, appelle Nominatim (uniquement si l'utilisateur demande la résolution).
     """
     z = normalize_zip(zip_code)
     if z and z in ZIP_TO_COUNTY:
         return ZIP_TO_COUNTY[z]
-
-    # Try Nominatim on zip
+    # Nominatim fallback (on ne l'appelle que si l'utilisateur clique sur "Résoudre Field Office")
     if z:
         county = fetch_county_from_nominatim(z + ", CA")
         if county:
-            # cache result
-            ZIP_TO_COUNTY[z] = county
+            ZIP_TO_COUNTY[z] = county  # cache
             return county
-
-    # Try Nominatim on city
     c = normalize_city(city)
     if c:
         county = fetch_county_from_nominatim(f"{c}, CA")
         if county:
-            # If zip provided, cache it
             if z:
                 ZIP_TO_COUNTY[z] = county
             return county
-
     return None
 
-# ---------- Infer field office with county fallback ----------
-def infer_field_office(city: str, zip_code: str = "") -> str:
-    """
-    Return Field Office label:
-    - If city maps directly in FIELD_OFFICE_MAP, return it.
-    - Else try to infer county and map county -> field office.
-    - Else return generic label or 'Unknown Field Office'.
-    """
+# -------------------------
+# Infer field office using county fallback (on-demand)
+# -------------------------
+def infer_field_office_lazy(city: str, zip_code: str = "") -> str:
     key = (city or "").strip().upper()
     if key:
         if key in FIELD_OFFICE_MAP:
@@ -247,74 +245,17 @@ def infer_field_office(city: str, zip_code: str = "") -> str:
         for label in FIELD_OFFICE_MAP.values():
             if key in label.upper():
                 return label
-
     county = get_county_for_zip_or_city(zip_code=zip_code, city=city)
     if county:
         mapped = COUNTY_TO_FIELD_OFFICE.get(county)
         if mapped:
             return mapped
         return f"{county} County — (Field Office non répertorié)"
-
     return "Unknown Field Office"
 
-# ---------- Build ZIP_CITY_FIELD_OFFICE using county fallback ----------
-def build_zip_city_field_office_with_county(zip_db: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, List[str]]]:
-    mapping: Dict[str, Dict[str, List[str]]] = {}
-    for zip_code, info in zip_db.items():
-        z = re.sub(r"\D", "", str(zip_code))[:5]
-        if len(z) != 5:
-            continue
-        city = (info.get("city") or "").strip().title()
-        office = (info.get("office") or "").strip()
-        if not city:
-            continue
-
-        if not office:
-            inferred = infer_field_office(city, zip_code=z)
-            office = inferred
-
-        entry = mapping.setdefault(z, {"cities": [], "field_offices": []})
-        if city not in entry["cities"]:
-            entry["cities"].append(city)
-        if office and office not in entry["field_offices"]:
-            entry["field_offices"].append(office)
-
-    if not mapping:
-        mapping["94015"] = {
-            "cities": ["Daly City"],
-            "field_offices": ["Baie de San Francisco — Daly City (599)"],
-        }
-
-    for z, entry in mapping.items():
-        if not entry["cities"]:
-            entry["cities"] = ["Unknown City"]
-        if not entry["field_offices"]:
-            entry["field_offices"] = ["Unknown Field Office"]
-
-    return dict(sorted(mapping.items(), key=lambda kv: int(kv[0])))
-
-# Replace previous mapping with county-aware one
-ZIP_CITY_FIELD_OFFICE = build_zip_city_field_office_with_county(ZIP_DB)
-
-# Rebuild CITY_TO_ZIPS and OFFICE_TO_ZIPS
-CITY_TO_ZIPS: Dict[str, List[str]] = {}
-OFFICE_TO_ZIPS: Dict[str, List[str]] = {}
-for zip_code, row in ZIP_CITY_FIELD_OFFICE.items():
-    for city in row["cities"]:
-        CITY_TO_ZIPS.setdefault(city, []).append(zip_code)
-    for office in row["field_offices"]:
-        OFFICE_TO_ZIPS.setdefault(office, []).append(zip_code)
-
-# ---------- Remaining utilities (unchanged) ----------
-def build_aamva_tags(fields: Dict[str, str]) -> str:
-    enriched = dict(fields)
-    enriched.setdefault("DAG", "2570 24TH STREET")
-    enriched.setdefault("DAI", "OAKLAND")
-    enriched.setdefault("DAJ", "CA")
-    enriched.setdefault("DAK", "94601")
-    return build_aamva_payload_continuous(enriched)
-
-# ---------- Minimal UI CSS (kept) ----------
+# -------------------------
+# UI CSS minimal
+# -------------------------
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -322,10 +263,13 @@ html, body, [class*="css"]  { font-family: 'Inter', sans-serif; }
 .card { width: 480px; border-radius: 12px; padding: 14px; background: linear-gradient(135deg,#1e3a8a,#2563eb); color: white; box-shadow: 0 8px 24px rgba(0,0,0,0.12); margin: auto; }
 .photo { width:86px; height:106px; background:#e5e7eb; border-radius:8px; overflow:hidden; }
 .photo img { width:100%; height:100%; object-fit:cover; display:block; }
+.debug { font-size:12px; color:#ffcc00; background:#111; padding:8px; border-radius:6px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- Sidebar controls ----------
+# -------------------------
+# Sidebar controls (inchangés)
+# -------------------------
 st.sidebar.header("Paramètres PDF417 (optionnel)")
 columns_param = st.sidebar.slider("Colonnes", 1, 30, 6, key="sb_columns")
 security_level_param = st.sidebar.selectbox("Niveau ECC", list(range(0, 9)), index=2, key="sb_ecc")
@@ -341,9 +285,24 @@ enable_validator = st.sidebar.checkbox("Activer la validation AAMVA (optionnel)"
 if enable_validator and not _AAMVA_UTILS_AVAILABLE:
     st.sidebar.info("aamva_utils.py introuvable — validation désactivée.")
 
-# ---------- Main UI ----------
+# -------------------------
+# Main UI — diagnostic visible en haut
+# -------------------------
 st.title("Générateur officiel de permis Californien")
 
+# Zone de diagnostic (affiche l'état des mappings et si des résolutions sont nécessaires)
+with st.expander("Diagnostic (utile si l'interface ne s'affiche pas)", expanded=True):
+    st.write("Nombre d'entrées ZIP_DB embarquées :", len(ZIP_DB))
+    st.write("Nombre d'entrées ZIP_CITY_FIELD_OFFICE :", len(ZIP_CITY_FIELD_OFFICE))
+    # Lister quelques zips marqués needs_resolution
+    needs = [z for z, row in ZIP_CITY_FIELD_OFFICE.items() if row.get("needs_resolution")]
+    st.write("Zips nécessitant résolution comté -> field office (lazy) :", needs[:20])
+    st.write("ZIP_TO_COUNTY cache local (exemples) :", {k: ZIP_TO_COUNTY[k] for k in list(ZIP_TO_COUNTY)[:10]})
+    st.markdown("**Conseil** : si la page reste blanche, ouvre la console du navigateur (F12) et le terminal où tourne Streamlit pour voir la trace d'erreur.")
+
+# -------------------------
+# Form inputs (inchangés)
+# -------------------------
 ln = st.text_input("Nom de famille", "HARMS", key="ui_ln")
 fn = st.text_input("Prénom", "ROSA", key="ui_fn")
 sex = st.selectbox("Sexe", ["M", "F"], key="ui_sex")
@@ -364,12 +323,15 @@ endorse = st.text_input("Endorsements", "NONE", key="ui_endorse")
 iss = st.date_input("Date d'émission", datetime.date.today(), key="ui_iss")
 address_line = st.text_input("Address Line", "2570 24TH STREET", key="ui_address_line")
 
+# -------------------------
+# Selects ZIP / City / Office with safe on_change handlers
+# -------------------------
 zip_options = list(ZIP_CITY_FIELD_OFFICE.keys()) or ["94015"]
 if "ui_zip" not in st.session_state or st.session_state["ui_zip"] not in ZIP_CITY_FIELD_OFFICE:
     st.session_state["ui_zip"] = zip_options[0]
 
 selected_zip = st.session_state["ui_zip"]
-selected_row = ZIP_CITY_FIELD_OFFICE.get(selected_zip, {"cities": ["Unknown City"], "field_offices": ["Unknown Field Office"]})
+selected_row = ZIP_CITY_FIELD_OFFICE.get(selected_zip, {"cities": ["Unknown City"], "field_offices": ["Unknown Field Office"], "needs_resolution": False})
 city_options = selected_row.get("cities") or ["Unknown City"]
 office_options = selected_row.get("field_offices") or ["Unknown Field Office"]
 
@@ -385,17 +347,12 @@ with col_zip:
         options=zip_options,
         index=zip_options.index(st.session_state["ui_zip"]),
         key="ui_zip",
-        on_change=lambda: (
-            st.session_state.update({"ui_zip": normalize_zip(st.session_state.get("ui_zip", ""))}),
-            # update cities/offices from mapping
-            st.session_state.update({"ui_city": (ZIP_CITY_FIELD_OFFICE.get(normalize_zip(st.session_state.get("ui_zip","")),{}).get("cities") or ["Unknown City"])[0]}),
-            st.session_state.update({"ui_office": (ZIP_CITY_FIELD_OFFICE.get(normalize_zip(st.session_state.get("ui_zip","")),{}).get("field_offices") or ["Unknown Field Office"])[0]})
-        ),
+        on_change=lambda: None,  # on_change handled below by re-evaluating selections
     )
 
-# recalc after zip change
+# Re-evaluate after potential zip change
 selected_zip = st.session_state["ui_zip"]
-selected_row = ZIP_CITY_FIELD_OFFICE.get(selected_zip, {"cities": ["Unknown City"], "field_offices": ["Unknown Field Office"]})
+selected_row = ZIP_CITY_FIELD_OFFICE.get(selected_zip, {"cities": ["Unknown City"], "field_offices": ["Unknown Field Office"], "needs_resolution": False})
 city_options = selected_row.get("cities") or ["Unknown City"]
 office_options = selected_row.get("field_offices") or ["Unknown Field Office"]
 if st.session_state.get("ui_city") not in city_options:
@@ -409,11 +366,7 @@ with col_city:
         options=city_options,
         index=city_options.index(st.session_state["ui_city"]),
         key="ui_city",
-        on_change=lambda: (
-            st.session_state.update({"ui_city": normalize_city(st.session_state.get("ui_city",""))}),
-            st.session_state.update({"ui_zip": (CITY_TO_ZIPS.get(normalize_city(st.session_state.get("ui_city","")), [""])[0])}),
-            st.session_state.update({"ui_office": (ZIP_CITY_FIELD_OFFICE.get(st.session_state.get("ui_zip",""),{}).get("field_offices") or ["Unknown Field Office"])[0]})
-        ),
+        on_change=lambda: None,
     )
 
 st.selectbox(
@@ -421,16 +374,49 @@ st.selectbox(
     options=office_options,
     index=office_options.index(st.session_state["ui_office"]),
     key="ui_office",
-    on_change=lambda: (
-        st.session_state.update({"ui_office": st.session_state.get("ui_office","")}),
-        st.session_state.update({"ui_zip": (OFFICE_TO_ZIPS.get(st.session_state.get("ui_office",""), [""])[0])}),
-        st.session_state.update({"ui_city": (ZIP_CITY_FIELD_OFFICE.get(st.session_state.get("ui_zip",""),{}).get("cities") or ["Unknown City"])[0]})
-    ),
+    on_change=lambda: None,
 )
 
+# -------------------------
+# Button to trigger lazy resolution for the currently selected ZIP / City
+# This avoids any blocking network calls at startup.
+# -------------------------
+col_resolve_left, col_resolve_right = st.columns([3, 1])
+with col_resolve_left:
+    st.markdown("Si le Field Office est 'Unknown Field Office', clique sur **Résoudre Field Office** pour tenter une résolution via comté (Nominatim).")
+with col_resolve_right:
+    if st.button("Résoudre Field Office", key="resolve_field_office"):
+        zip_sel = normalize_zip(st.session_state.get("ui_zip", ""))
+        city_sel = normalize_city(st.session_state.get("ui_city", ""))
+        st.info(f"Tentative de résolution pour ZIP {zip_sel} / Ville {city_sel} (appel Nominatim en fallback).")
+        county = get_county_for_zip_or_city(zip_sel, city_sel)
+        if county:
+            st.success(f"Comté résolu : {county} (mis en cache).")
+            mapped = COUNTY_TO_FIELD_OFFICE.get(county)
+            new_office = mapped if mapped else f"{county} County — (Field Office non répertorié)"
+        else:
+            st.warning("Impossible de résoudre le comté via Nominatim pour cette entrée.")
+            new_office = "Unknown Field Office"
+        # Mettre à jour le mapping local pour ce zip
+        if zip_sel in ZIP_CITY_FIELD_OFFICE:
+            row = ZIP_CITY_FIELD_OFFICE[zip_sel]
+            # remplacer Unknown Field Office par la valeur résolue
+            if "Unknown Field Office" in row["field_offices"]:
+                row["field_offices"].remove("Unknown Field Office")
+            if new_office not in row["field_offices"]:
+                row["field_offices"].append(new_office)
+            row["needs_resolution"] = False
+            # mettre à jour les structures dérivées
+            CITY_TO_ZIPS.setdefault(city_sel, []).append(zip_sel)
+            OFFICE_TO_ZIPS.setdefault(new_office, []).append(zip_sel)
+            st.session_state["ui_office"] = new_office
+            st.experimental_rerun()  # safe here because user action triggered it
+
+# -------------------------
+# Generate button and main flow (identique à ton code)
+# -------------------------
 generate = st.button("Générer la carte", key="ui_generate")
 
-# ---------- Validation & helpers ----------
 def validate_inputs() -> List[str]:
     errors: List[str] = []
     if not st.session_state.get("ui_ln", "").strip():
@@ -628,6 +614,7 @@ if generate:
     """
     st.markdown(html, unsafe_allow_html=True)
 
+    # Validation AAMVA (optionnel)
     if enable_validator and _AAMVA_UTILS_AVAILABLE:
         st.subheader("Validation AAMVA (optionnelle)")
         results = validate_aamva_payload(payload_to_use)
@@ -653,6 +640,7 @@ if generate:
                     payload_to_use = st.session_state.get("ui_aamva_corrected_preview", corrected)
                     st.success("Correction appliquée.")
 
+    # PDF417 / export (optionnel)
     svg_str = None
     if show_barcodes:
         st.subheader("PDF417")
