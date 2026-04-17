@@ -1,8 +1,9 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA strict (sortie = valeurs saisies)
-# - Aucun préremplissage automatique (sauf via bouton "Insérer exemple")
+# Streamlit — Générateur AAMVA strict (sans boutons d'exemple)
+# - Aucun bouton "Insérer exemple"
+# - Aucun préremplissage automatique
 # - DAQ modifiable et utilisé en priorité
-# - DAJ lié à la subdivision (abréviations CA/US) sans écraser saisies manuelles
+# - DAJ lié automatiquement à la subdivision (abréviations CA/US) sans écraser saisies manuelles
 # - En-tête numérique IIN+VER+DES concaténé sans espaces
 # - Sortie commence par "@\n" et utilise les séquences littérales "\n"
 
@@ -82,18 +83,6 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCF","Numéro de référence du document")
 ]
 
-# Exemples (optionnels via bouton)
-CANADA_EXAMPLE = {
-    "DCG":"CAN","DAQ":"N242094120896","DCS":"NICOLAS","DAC":"JEAN","DBB":"19941208",
-    "DAG":"1560 SHERBROOKE ST E","DAI":"MONTREAL","DAJ":"Quebec","DAK":"H2L4M1",
-    "DBD":"20230510","DBA":"20310509","DBC":"1","DAU":"180","DAY":"BRUN","DCE":"5","DCF":"PEJQ04N96"
-}
-USA_EXAMPLE = {
-    "DCG":"US","DAQ":"A123456789012","DCS":"DOE","DAC":"JOHN","DBB":"19800115",
-    "DAG":"123 MAIN ST","DAI":"ANYTOWN","DAJ":"California","DAK":"90001",
-    "DBD":"20220101","DBA":"20260101","DBC":"1","DAU":"175","DAY":"BRO","DCE":"D","DCF":"ABC1234567"
-}
-
 # Session init
 if "prev_subdivision" not in st.session_state:
     st.session_state["prev_subdivision"] = ""
@@ -108,12 +97,12 @@ for prefix, _ in PREFIX_FIELDS:
 
 # UI header
 st.markdown("<div style='text-align:center'><h1 style='margin:0;'>Driver License App — AAMVA Strict</h1></div>", unsafe_allow_html=True)
-st.write("Remplis les champs manuellement. Utilise les boutons 'Insérer exemple' si tu veux préremplir pour tester.")
+st.write("Remplis les champs manuellement. Aucun exemple n'est inséré automatiquement.")
 
 # Country / subdivision
 cols = st.columns([1,2,1])
 with cols[1]:
-    c1, c2, c3 = st.columns([1,1,1])
+    c1, c2 = st.columns([1,1])
     with c1:
         country = st.selectbox("Pays", ["", "Canada", "United States"], key="country")
     with c2:
@@ -123,18 +112,10 @@ with cols[1]:
             subdivision = st.selectbox("État", [""] + US_STATES, key="subdivision")
         else:
             subdivision = st.selectbox("Subdivision", [""], key="subdivision")
-    with c3:
-        # boutons d'insertion d'exemple (optionnels)
-        if st.button("Insérer exemple Canada") and country == "Canada":
-            for k,v in CANADA_EXAMPLE.items():
-                st.session_state[f"field_{k}"] = v
-        if st.button("Insérer exemple USA") and country == "United States":
-            for k,v in USA_EXAMPLE.items():
-                st.session_state[f"field_{k}"] = v
 
 # Hint
 if country and not subdivision:
-    st.info("Choisis une subdivision pour préremplir DAJ automatiquement (si tu veux).")
+    st.info("Choisis une subdivision pour préremplir DAJ automatiquement (modifiable).")
 
 # DAJ auto-update (abréviations) — ne pas écraser saisies manuelles
 current_daj = st.session_state.get("field_DAJ","").strip()
@@ -146,9 +127,7 @@ if subdivision and subdivision != prev_sub:
         daj_val = US_ABBR.get(subdivision, subdivision)
     else:
         daj_val = subdivision
-    example_daj_can = CANADA_EXAMPLE.get("DAJ","")
-    example_daj_us = USA_EXAMPLE.get("DAJ","")
-    if current_daj == "" or current_daj == prev_sub or current_daj == example_daj_can or current_daj == example_daj_us:
+    if current_daj == "" or current_daj == prev_sub:
         st.session_state["field_DAJ"] = daj_val
     st.session_state["prev_subdivision"] = subdivision
 elif not subdivision:
@@ -232,7 +211,7 @@ if country:
         real_data_block = "\n".join(data_lines) + ("\n" if data_lines else "")
         length = f"{len(real_data_block):04d}"  # 4 digits
 
-        offset = "0041"  # default; can be computed/adjusted if you want to match exact jurisdiction offset
+        offset = "0041"  # default; adjust if you implement exact offset calculation
 
         header = f"ANSI {iin_sequence}DL{offset}{length}DL"  # note: no spaces inside numeric sequence
 
@@ -244,7 +223,6 @@ if country:
 
     # Actions
     if st.button("Générer le bloc AAMVA strict (séquences '\\n' littérales)"):
-        # Collect current form values (exactly what user entered)
         fields_values = {p[0]: st.session_state.get(f"field_{p[0]}", "").strip() for p in PREFIX_FIELDS}
         aamva = build_strict_aamva(fields_values, country, subdivision)
         st.session_state["last_aamva"] = aamva
@@ -273,4 +251,4 @@ if country:
 
 # Footer
 st.markdown("---")
-st.caption("Remarque : ce générateur produit le bloc à partir des valeurs saisies. OFFSET par défaut = 0041; VERSION/DESIGN = 08/0001. Si tu veux que j'implémente le calcul exact de l'OFFSET selon règles AAMVA, je peux l'ajouter.")
+st.caption("Remarque : ce générateur produit le bloc à partir des valeurs saisies. OFFSET par défaut = 0041; VERSION/DESIGN = 08/0001. Si tu veux que j'implémente le calcul exact de l'OFFSET selon la norme AAMVA, je peux l'ajouter.")
