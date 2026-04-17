@@ -1,7 +1,7 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA (texte brut) avec DAJ lié à la subdivision
-# Correction finale : en-tête ANSI construit sans espaces dans la séquence IIN+version+design
-# Sortie avec séquences littérales '\n' et header exactement comme demandé
+# Streamlit — Générateur AAMVA (texte brut) avec préremplissages exemples pour Canada et USA,
+# DAJ lié automatiquement à la subdivision (abréviation pour Canada et USA),
+# sortie copiable avec séquences littérales '\n' et en-tête ANSI sans espaces.
 # Usage: streamlit run driver_license_app.py
 
 import streamlit as st
@@ -46,6 +46,24 @@ CA_ABBR = {
 }
 
 # ---------------------------
+# Abréviations USA pour DAJ (USPS two-letter codes)
+# ---------------------------
+US_ABBR = {
+    "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
+    "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
+    "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA",
+    "Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD",
+    "Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO",
+    "Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ",
+    "New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH",
+    "Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC",
+    "South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT",
+    "Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY",
+    "District of Columbia":"DC","Puerto Rico":"PR","Guam":"GU","U.S. Virgin Islands":"VI",
+    "American Samoa":"AS","Northern Mariana Islands":"MP"
+}
+
+# ---------------------------
 # Données pour selects
 # ---------------------------
 US_STATES = sorted(list(IIN_US.keys()))
@@ -61,7 +79,7 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DBB", "Date de naissance (YYYY-MM-DD ou YYYYMMDD)"),
     ("DAG", "Adresse ligne 1 (ex: 1560 SHERBROOKE ST E)"),
     ("DAI", "Ville (ex: MONTREAL)"),
-    ("DAJ", "Province/État (ex: QC ou California)"),
+    ("DAJ", "Province/État (ex: QC ou CA)"),
     ("DAK", "Code postal / ZIP (ex: H2L4M1 ou 90001)"),
     ("DBD", "Date d'émission (YYYY-MM-DD ou YYYYMMDD)"),
     ("DBA", "Date d'expiration (YYYY-MM-DD ou YYYYMMDD)"),
@@ -81,7 +99,7 @@ CANADA_EXAMPLE = {
     "DBB": "19941208",
     "DAG": "1560 SHERBROOKE ST E",
     "DAI": "MONTREAL",
-    "DAJ": "Quebec",          # valeur d'exemple (sera convertie en QC si country==Canada)
+    "DAJ": "Quebec",          # valeur d'exemple (sera convertie en QC)
     "DAK": "H2L4M1",
     "DBD": "20230510",
     "DBA": "20310509",
@@ -89,6 +107,26 @@ CANADA_EXAMPLE = {
     "DAU": "180",
     "DAY": "BRUN",
     "DCF": "PEJQ04N96"
+}
+
+# ---------------------------
+# Exemple modifiable pour USA (préremplissage)
+# ---------------------------
+USA_EXAMPLE = {
+    "DCG": "US",
+    "DCS": "DOE",
+    "DAC": "JOHN",
+    "DBB": "19800115",
+    "DAG": "123 MAIN ST",
+    "DAI": "ANYTOWN",
+    "DAJ": "California",      # valeur d'exemple (sera convertie en CA)
+    "DAK": "90001",
+    "DBD": "20220101",
+    "DBA": "20260101",
+    "DBC": "1",
+    "DAU": "175",
+    "DAY": "BRO",
+    "DCF": "ABC1234567"
 }
 
 # ---------------------------
@@ -115,7 +153,7 @@ for prefix, _ in PREFIX_FIELDS:
 st.markdown(
     "<div style='text-align:center; margin-top:6px;'>"
     "<h1 style='margin:0;'>Formulaire préfixes — Pays / Subdivision</h1>"
-    "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — exemple automatique pour Canada (modifiable)</p>"
+    "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — exemples automatiques pour Canada et USA (modifiable)</p>"
     "</div>",
     unsafe_allow_html=True
 )
@@ -164,8 +202,9 @@ if subdivision:
     st.session_state["show_hint"] = False
 
 # ---------------------------
-# Préremplissage automatique d'exemple pour Canada
+# Préremplissage automatique d'exemple pour Canada ou USA
 # - Ne remplit que les champs vides pour ne pas écraser les saisies de l'utilisateur.
+# - S'exécute dès que country est choisi et avant l'affichage du formulaire.
 # ---------------------------
 if country == "Canada":
     for code, example_val in CANADA_EXAMPLE.items():
@@ -173,9 +212,15 @@ if country == "Canada":
         if st.session_state.get(key, "") == "":
             st.session_state[key] = example_val
 
+if country == "United States":
+    for code, example_val in USA_EXAMPLE.items():
+        key = f"field_{code}"
+        if st.session_state.get(key, "") == "":
+            st.session_state[key] = example_val
+
 # ---------------------------
 # Liaison DAJ <-> subdivision (DAJ mis automatiquement selon la sélection)
-# - DAJ prend l'abréviation pour le Canada (QC, ON, ...), sinon le nom de l'état pour US.
+# - DAJ prend l'abréviation pour le Canada (QC, ON, ...) et pour les USA (CA, NY, ...).
 # - On n'écrase pas DAJ si l'utilisateur a saisi manuellement une valeur différente.
 # ---------------------------
 current_daj = st.session_state.get("field_DAJ", "").strip()
@@ -184,11 +229,17 @@ prev_sub = st.session_state.get("prev_subdivision", "")
 if subdivision and subdivision != prev_sub:
     if country == "Canada":
         daj_value = CA_ABBR.get(subdivision, subdivision)
+    elif country == "United States":
+        daj_value = US_ABBR.get(subdivision, subdivision)
     else:
         daj_value = subdivision
-    example_daj = CANADA_EXAMPLE.get("DAJ", "")
-    if current_daj == "" or current_daj == prev_sub or current_daj == example_daj:
+
+    example_daj_can = CANADA_EXAMPLE.get("DAJ", "")
+    example_daj_us = USA_EXAMPLE.get("DAJ", "")
+    # Conditions pour écraser DAJ : vide, égal à l'ancienne valeur auto-remplie, ou égal à la valeur d'exemple
+    if current_daj == "" or current_daj == prev_sub or current_daj == example_daj_can or current_daj == example_daj_us:
         st.session_state["field_DAJ"] = daj_value
+
     st.session_state["prev_subdivision"] = subdivision
 elif not subdivision:
     st.session_state["prev_subdivision"] = ""
@@ -207,6 +258,9 @@ if country:
     if subdivision:
         if country == "Canada":
             abbr = CA_ABBR.get(subdivision, "")
+            first = abbr if abbr else subdivision
+        elif country == "United States":
+            abbr = US_ABBR.get(subdivision, "")
             first = abbr if abbr else subdivision
         else:
             first = subdivision
@@ -259,8 +313,8 @@ if country:
 
     # ---------------------------
     # Fonctions utilitaires pour la génération AAMVA (format avec "\n" littéraux)
-    # Correction finale : en-tête construit sans espaces dans la séquence IIN+version+design.
-    # Exemple demandé : "636038080001DL00410214DLDAQN242094120896\n" (aucun espace dans la séquence numérique)
+    # - En-tête construit sans espaces dans la séquence IIN+version+design (ex: 636038080001DL00410214DL)
+    # - Sortie commence par "@\n" littéral puis header puis données avec '\n' littéraux
     # ---------------------------
     def get_iin_for_selection(country_name: str, subdivision_name: str) -> str:
         if country_name == "United States":
@@ -276,8 +330,7 @@ if country:
         """
         Retourne une chaîne où chaque saut de ligne est représenté par la séquence littérale '\n'.
         La chaîne commence par "@\n" (séquence littérale) puis l'en-tête ANSI et les lignes de données.
-        IMPORTANT: la séquence numérique IIN+version+design est concaténée sans espaces,
-        par exemple: "636038080001DL00410214DLDAQN242094120896\n"
+        L'en-tête numérique IIN+version+design est concaténé sans espaces, par ex: "636038080001DL00410214DL"
         """
         iin = get_iin_for_selection(country_name, subdivision_name)
         data_lines = []
@@ -306,12 +359,10 @@ if country:
         real_data_block = "\n".join(data_lines) + "\n" if data_lines else ""
         length = f"{len(real_data_block):04d}"
 
-        # En-tête : **aucun espace** entre IIN, version et design
+        # En-tête : concaténation IIN + version + design sans espaces
         version = "08"
         design = "0001"
-        # Concaténation sans espaces : IIN + version + design
         iin_sequence = f"{iin}{version}{design}"  # ex: "636038080001"
-        # Puis "DL" immédiatement après la séquence numérique, sans espace
         header = f"ANSI {iin_sequence}DL{offset}{length}DL"
 
         # Construire la sortie finale avec séquences littérales '\n'
@@ -360,5 +411,5 @@ st.markdown("---")
 st.caption(
     "Note : La sortie contient des séquences littérales '\\n' pour représenter les retours à la ligne. "
     "L'en-tête ANSI utilise une séquence IIN+version+design concaténée sans espaces (ex: 636038080001DL00410214DL). "
-    "Utilise ce texte à des fins de test et d'apprentissage uniquement."
+    "Les exemples pour Canada et USA sont insérés automatiquement mais restent modifiables. Utilise ce texte à des fins de test et d'apprentissage uniquement."
 )
