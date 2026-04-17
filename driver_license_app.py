@@ -1,11 +1,11 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA strict (sans boutons d'exemple)
-# - Aucun bouton "Insérer exemple"
-# - Aucun préremplissage automatique
+# Streamlit — Générateur AAMVA strict
+# - Aucun préremplissage automatique ni boutons d'exemple
 # - DAQ modifiable et utilisé en priorité
 # - DAJ lié automatiquement à la subdivision (abréviations CA/US) sans écraser saisies manuelles
 # - En-tête numérique IIN+VER+DES concaténé sans espaces
 # - Sortie commence par "@\n" et utilise les séquences littérales "\n"
+# - **Affiche une petite indication (aide) à côté de chaque case** comme demandé
 
 import streamlit as st
 import datetime
@@ -65,22 +65,22 @@ CA_PROVINCES = sorted(list(IIN_CA.keys()))
 
 # Champs (DAQ inclus)
 PREFIX_FIELDS: List[Tuple[str, str]] = [
-    ("DCG","Code du pays (CAN/US)"),
-    ("DAQ","Numéro de permis (modifiable)"),
-    ("DCS","Nom de famille"),
-    ("DAC","Prénom"),
-    ("DBB","Date de naissance (YYYYMMDD)"),
-    ("DAG","Adresse ligne 1"),
-    ("DAI","Ville"),
-    ("DAJ","Province/État (abréviation ou nom)"),
-    ("DAK","Code postal / ZIP"),
-    ("DBD","Date d'émission (YYYYMMDD)"),
-    ("DBA","Date d'expiration (YYYYMMDD)"),
-    ("DBC","Sexe (1=Homme,2=Femme)"),
-    ("DAU","Taille (cm)"),
-    ("DAY","Couleur des yeux"),
-    ("DCE","Classe(s)"),
-    ("DCF","Numéro de référence du document")
+    ("DCG","Code du pays (CAN/US) — ex: CAN ou US"),
+    ("DAQ","Numéro de permis (modifiable) — ex: N242094120896"),
+    ("DCS","Nom de famille — majuscules recommandées"),
+    ("DAC","Prénom — majuscules recommandées"),
+    ("DBB","Date de naissance — format YYYYMMDD"),
+    ("DAG","Adresse ligne 1 — sans accents si possible"),
+    ("DAI","Ville — majuscules recommandées"),
+    ("DAJ","Province/État — s'auto-remplit selon la subdivision"),
+    ("DAK","Code postal / ZIP — ex: H2L4M1 ou 90001"),
+    ("DBD","Date d'émission — format YYYYMMDD"),
+    ("DBA","Date d'expiration — format YYYYMMDD"),
+    ("DBC","Sexe — 1 = Homme, 2 = Femme"),
+    ("DAU","Taille (cm) — ex: 180"),
+    ("DAY","Couleur des yeux — ex: BRUN"),
+    ("DCE","Classe(s) — ex: 5"),
+    ("DCF","Numéro de référence du document — ex: PEJQ04N96")
 ]
 
 # Session init
@@ -97,7 +97,7 @@ for prefix, _ in PREFIX_FIELDS:
 
 # UI header
 st.markdown("<div style='text-align:center'><h1 style='margin:0;'>Driver License App — AAMVA Strict</h1></div>", unsafe_allow_html=True)
-st.write("Remplis les champs manuellement. Aucun exemple n'est inséré automatiquement.")
+st.write("Remplis les champs manuellement. Les petites indications sont affichées à droite de chaque case.")
 
 # Country / subdivision
 cols = st.columns([1,2,1])
@@ -133,44 +133,66 @@ if subdivision and subdivision != prev_sub:
 elif not subdivision:
     st.session_state["prev_subdivision"] = ""
 
-# Form fields (grid) — DAQ editable
+# Form fields (grid) — display small help text to the right of each input
 if country:
     st.markdown("---")
     st.subheader("Champs préfixés (saisis manuellement)")
+
     default_dcg = "CAN" if country=="Canada" else "US" if country=="United States" else ""
+
+    # For each field, render: label (left), input (middle), small help text (right)
     for i in range(0, len(PREFIX_FIELDS), 2):
         left = PREFIX_FIELDS[i]
         right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
-        cols = st.columns([1,1])
-        # left
-        key_l = f"field_{left[0]}"
-        if left[0] == "DCG":
-            cols[0].text_input(left[0], value=st.session_state.get(key_l, default_dcg), key=key_l)
-        elif left[0] == "DAJ":
+
+        # Use three columns per field row: label+input+help for left and right fields
+        row_cols = st.columns([1, 3, 2, 1, 3, 2])  # left label/input/help ; right label/input/help
+
+        # LEFT field
+        label_l = left[0]
+        help_l = left[1]
+        key_l = f"field_{label_l}"
+        # label (we show as caption to keep compact)
+        row_cols[0].markdown(f"**{label_l}**")
+        # input
+        if label_l == "DCG":
+            row_cols[1].text_input(label_l, value=st.session_state.get(key_l, default_dcg), key=key_l)
+        elif label_l == "DAJ":
             current = st.session_state.get(key_l,"")
-            display_opts = [""] + ([current] if current else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != current]
+            options_display = [""] + ([current] if current else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != current]
             try:
-                idx = display_opts.index(current)
+                idx = options_display.index(current)
             except ValueError:
                 idx = 0
-            cols[0].selectbox(left[0], options=display_opts, index=idx, key=key_l)
+            row_cols[1].selectbox(label_l, options=options_display, index=idx, key=key_l)
+        elif label_l == "DBC":
+            row_cols[1].selectbox(label_l, options=["", "1 - Homme", "2 - Femme"], key=key_l)
         else:
-            cols[0].text_input(left[0], value=st.session_state.get(key_l,""), key=key_l)
-        # right
+            row_cols[1].text_input(label_l, value=st.session_state.get(key_l,""), key=key_l)
+        # help text
+        row_cols[2].caption(help_l)
+
+        # RIGHT field (if exists)
         if right:
-            key_r = f"field_{right[0]}"
-            if right[0] == "DCG":
-                cols[1].text_input(right[0], value=st.session_state.get(key_r, default_dcg), key=key_r)
-            elif right[0] == "DAJ":
+            label_r = right[0]
+            help_r = right[1]
+            key_r = f"field_{label_r}"
+            row_cols[3].markdown(f"**{label_r}**")
+            if label_r == "DCG":
+                row_cols[4].text_input(label_r, value=st.session_state.get(key_r, default_dcg), key=key_r)
+            elif label_r == "DAJ":
                 current_r = st.session_state.get(key_r,"")
-                display_opts_r = [""] + ([current_r] if current_r else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != current_r]
+                options_display_r = [""] + ([current_r] if current_r else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != current_r]
                 try:
-                    idx_r = display_opts_r.index(current_r)
+                    idx_r = options_display_r.index(current_r)
                 except ValueError:
                     idx_r = 0
-                cols[1].selectbox(right[0], options=display_opts_r, index=idx_r, key=key_r)
+                row_cols[4].selectbox(label_r, options=options_display_r, index=idx_r, key=key_r)
+            elif label_r == "DBC":
+                row_cols[4].selectbox(label_r, options=["", "1 - Homme", "2 - Femme"], key=key_r)
             else:
-                cols[1].text_input(right[0], value=st.session_state.get(key_r,""), key=key_r)
+                row_cols[4].text_input(label_r, value=st.session_state.get(key_r,""), key=key_r)
+            row_cols[5].caption(help_r)
 
     st.markdown("---")
 
