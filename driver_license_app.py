@@ -1,6 +1,7 @@
 # driver_license_app.py
 # Streamlit — Générateur AAMVA (texte brut) avec DAJ lié à la subdivision
-# Correction : en-tête ANSI sans espaces dans la séquence IIN+version+design (ex: "636033080001")
+# Correction finale : en-tête ANSI construit sans espaces dans la séquence IIN+version+design
+# Sortie avec séquences littérales '\n' et header exactement comme demandé
 # Usage: streamlit run driver_license_app.py
 
 import streamlit as st
@@ -258,7 +259,8 @@ if country:
 
     # ---------------------------
     # Fonctions utilitaires pour la génération AAMVA (format avec "\n" littéraux)
-    # Correction : en-tête construit sans espaces dans la séquence IIN+version+design.
+    # Correction finale : en-tête construit sans espaces dans la séquence IIN+version+design.
+    # Exemple demandé : "636038080001DL00410214DLDAQN242094120896\n" (aucun espace dans la séquence numérique)
     # ---------------------------
     def get_iin_for_selection(country_name: str, subdivision_name: str) -> str:
         if country_name == "United States":
@@ -275,7 +277,7 @@ if country:
         Retourne une chaîne où chaque saut de ligne est représenté par la séquence littérale '\n'.
         La chaîne commence par "@\n" (séquence littérale) puis l'en-tête ANSI et les lignes de données.
         IMPORTANT: la séquence numérique IIN+version+design est concaténée sans espaces,
-        par exemple: "636033080001" (IIN=636033, version=08, design=0001).
+        par exemple: "636038080001DL00410214DLDAQN242094120896\n"
         """
         iin = get_iin_for_selection(country_name, subdivision_name)
         data_lines = []
@@ -304,11 +306,12 @@ if country:
         real_data_block = "\n".join(data_lines) + "\n" if data_lines else ""
         length = f"{len(real_data_block):04d}"
 
-        # En-tête : **un espace** après "ANSI", puis la séquence IIN+version+design **sans espaces**
-        # version = "08", design = "0001" (exemple), concaténés directement après l'IIN
+        # En-tête : **aucun espace** entre IIN, version et design
         version = "08"
         design = "0001"
-        iin_sequence = f"{iin}{version}{design}"  # ex: "636033080001" (aucun espace)
+        # Concaténation sans espaces : IIN + version + design
+        iin_sequence = f"{iin}{version}{design}"  # ex: "636038080001"
+        # Puis "DL" immédiatement après la séquence numérique, sans espace
         header = f"ANSI {iin_sequence}DL{offset}{length}DL"
 
         # Construire la sortie finale avec séquences littérales '\n'
@@ -356,6 +359,6 @@ if country:
 st.markdown("---")
 st.caption(
     "Note : La sortie contient des séquences littérales '\\n' pour représenter les retours à la ligne. "
-    "L'en-tête ANSI utilise une séquence IIN+version+design concaténée sans espaces (ex: 636033080001). "
+    "L'en-tête ANSI utilise une séquence IIN+version+design concaténée sans espaces (ex: 636038080001DL00410214DL). "
     "Utilise ce texte à des fins de test et d'apprentissage uniquement."
 )
