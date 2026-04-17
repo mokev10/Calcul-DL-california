@@ -317,7 +317,7 @@ if country:
     # ---------------------------
     # Actions : Générer / Enregistrer / Réinitialiser
     # ---------------------------
-    if st.button("Générer le bloc AAMVA copiable (avec '\\n' littéraux)"):
+    if st.button("Générer"):
         fields_values = {}
         for prefix, _ in PREFIX_FIELDS:
             fields_values[prefix] = st.session_state.get(f"field_{prefix}", "").strip()
@@ -357,3 +357,6 @@ st.caption(
     "Note : La sortie contient des séquences littérales '\\n' pour représenter les retours à la ligne. "
     "Utilise ce texte à des fins de test et d'apprentissage uniquement."
 )
+
+
+
