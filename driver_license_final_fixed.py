@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-# country_subdivision_form_side_by_side.py
-# Streamlit — Pays et Subdivision côte à côte, puis formulaire préfixes (DCG, DCS, ...)
-# Usage : streamlit run country_subdivision_form_side_by_side.py
+# country_subdivision_form_proportional.py
+# Streamlit — Pays et Subdivision côte à côte avec mise en page proportionnelle pour meilleur UI/UX
+# Usage : streamlit run country_subdivision_form_proportional.py
 
 import datetime
 from typing import Dict, List, Tuple, Optional
 
 import streamlit as st
 
-st.set_page_config(page_title="Formulaire préfixes — côte à côte", layout="wide")
+st.set_page_config(page_title="Formulaire préfixes — mise en page proportionnelle", layout="wide")
 
 # --- Données : US states (50) et Canada provinces/territories (13) ---
 US_STATES: Dict[str, str] = {
@@ -51,74 +51,94 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
 # --- UI ---
 st.title("Sélecteur Pays et Subdivision — Formulaire préfixes")
 
-# Afficher les deux menus côte à côte
-col_country, col_subdivision = st.columns([0.6, 1.4])
+# Layout proportionnel : gauche (menus) plus étroit, droite (formulaire) plus large
+left_col, right_col = st.columns([0.36, 0.64])
 
-with col_country:
-    country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="select_country")
+# --- Menus côte à côte dans la colonne de gauche (compact et aligné) ---
+with left_col:
+    st.markdown("### Sélection")
+    # petits sous-colonnes pour garder les menus côte à côte et proportionnés
+    menu_a, menu_b = st.columns([0.5, 0.5])
+    with menu_a:
+        country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="select_country")
+    # build options depending on country to show in the second small column
+    if country.startswith("United"):
+        options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
+        subtitle = "État"
+    else:
+        options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
+        subtitle = "Province / Territoire"
+    with menu_b:
+        subdivision = st.selectbox(subtitle, [""] + options, key="select_subdivision")
 
-# Construire la liste liée en fonction du pays
-if country.startswith("United"):
-    subtitle = "Sélectionnez un État (United States)"
-    options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
-else:
-    subtitle = "Sélectionnez une Province / Territoire (Canada)"
-    options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
+    # Optionnel : rappel compact de la sélection
+    if subdivision:
+        st.markdown(f"**{country.split('(')[0].strip()}** — {subdivision.split('(')[0].strip()}")
 
-with col_subdivision:
-    subdivision = st.selectbox(subtitle, [""] + options, key="select_subdivision")
+# --- Formulaire dans la colonne de droite (plus d'espace pour les champs) ---
+with right_col:
+    if subdivision:
+        default_country_code = "US" if country.startswith("United") else "CAN"
 
-# Affichage du formulaire des préfixes (à droite, occupant la largeur restante)
-if subdivision:
-    st.markdown("---")
-    st.success(f"Pays : **{country}** — Subdivision : **{subdivision}**")
-    st.markdown("Remplissez les champs ci‑dessous (texte libre). Chaque champ affiche un petit sous‑titre explicatif.")
+        # Card visuel pour le formulaire (meilleure lisibilité)
+        st.markdown("<div style='padding:12px;border-radius:8px;background:#ffffff;box-shadow:0 1px 4px rgba(0,0,0,0.06)'>", unsafe_allow_html=True)
+        st.markdown("### Formulaire préfixes")
+        st.markdown("Remplissez les champs ci‑dessous (texte libre).")
 
-    default_country_code = "US" if country.startswith("United") else "CAN"
-
-    # Présentation : deux colonnes pour les champs, afin d'être compact et lisible
-    for i in range(0, len(PREFIX_FIELDS), 2):
-        left = PREFIX_FIELDS[i]
-        right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
-        cols = st.columns([1,1])
-        # Champ gauche
-        key_left = f"field_{left[0]}"
-        if left[0] == "DCG":
-            cols[0].text_input(left[0], value=default_country_code, help=left[1], key=key_left)
-        else:
-            cols[0].text_input(left[0], value="", help=left[1], placeholder=left[1], key=key_left)
-
-        # Champ droit
-        if right:
-            key_right = f"field_{right[0]}"
-            if right[0] == "DCG":
-                cols[1].text_input(right[0], value=default_country_code, help=right[1], key=key_right)
+        # Utiliser une grille de champs : deux colonnes équilibrées
+        for i in range(0, len(PREFIX_FIELDS), 2):
+            left = PREFIX_FIELDS[i]
+            right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
+            cols = st.columns([1,1])
+            # Champ gauche
+            key_left = f"field_{left[0]}"
+            if left[0] == "DCG":
+                cols[0].text_input(left[0], value=default_country_code, help=left[1], key=key_left)
             else:
-                cols[1].text_input(right[0], value="", help=right[1], placeholder=right[1], key=key_right)
+                cols[0].text_input(left[0], value="", help=left[1], placeholder=left[1], key=key_left)
 
-    st.markdown("---")
-    action_col1, action_col2 = st.columns([1,1])
-    with action_col1:
-        if st.button("Enregistrer (session)"):
-            payload = {}
-            for prefix, _ in PREFIX_FIELDS:
-                payload[prefix] = st.session_state.get(f"field_{prefix}", "")
-            payload["COUNTRY_LABEL"] = country
-            payload["SUBDIVISION_LABEL"] = subdivision
-            payload["TIMESTAMP"] = datetime.datetime.now().isoformat()
-            st.session_state["last_prefix_payload"] = payload
-            st.success("Données enregistrées en session (usage pédagogique).")
-    with action_col2:
-        if st.button("Réinitialiser les champs"):
-            for prefix, _ in PREFIX_FIELDS:
-                st.session_state[f"field_{prefix}"] = ""
-            st.session_state["field_DCG"] = default_country_code
-            st.info("Champs réinitialisés.")
+            # Champ droit
+            if right:
+                key_right = f"field_{right[0]}"
+                if right[0] == "DCG":
+                    cols[1].text_input(right[0], value=default_country_code, help=right[1], key=key_right)
+                else:
+                    cols[1].text_input(right[0], value="", help=right[1], placeholder=right[1], key=key_right)
 
-    # Aperçu si présent
-    if st.session_state.get("last_prefix_payload"):
-        st.markdown("---")
-        st.subheader("Aperçu des données enregistrées (session)")
-        st.json(st.session_state["last_prefix_payload"])
-else:
-    st.info("Sélectionnez un pays et une subdivision (les menus sont côte à côte) pour afficher le formulaire.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Actions alignées et proportionnées
+        st.markdown("")  # spacing
+        action_l, action_r = st.columns([1,1])
+        with action_l:
+            if st.button("Enregistrer (session)"):
+                payload = {}
+                for prefix, _ in PREFIX_FIELDS:
+                    payload[prefix] = st.session_state.get(f"field_{prefix}", "")
+                payload["COUNTRY_LABEL"] = country
+                payload["SUBDIVISION_LABEL"] = subdivision
+                payload["TIMESTAMP"] = datetime.datetime.now().isoformat()
+                st.session_state["last_prefix_payload"] = payload
+                st.success("Données enregistrées en session (usage pédagogique).")
+        with action_r:
+            if st.button("Réinitialiser les champs"):
+                for prefix, _ in PREFIX_FIELDS:
+                    st.session_state[f"field_{prefix}"] = ""
+                st.session_state["field_DCG"] = default_country_code
+                st.info("Champs réinitialisés.")
+
+        # Aperçu (occupant toute la largeur droite, mais compact)
+        if st.session_state.get("last_prefix_payload"):
+            st.markdown("---")
+            st.subheader("Aperçu des données enregistrées (session)")
+            st.json(st.session_state["last_prefix_payload"])
+    else:
+        # Message discret quand rien n'est sélectionné
+        st.info("Sélectionnez un pays et une subdivision pour afficher le formulaire.")
+
+# --- Notes UI/UX (non affichées dans l'app) ---
+# - Les proportions [0.36, 0.64] laissent suffisamment d'espace au formulaire tout en gardant les menus visibles.
+# - Les menus sont eux-mêmes contenus dans deux petites colonnes égales pour rester alignés et compacts.
+# - Le formulaire utilise une grille 2-colonnes pour une lecture rapide et une saisie efficace.
+# - Si tu veux des ajustements (ex : menus plus petits, formulaire encore plus large, ou champs sur 3 colonnes),
+#   dis-moi la proportion exacte souhaitée et j'adapte le layout.
