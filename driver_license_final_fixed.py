@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-# country_subdivision_form_equal_boxes.py
-# Streamlit — En-tête fixe, deux menus déroulants côte à côte de même taille,
-# et formulaire préfixes affiché dans la colonne de droite.
-# Usage : streamlit run country_subdivision_form_equal_boxes.py
+# country_subdivision_stacked.py
+# Streamlit — En-tête fixe, menu "Pays" puis menu "Subdivision" placé directement en dessous (mêmes dimensions),
+# formulaire préfixes affiché à droite. Usage : streamlit run country_subdivision_stacked.py
 
 import datetime
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 import streamlit as st
 
-st.set_page_config(page_title="Formulaire préfixes — boîtes égales", layout="wide")
+st.set_page_config(page_title="Pays → Subdivision (stacked)", layout="wide")
 
 # --- Données : US states (50) et Canada provinces/territories (13) ---
 US_STATES: Dict[str, str] = {
@@ -54,29 +53,34 @@ st.title("Formulaire préfixes — Pays / Subdivision")
 st.caption("Usage pédagogique — remplissez les champs texte libre après sélection du pays et de la subdivision")
 
 # --- Layout principal ---
-# Trois colonnes : les deux premières pour les menus (mêmes largeurs), la troisième pour le formulaire
-col_menu_1, col_menu_2, col_form = st.columns([0.33, 0.33, 0.34])
+# Deux colonnes : gauche pour les menus empilés (même largeur), droite pour le formulaire
+col_left, col_right = st.columns([0.36, 0.64])
 
-# --- Menus côte à côte, mêmes tailles ---
-with col_menu_1:
-    country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="select_country_equal")
+with col_left:
+    # Les deux menus sont empilés dans la même colonne : ils auront la même largeur visuelle
+    st.markdown("### Sélection")
+    country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="select_country_stacked")
 
-with col_menu_2:
-    # Construire la liste liée en fonction du pays
+    # Le menu "Subdivision" doit être placé directement sous "Pays"
     if country.startswith("United"):
-        options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
         subdivision_label = "État"
+        options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
     else:
-        options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
         subdivision_label = "Province / Territoire"
-    subdivision = st.selectbox(subdivision_label, [""] + options, key="select_subdivision_equal")
+        options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
 
-# --- Formulaire (colonne de droite) ---
-with col_form:
+    # Subdivision selectbox placé immédiatement sous le country selectbox (stacked)
+    subdivision = st.selectbox(subdivision_label, [""] + options, key="select_subdivision_stacked")
+
+    # Rappel compact de la sélection (sous les menus)
+    if subdivision:
+        st.markdown(f"**{country.split('(')[0].strip()}** — {subdivision.split('(')[0].strip()}")
+
+with col_right:
+    # Formulaire affiché à droite ; n'apparaît que si une subdivision est choisie
     if subdivision:
         default_country_code = "US" if country.startswith("United") else "CAN"
 
-        # Card visuel pour meilleure lisibilité
         st.markdown("<div style='padding:12px;border-radius:8px;background:#ffffff;box-shadow:0 1px 6px rgba(0,0,0,0.06)'>", unsafe_allow_html=True)
         st.subheader("Champs préfixés (texte libre)")
         st.markdown("Remplissez les champs ci‑dessous. Chaque champ est un champ texte libre avec un petit aide‑texte.")
@@ -104,7 +108,6 @@ with col_form:
         st.markdown("</div>", unsafe_allow_html=True)
 
         # Actions
-        st.markdown("")  # spacing
         action_l, action_r = st.columns([1, 1])
         with action_l:
             if st.button("Enregistrer (session)"):
@@ -129,10 +132,4 @@ with col_form:
             st.subheader("Aperçu des données enregistrées (session)")
             st.json(st.session_state["last_prefix_payload"])
     else:
-        st.info("Sélectionnez un pays et une subdivision pour afficher le formulaire.")
-
-# --- Ajustements UI/UX supplémentaires (optionnels) ---
-# - Les deux menus sont strictement de la même largeur (colonnes [0.33, 0.33, 0.34]).
-# - L'en-tête reste toujours visible en haut comme demandé.
-# - Si tu veux que les labels des menus soient plus compacts (ex: 'Pays' et 'État'), je peux les raccourcir.
-# - Si tu veux que la colonne formulaire soit plus large, indique la proportion souhaitée (ex: [0.28,0.28,0.44]).
+        st.info("Sélectionnez un pays puis une subdivision (le menu Subdivision est placé directement sous Pays).")
