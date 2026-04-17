@@ -1,72 +1,148 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA strict avec styles CSS pour indications (effet survol)
-# - Aucun préremplissage automatique ni boutons d'exemple
-# - DAQ modifiable et utilisé en priorité
-# - DAJ lié automatiquement à la subdivision (abréviations CA/US) sans écraser saisies manuelles
-# - En-tête numérique IIN+VER+DES concaténé sans espaces
-# - Sortie commence par "@\n" et utilise les séquences littérales "\n"
-# - Petites indications affichées à droite de chaque case avec effet CSS au survol (curseur, ombre, transition)
+# Streamlit — Générateur AAMVA avec infobulles modernes (CSS hover) intégrées dans l'interface
+# - Infobulles visibles uniquement au survol (hover) avec transition fluide
+# - Design moderne via CSS injecté (couleurs, ombres, transitions)
+# - Les infobulles sont placées à droite de chaque champ et n'écrasent pas la logique existante
+# Usage: streamlit run driver_license_app.py
 
 import streamlit as st
 import datetime
 from typing import Dict, List, Tuple
 
-st.set_page_config(page_title="Driver License App — AAMVA Strict", layout="wide")
+st.set_page_config(page_title="Driver License App — AAMVA", layout="wide")
 
 # ---------------------------
-# CSS personnalisé pour les indications (help-bubble)
+# Injecter CSS global pour le style moderne et les tooltips
 # ---------------------------
 st.markdown(
     """
     <style>
-    /* Conteneur global pour les petites indications */
+    :root{
+      --bg:#071025;
+      --card:#0b1220;
+      --muted:#9aa7c7;
+      --accent:#4f8cff;
+      --tooltip-bg: rgba(18,24,40,0.98);
+      --tooltip-color: #eaf0ff;
+      --radius:12px;
+      --ease: cubic-bezier(.2,.9,.3,1);
+    }
+
+    /* Container principal */
+    .app-wrap {
+      max-width:1100px;
+      margin:28px auto;
+      padding:22px;
+      border-radius:var(--radius);
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      box-shadow: 0 12px 40px rgba(2,6,23,0.6);
+      border: 1px solid rgba(255,255,255,0.03);
+      color: #eaf0ff;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+
+    /* Header */
+    .app-header { display:flex; gap:14px; align-items:center; margin-bottom:12px; }
+    .app-logo { width:48px; height:48px; border-radius:10px; background: linear-gradient(135deg,var(--accent),#2bb0ff); display:flex; align-items:center; justify-content:center; font-weight:700; color:white; font-size:18px; box-shadow: 0 8px 24px rgba(79,140,255,0.14); }
+    .app-title { margin:0; font-size:18px; }
+    .app-sub { margin:2px 0 0 0; color:var(--muted); font-size:13px; }
+
+    /* Cards and grid */
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-top:18px; }
+    .card { background: var(--card); border-radius:12px; padding:14px; border:1px solid rgba(255,255,255,0.02); }
+
+    /* Field row layout */
+    .field-row { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    .field-main { flex:1; }
+    label.field-label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:600; }
+
+    input[type="text"], select {
+      width:100%;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.04);
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+      color: #eaf0ff;
+      outline:none;
+      transition: box-shadow .18s var(--ease), transform .12s var(--ease), border-color .12s var(--ease);
+      font-size:14px;
+    }
+    input[type="text"]:focus, select:focus{
+      box-shadow: 0 8px 26px rgba(79,140,255,0.12);
+      border-color: rgba(79,140,255,0.6);
+      transform: translateY(-1px);
+    }
+
+    /* Help bubble (infobulle déclenchée au survol) */
     .help-bubble {
-        display: inline-block;
-        font-size: 12px;
-        color: #0b3d91;
-        background: rgba(11,61,145,0.06);
-        padding: 6px 8px;
-        border-radius: 6px;
-        border: 1px solid rgba(11,61,145,0.12);
-        transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 220px;
-        vertical-align: middle;
-        cursor: default;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:36px;
+      height:36px;
+      border-radius:10px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border:1px solid rgba(255,255,255,0.03);
+      color:var(--muted);
+      font-weight:700;
+      cursor:default;
+      position:relative;
+      transition: transform .12s var(--ease), box-shadow .12s var(--ease), background .12s var(--ease);
+      user-select:none;
+    }
+    .help-bubble:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 12px 36px rgba(2,6,23,0.6); color:#fff; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); cursor:help; }
+
+    .help-bubble .tooltip {
+      position:absolute;
+      right:calc(100% + 12px);
+      top:50%;
+      transform: translateY(-50%) translateX(6px);
+      background: var(--tooltip-bg);
+      color: var(--tooltip-color);
+      padding:10px 12px;
+      border-radius:10px;
+      font-size:13px;
+      white-space:nowrap;
+      opacity:0;
+      pointer-events:none;
+      box-shadow: 0 10px 30px rgba(2,6,23,0.6);
+      transition: opacity .22s var(--ease), transform .22s var(--ease);
+      z-index:40;
+      border: 1px solid rgba(255,255,255,0.04);
+      transform-origin: right center;
+    }
+    .help-bubble .tooltip::after {
+      content:"";
+      position:absolute;
+      left:100%;
+      top:50%;
+      transform:translateY(-50%);
+      width:10px;height:10px;
+      background:var(--tooltip-bg);
+      border-left:1px solid rgba(255,255,255,0.04);
+      clip-path: polygon(0 50%, 100% 0, 100% 100%);
+    }
+    .help-bubble:hover .tooltip { opacity:1; transform: translateY(-50%) translateX(0); pointer-events:auto; }
+
+    /* Responsive: tooltip below on small screens */
+    @media (max-width:720px){
+      .help-bubble .tooltip { right:auto; left:50%; top:calc(100% + 10px); transform: translateX(-50%) translateY(6px); }
+      .help-bubble .tooltip::after { left:50%; top:-6px; transform:translateX(-50%) rotate(180deg); clip-path: polygon(50% 0, 0 100%, 100% 100%); }
     }
 
-    /* Effet au survol : curseur pointeur, légère élévation et changement de fond */
-    .help-bubble:hover {
-        transform: translateY(-3px) scale(1.02);
-        box-shadow: 0 6px 18px rgba(11,61,145,0.12);
-        background: rgba(11,61,145,0.12);
-        cursor: pointer;
-    }
+    /* Buttons */
+    .actions { display:flex; gap:12px; margin-top:18px; align-items:center; }
+    .btn { padding:10px 14px; border-radius:10px; border:none; background: linear-gradient(90deg,var(--accent),#2bb0ff); color:white; font-weight:600; cursor:pointer; box-shadow: 0 8px 24px rgba(79,140,255,0.14); }
+    .btn.ghost { background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted); box-shadow:none; }
 
-    /* Variante compacte pour écrans étroits */
-    @media (max-width: 640px) {
-        .help-bubble {
-            font-size: 11px;
-            max-width: 140px;
-            padding: 5px 6px;
-        }
-    }
-
-    /* Style pour le label des champs (pour cohérence visuelle) */
-    .field-label {
-        font-weight: 600;
-        font-size: 14px;
-        margin-bottom: 4px;
-    }
+    .output-card { margin-top:16px; padding:12px; border-radius:10px; background: rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.02); font-family: monospace; white-space: pre-wrap; color:#dfe9ff; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # ---------------------------
-# IIN mapping (US states + Canadian provinces)
+# Data / mappings
 # ---------------------------
 IIN_US = {
     "Alabama":"636033","Alaska":"636059","Arizona":"636026","Arkansas":"636021","California":"636014",
@@ -82,41 +158,22 @@ IIN_US = {
     "District of Columbia":"636043","Puerto Rico":"636017","Guam":"636019","U.S. Virgin Islands":"636016",
     "American Samoa":"636044","Northern Mariana Islands":"636056"
 }
-
 IIN_CA = {
     "Alberta":"636031","British Columbia":"636028","Manitoba":"636030","New Brunswick":"636027",
     "Newfoundland and Labrador":"636029","Northwest Territories":"636062","Nova Scotia":"636025",
     "Nunavut":"636063","Ontario":"636032","Prince Edward Island":"636026","Quebec":"636033",
     "Saskatchewan":"636034","Yukon":"636064"
 }
-
-# Abréviations
-CA_ABBR = {
-    "Alberta":"AB","British Columbia":"BC","Manitoba":"MB","New Brunswick":"NB",
-    "Newfoundland and Labrador":"NL","Northwest Territories":"NT","Nova Scotia":"NS",
-    "Nunavut":"NU","Ontario":"ON","Prince Edward Island":"PE","Quebec":"QC",
-    "Saskatchewan":"SK","Yukon":"YT"
-}
-US_ABBR = {
-    "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
-    "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
-    "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA",
-    "Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD",
-    "Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO",
-    "Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ",
-    "New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH",
-    "Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC",
-    "South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT",
-    "Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY",
-    "District of Columbia":"DC","Puerto Rico":"PR","Guam":"GU","U.S. Virgin Islands":"VI",
-    "American Samoa":"AS","Northern Mariana Islands":"MP"
-}
+CA_ABBR = {"Alberta":"AB","British Columbia":"BC","Manitoba":"MB","New Brunswick":"NB","Newfoundland and Labrador":"NL","Northwest Territories":"NT","Nova Scotia":"NS","Nunavut":"NU","Ontario":"ON","Prince Edward Island":"PE","Quebec":"QC","Saskatchewan":"SK","Yukon":"YT"}
+US_ABBR = {"Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA","Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY","District of Columbia":"DC","Puerto Rico":"PR","Guam":"GU","U.S. Virgin Islands":"VI","American Samoa":"AS","Northern Mariana Islands":"MP"}
 
 US_STATES = sorted(list(IIN_US.keys()))
 CA_PROVINCES = sorted(list(IIN_CA.keys()))
 
-# Champs (DAQ inclus) avec aides textuelles
-PREFIX_FIELDS: List[Tuple[str, str]] = [
+# ---------------------------
+# Session init for fields
+# ---------------------------
+FIELDS = [
     ("DCG","Code du pays (CAN/US) — ex: CAN ou US"),
     ("DAQ","Numéro de permis (modifiable) — ex: N242094120896"),
     ("DCS","Nom de famille — majuscules recommandées"),
@@ -135,23 +192,26 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCF","Numéro de référence du document — ex: PEJQ04N96")
 ]
 
-# Session init
+for code, _ in FIELDS:
+    key = f"field_{code}"
+    if key not in st.session_state:
+        st.session_state[key] = ""
+
 if "prev_subdivision" not in st.session_state:
     st.session_state["prev_subdivision"] = ""
 if "last_aamva" not in st.session_state:
     st.session_state["last_aamva"] = ""
 
-# Ensure fields exist
-for prefix, _ in PREFIX_FIELDS:
-    key = f"field_{prefix}"
-    if key not in st.session_state:
-        st.session_state[key] = ""
+# ---------------------------
+# Page layout (Streamlit widgets + HTML help bubbles)
+# ---------------------------
+st.markdown("<div class='app-wrap'>", unsafe_allow_html=True)
+st.markdown(
+    "<div class='app-header'><div class='app-logo'>A</div>"
+    "<div><h2 class='app-title'>Générateur AAMVA</h2><div class='app-sub'>Saisie des champs — infobulles modernes au survol</div></div></div>",
+    unsafe_allow_html=True
+)
 
-# UI header
-st.markdown("<div style='text-align:center'><h1 style='margin:0;'>Driver License App — AAMVA Strict</h1></div>", unsafe_allow_html=True)
-st.write("Remplis les champs manuellement. Les petites indications ont un effet visuel au survol du curseur.")
-
-# Country / subdivision
 cols = st.columns([1,2,1])
 with cols[1]:
     c1, c2 = st.columns([1,1])
@@ -165,7 +225,6 @@ with cols[1]:
         else:
             subdivision = st.selectbox("Subdivision", [""], key="subdivision")
 
-# Hint
 if country and not subdivision:
     st.info("Choisis une subdivision pour préremplir DAJ automatiquement (modifiable).")
 
@@ -185,144 +244,110 @@ if subdivision and subdivision != prev_sub:
 elif not subdivision:
     st.session_state["prev_subdivision"] = ""
 
-# Form fields (grid) — affichage label / input / aide (avec style)
-if country:
-    st.markdown("---")
-    st.subheader("Champs préfixés (saisis manuellement)")
+# Grid of fields with help bubbles
+st.markdown("<div class='grid'>", unsafe_allow_html=True)
 
-    default_dcg = "CAN" if country=="Canada" else "US" if country=="United States" else ""
-
-    # Pour chaque champ : label (col 0), input (col 1), aide stylée (col 2)
-    for i in range(0, len(PREFIX_FIELDS), 2):
-        left = PREFIX_FIELDS[i]
-        right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
-
-        # Six colonnes : label/input/help pour gauche ; label/input/help pour droite
-        row_cols = st.columns([1, 3, 2, 1, 3, 2])
-
-        # LEFT field
-        label_l = left[0]
-        help_l = left[1]
-        key_l = f"field_{label_l}"
-        row_cols[0].markdown(f"<div class='field-label'>{label_l}</div>", unsafe_allow_html=True)
-        if label_l == "DCG":
-            row_cols[1].text_input(label_l, value=st.session_state.get(key_l, default_dcg), key=key_l)
-        elif label_l == "DAJ":
-            current = st.session_state.get(key_l,"")
-            options_display = [""] + ([current] if current else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != current]
-            try:
-                idx = options_display.index(current)
-            except ValueError:
-                idx = 0
-            row_cols[1].selectbox(label_l, options=options_display, index=idx, key=key_l)
-        elif label_l == "DBC":
-            row_cols[1].selectbox(label_l, options=["", "1 - Homme", "2 - Femme"], key=key_l)
+# Left card
+st.markdown("<div class='card'><h3 style='margin-top:0'>Informations personnelles</h3>", unsafe_allow_html=True)
+for code, help_text in FIELDS[:8]:
+    # layout: two columns per field: input (wide) + help bubble (narrow)
+    col_input, col_help = st.columns([8,1])
+    with col_input:
+        label = f"{code}"
+        # choose widget type for some fields
+        if code == "DBC":
+            val = st.selectbox(label, ["", "1 - Homme", "2 - Femme"], key=f"field_{code}")
         else:
-            row_cols[1].text_input(label_l, value=st.session_state.get(key_l,""), key=key_l)
-        # help bubble (HTML span with class)
-        safe_help_l = help_l.replace("'", "&#39;").replace('"', "&quot;")
-        row_cols[2].markdown(f"<span class='help-bubble' title='{safe_help_l}'>{safe_help_l}</span>", unsafe_allow_html=True)
+            val = st.text_input(label, value=st.session_state.get(f"field_{code}", ""), key=f"field_{code}")
+    # render help bubble as HTML in the small column
+    safe_help = help_text.replace("'", "&#39;").replace('"', "&quot;")
+    help_html = f"""
+      <div class="help-bubble" tabindex="0" role="button" aria-label="{safe_help}">
+        ?
+        <div class="tooltip" role="tooltip">{safe_help}</div>
+      </div>
+    """
+    with col_help:
+        st.markdown(help_html, unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)  # close left card
 
-        # RIGHT field (si présent)
-        if right:
-            label_r = right[0]
-            help_r = right[1]
-            key_r = f"field_{label_r}"
-            row_cols[3].markdown(f"<div class='field-label'>{label_r}</div>", unsafe_allow_html=True)
-            if label_r == "DCG":
-                row_cols[4].text_input(label_r, value=st.session_state.get(key_r, default_dcg), key=key_r)
-            elif label_r == "DAJ":
-                current_r = st.session_state.get(key_r,"")
-                options_display_r = [""] + ([current_r] if current_r else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != current_r]
-                try:
-                    idx_r = options_display_r.index(current_r)
-                except ValueError:
-                    idx_r = 0
-                row_cols[4].selectbox(label_r, options=options_display_r, index=idx_r, key=key_r)
-            elif label_r == "DBC":
-                row_cols[4].selectbox(label_r, options=["", "1 - Homme", "2 - Femme"], key=key_r)
-            else:
-                row_cols[4].text_input(label_r, value=st.session_state.get(key_r,""), key=key_r)
-            safe_help_r = help_r.replace("'", "&#39;").replace('"', "&quot;")
-            row_cols[5].markdown(f"<span class='help-bubble' title='{safe_help_r}'>{safe_help_r}</span>", unsafe_allow_html=True)
+# Right card
+st.markdown("<div class='card'><h3 style='margin-top:0'>Adresse & Détails</h3>", unsafe_allow_html=True)
+for code, help_text in FIELDS[8:]:
+    col_input, col_help = st.columns([8,1])
+    with col_input:
+        label = f"{code}"
+        if code == "DBC":
+            val = st.selectbox(label, ["", "1 - Homme", "2 - Femme"], key=f"field_{code}")
+        else:
+            val = st.text_input(label, value=st.session_state.get(f"field_{code}", ""), key=f"field_{code}")
+    safe_help = help_text.replace("'", "&#39;").replace('"', "&quot;")
+    help_html = f"""
+      <div class="help-bubble" tabindex="0" role="button" aria-label="{safe_help}">
+        ?
+        <div class="tooltip" role="tooltip">{safe_help}</div>
+      </div>
+    """
+    with col_help:
+        st.markdown(help_html, unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)  # close right card
 
-    st.markdown("---")
+st.markdown("</div>", unsafe_allow_html=True)  # close grid
 
-    # Build strict AAMVA block (uses only values currently in the form)
-    def get_iin(country_name: str, subdivision_name: str) -> str:
-        if country_name == "United States":
-            return IIN_US.get(subdivision_name, "000000")
-        if country_name == "Canada":
-            return IIN_CA.get(subdivision_name, "000000")
-        return "000000"
-
-    def normalize_date(v: str) -> str:
-        return v.replace("-","").strip()
-
-    def build_strict_aamva(fields: Dict[str,str], country_name: str, subdivision_name: str) -> str:
-        # IIN sequence (no spaces) + version + design
-        iin = get_iin(country_name, subdivision_name)
+# Actions
+col_a, col_b = st.columns([1,1])
+with col_a:
+    if st.button("Générer le bloc AAMVA (séquences '\\n' littérales)"):
+        # collect current values exactly as entered
+        fields_values = {code: st.session_state.get(f"field_{code}", "").strip() for code, _ in FIELDS}
+        # build block
+        def get_iin(country_name: str, subdivision_name: str) -> str:
+            if country_name == "United States":
+                return IIN_US.get(subdivision_name, "000000")
+            if country_name == "Canada":
+                return IIN_CA.get(subdivision_name, "000000")
+            return "000000"
+        def normalize_date(v: str) -> str:
+            return v.replace("-", "").strip()
+        iin = get_iin(country, subdivision)
         version = "08"
         design = "0001"
-        iin_sequence = f"{iin}{version}{design}"  # e.g. 636038080001
-
-        # Build data lines from current fields (DAQ used in priority)
+        iin_sequence = f"{iin}{version}{design}"
         data_lines = []
-        daq = fields.get("DAQ","") or fields.get("DCF","")
+        daq = fields_values.get("DAQ","") or fields_values.get("DCF","")
         if daq:
             data_lines.append(f"DAQ{daq}")
-
         order = ["DCS","DAC","DBB","DAG","DAI","DAJ","DAK","DBD","DBA","DBC","DAU","DAY","DCE","DCG","DCF"]
         for code in order:
-            val = fields.get(code,"")
+            val = fields_values.get(code,"")
             if val:
                 if code in ("DBB","DBD","DBA"):
                     val = normalize_date(val)
                 val = str(val).replace("\n"," ").strip()
                 data_lines.append(f"{code}{val}")
-
-        # Real data block for length calculation (with real newlines)
         real_data_block = "\n".join(data_lines) + ("\n" if data_lines else "")
-        length = f"{len(real_data_block):04d}"  # 4 digits
-
-        offset = "0041"  # default; adjust if you implement exact offset calculation
-
-        header = f"ANSI {iin_sequence}DL{offset}{length}DL"  # note: no spaces inside numeric sequence
-
-        # Data block for output uses literal '\n' sequences
+        length = f"{len(real_data_block):04d}"
+        offset = "0041"
+        header = f"ANSI {iin_sequence}DL{offset}{length}DL"
         data_block_literal = "\\n".join(data_lines) + "\\n" if data_lines else ""
-
         final = "@\\n" + header + "\\n" + data_block_literal
-        return final
+        st.session_state["last_aamva"] = final
+with col_b:
+    if st.button("Réinitialiser"):
+        for code, _ in FIELDS:
+            st.session_state[f"field_{code}"] = ""
+        st.session_state["last_aamva"] = ""
+        st.experimental_rerun()
 
-    # Actions
-    if st.button("Générer le bloc AAMVA strict (séquences '\\n' littérales)"):
-        fields_values = {p[0]: st.session_state.get(f"field_{p[0]}", "").strip() for p in PREFIX_FIELDS}
-        aamva = build_strict_aamva(fields_values, country, subdivision)
-        st.session_state["last_aamva"] = aamva
-        st.success("Bloc généré — copie ci‑dessous (séquences '\\n' littérales).")
+# Output
+if st.session_state.get("last_aamva"):
+    st.markdown("<div class='output-card'>", unsafe_allow_html=True)
+    st.code(st.session_state["last_aamva"], language=None)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    c1, c2 = st.columns([1,1])
-    with c1:
-        if st.button("Enregistrer (session)"):
-            payload = {p[0]: st.session_state.get(f"field_{p[0]}", "") for p in PREFIX_FIELDS}
-            payload["COUNTRY"] = country
-            payload["SUBDIVISION"] = subdivision
-            payload["TIMESTAMP"] = datetime.datetime.now().isoformat()
-            st.session_state["last_prefix_payload"] = payload
-            st.success("Données enregistrées en session.")
-    with c2:
-        if st.button("Réinitialiser"):
-            for p in PREFIX_FIELDS:
-                st.session_state[f"field_{p[0]}"] = ""
-            st.info("Champs réinitialisés.")
+# Footer note
+st.markdown("<div style='margin-top:14px;color:var(--muted);font-size:13px'>"
+            "Note : les infobulles s'affichent au survol. Sur mobile, utilise le focus sur l'icône pour voir l'aide.</div>",
+            unsafe_allow_html=True)
 
-    # Display result (exactly what was generated)
-    if st.session_state.get("last_aamva"):
-        st.markdown("### Bloc AAMVA (texte brut) — format strict")
-        st.code(st.session_state["last_aamva"], language=None)
-        st.info("Copie le texte ci‑dessous (Ctrl+C / Cmd+C).")
-
-# Footer
-st.markdown("---")
-st.caption("Remarque : ce générateur produit le bloc à partir des valeurs saisies. OFFSET par défaut = 0041; VERSION/DESIGN = 08/0001. Si tu veux que j'implémente le calcul exact de l'OFFSET selon la norme AAMVA, je peux l'ajouter.")
+st.markdown("</div>", unsafe_allow_html=True)  # close app-wrap
