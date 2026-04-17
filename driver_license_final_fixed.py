@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# country_subdivision_side_by_side_with_hint.py
-# Streamlit — En-tête fixe, deux selects côte à côte (mêmes tailles) et texte d'aide affiché
-# directement sous ces deux selects. Formulaire préfixes à droite.
-# Usage : streamlit run country_subdivision_side_by_side_with_hint.py
+# country_subdivision_centered.py
+# Streamlit — en-tête fixe, deux selects côte à côte centrés horizontalement,
+# texte d'aide directement sous les selects, formulaire préfixes à droite.
+# Usage : streamlit run country_subdivision_centered.py
 
 import datetime
 from typing import Dict, List, Tuple
 
 import streamlit as st
 
-st.set_page_config(page_title="Pays → Subdivision", layout="wide")
+st.set_page_config(page_title="Pays → Subdivision (centré)", layout="wide")
 
 # --- Données : US states (50) et Canada provinces/territories (13) ---
 US_STATES: Dict[str, str] = {
@@ -31,7 +31,7 @@ CAN_PROVINCES_TERRITORIES: Dict[str, str] = {
     "Newfoundland and Labrador":"NL","Yukon":"YT","Northwest Territories":"NT","Nunavut":"NU"
 }
 
-# --- Préfixes et descriptions (titre, sous-titre/exemple) ---
+# --- Préfixes et descriptions ---
 PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCG", "Code du pays (ex: CAN pour Canada, US pour United States) [8]"),
     ("DCS", "Nom de famille (ex: NICOLAS) [5, 8]"),
@@ -49,42 +49,46 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCF", "Numéro de référence du document (ex: PEJQ04N96) [5]")
 ]
 
-# --- En-tête (toujours présent) ---
+# --- En-tête ---
 st.title("Formulaire préfixes — Pays / Subdivision")
 st.caption("Usage pédagogique — remplissez les champs texte libre après sélection du pays et de la subdivision")
 
-# --- Layout principal : gauche pour selects + hint, droite pour formulaire ---
-col_left, col_right = st.columns([0.36, 0.64])
+# --- Layout principal : left area for centered selects + hint, right for form ---
+left_col, right_col = st.columns([0.36, 0.64])
 
-with col_left:
-    # Row with two selects side-by-side and equal width
-    select_a, select_b = st.columns([1, 1])
-    with select_a:
-        country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="country_select")
-    # Build options depending on country
-    if country.startswith("United"):
-        subdivision_label = "État"
-        options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
-    else:
-        subdivision_label = "Province / Territoire"
-        options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
-    with select_b:
-        subdivision = st.selectbox(subdivision_label, [""] + options, key="subdivision_select")
+with left_col:
+    # Create three columns so the middle one is centered on the left area
+    spacer_l, center_col, spacer_r = st.columns([1, 2, 1])
 
-    # Hint text displayed directly under the two selects (spans the left column)
-    st.markdown(
-        "<div style='margin-top:8px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81'>"
-        "Sélectionnez un pays et une subdivision pour afficher le formulaire."
-        "</div>",
-        unsafe_allow_html=True
-    )
+    with center_col:
+        # Two selects side-by-side with equal width, centered in the page
+        sel_a, sel_b = st.columns([1, 1])
+        with sel_a:
+            country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="country_centered")
+        # build options depending on country
+        if country.startswith("United"):
+            subdivision_label = "État"
+            options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
+        else:
+            subdivision_label = "Province / Territoire"
+            options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
+        with sel_b:
+            subdivision = st.selectbox(subdivision_label, [""] + options, key="subdivision_centered")
 
-    # Compact selection summary (optional)
-    if subdivision:
-        st.markdown(f"**{country.split('(')[0].strip()}** — {subdivision.split('(')[0].strip()}")
+        # Hint text directly under the two selects, centered with the selects
+        st.markdown(
+            "<div style='margin-top:8px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81;text-align:center;'>"
+            "Sélectionnez un pays et une subdivision pour afficher le formulaire."
+            "</div>",
+            unsafe_allow_html=True
+        )
 
-with col_right:
-    # Formulaire affiché à droite uniquement si subdivision choisie
+        # Optional compact selection summary (centered)
+        if subdivision:
+            st.markdown(f"<div style='text-align:center;margin-top:6px'><strong>{country.split('(')[0].strip()}</strong> — {subdivision.split('(')[0].strip()}</div>", unsafe_allow_html=True)
+
+with right_col:
+    # Form appears on the right only when subdivision is chosen
     if subdivision:
         default_country_code = "US" if country.startswith("United") else "CAN"
 
@@ -92,7 +96,7 @@ with col_right:
         st.subheader("Champs préfixés (texte libre)")
         st.markdown("Remplissez les champs ci‑dessous. Chaque champ est un champ texte libre avec un petit aide‑texte.")
 
-        # Grille 2 colonnes équilibrées pour les champs
+        # Two-column balanced grid for fields
         for i in range(0, len(PREFIX_FIELDS), 2):
             left = PREFIX_FIELDS[i]
             right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
@@ -131,7 +135,7 @@ with col_right:
                 st.session_state["field_DCG"] = default_country_code
                 st.info("Champs réinitialisés.")
 
-        # Aperçu si présent
+        # Preview if present
         if st.session_state.get("last_prefix_payload"):
             st.markdown("---")
             st.subheader("Aperçu des données enregistrées (session)")
