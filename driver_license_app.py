@@ -1,5 +1,6 @@
 # driver_license_app.py
-# Streamlit — Version finale : préremplissage d'exemple pour Canada + DAJ auto selon subdivision
+# Streamlit — Version finale : DAJ reste lié à la province/état sélectionné(e),
+# préremplissage exemple Canada (modifiable) sans écraser les saisies manuelles.
 # Usage: streamlit run driver_license_app.py
 
 import streamlit as st
@@ -79,7 +80,7 @@ CANADA_EXAMPLE = {
     "DBB": "19941208",
     "DAG": "1560 SHERBROOKE ST E",
     "DAI": "MONTREAL",
-    "DAJ": "Quebec",          # sera converti en QC si on veut abbr
+    "DAJ": "Quebec",          # valeur d'exemple (sera convertie en QC si country==Canada)
     "DAK": "H2L4M1",
     "DBD": "20230510",
     "DBA": "20310509",
@@ -126,11 +127,10 @@ with center_col:
     sel_left, sel_right = st.columns([1, 1])
     with sel_left:
         country = st.selectbox("Pays", ["", "Canada", "United States"], key="country_main")
-    # Si le pays change, activer le hint (si pays non vide)
+    # Si le pays change, activer le hint (si pays non vide) et réinitialiser prev_subdivision
     if country != st.session_state.get("prev_country", ""):
         st.session_state["show_hint"] = bool(country)
         st.session_state["prev_country"] = country
-        # reset previous subdivision tracking so DAJ can update for new country
         st.session_state["prev_subdivision"] = ""
 
     # Construire options selon pays
@@ -170,16 +170,15 @@ if subdivision:
 if country == "Canada":
     for code, example_val in CANADA_EXAMPLE.items():
         key = f"field_{code}"
-        # Si DAJ doit être l'abréviation et subdivision déjà choisie, on gère plus bas.
         if st.session_state.get(key, "") == "":
             st.session_state[key] = example_val
 
 # ---------------------------
-# Comportement demandé : mettre à jour automatiquement DAJ selon la subdivision choisie
-# - On met à jour DAJ automatiquement quand l'utilisateur choisit une subdivision différente de prev_subdivision.
-# - On n'écrase pas DAJ si l'utilisateur a saisi manuellement autre chose (détection simple).
-# - Si DAJ était vide ou égal à l'ancienne valeur auto-remplie, on remplace par la nouvelle subdivision.
-# - Pour le Canada, on propose l'abréviation (QC) si disponible.
+# Liaison DAJ <-> subdivision (corrigée)
+# - Quand l'utilisateur choisit une subdivision, DAJ est automatiquement mise à jour
+#   si et seulement si DAJ est vide, égale à l'ancienne valeur auto-remplie, ou égale à la valeur d'exemple.
+# - Si l'utilisateur a modifié DAJ manuellement (valeur différente), on ne l'écrase pas.
+# - Pour le Canada, DAJ prend l'abréviation (QC, ON, etc.) si disponible.
 # ---------------------------
 current_daj = st.session_state.get("field_DAJ", "").strip()
 prev_sub = st.session_state.get("prev_subdivision", "")
@@ -187,18 +186,19 @@ prev_sub = st.session_state.get("prev_subdivision", "")
 if subdivision and subdivision != prev_sub:
     # Déterminer la valeur à mettre dans DAJ selon le pays
     if country == "Canada":
-        # utiliser l'abréviation si disponible
-        daj_value = CA_ABBR.get(subdivision, subdivision)
+        daj_value = CA_ABBR.get(subdivision, subdivision)  # abbr si dispo, sinon nom complet
     else:
-        daj_value = subdivision
+        daj_value = subdivision  # pour US on met le nom de l'état
 
-    # Si DAJ est vide ou correspondait à l'ancienne valeur auto-remplie, on met à jour
-    if current_daj == "" or current_daj == prev_sub or current_daj == CANADA_EXAMPLE.get("DAJ", ""):
+    # Conditions pour écraser DAJ : vide, égal à l'ancienne valeur auto-remplie, ou égal à l'exemple Canada
+    example_daj = CANADA_EXAMPLE.get("DAJ", "")
+    if current_daj == "" or current_daj == prev_sub or current_daj == example_daj:
         st.session_state["field_DAJ"] = daj_value
 
-    # Mettre à jour le prev_subdivision pour la prochaine comparaison
+    # Mettre à jour prev_subdivision
     st.session_state["prev_subdivision"] = subdivision
 elif not subdivision:
+    # si désélection, on réinitialise prev_subdivision pour futures mises à jour
     st.session_state["prev_subdivision"] = ""
 
 # ---------------------------
@@ -213,7 +213,14 @@ if country:
     # Préparer DAJ options (priorité à la subdivision sélectionnée)
     daj_options = []
     if subdivision:
-        daj_options = [subdivision] + [opt for opt in options if opt != subdivision]
+        # pour affichage, on propose d'abord la valeur actuelle (abréviation ou nom), puis les autres
+        if country == "Canada":
+            # proposer abbr + nom pour clarté
+            abbr = CA_ABBR.get(subdivision, "")
+            first = abbr if abbr else subdivision
+        else:
+            first = subdivision
+        daj_options = [first] + [opt for opt in options if opt != subdivision]
     else:
         daj_options = options
 
@@ -230,13 +237,12 @@ if country:
         elif left[0] == "DAJ":
             # afficher selectbox avec la valeur actuelle de session_state si présente
             current_val = st.session_state.get(key_left, "")
-            # construire options pour selectbox (afficher abbr pour Canada si applicable)
             display_options = [""] + daj_options
-            # index selection: find current_val in display_options if present
             try:
                 idx = display_options.index(current_val)
             except ValueError:
                 idx = 0
+            # Use selectbox bound to the same session_state key so changes persist
             cols[0].selectbox(left[0], options=display_options, index=idx, help=left[1], key=key_left)
         elif left[0] == "DBC":
             cols[0].selectbox(left[0], options=["", "1 - Homme", "2 - Femme"], help=left[1], key=key_left)
@@ -335,5 +341,5 @@ if country:
 st.markdown("---")
 st.caption(
     "Note : Les valeurs d'exemple pour le Canada sont insérées automatiquement (modifiable). "
-    "Le générateur produit un bloc texte pédagogique inspiré du format AAMVA. Les en‑têtes sont simplifiés."
+    "DAJ est lié à la subdivision sélectionnée et ne sera pas écrasé si tu as saisi une valeur manuelle."
 )
