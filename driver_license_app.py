@@ -1,17 +1,69 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA strict
+# Streamlit — Générateur AAMVA strict avec styles CSS pour indications (effet survol)
 # - Aucun préremplissage automatique ni boutons d'exemple
 # - DAQ modifiable et utilisé en priorité
 # - DAJ lié automatiquement à la subdivision (abréviations CA/US) sans écraser saisies manuelles
 # - En-tête numérique IIN+VER+DES concaténé sans espaces
 # - Sortie commence par "@\n" et utilise les séquences littérales "\n"
-# - **Affiche une petite indication (aide) à côté de chaque case** comme demandé
+# - Petites indications affichées à droite de chaque case avec effet CSS au survol (curseur, ombre, transition)
 
 import streamlit as st
 import datetime
 from typing import Dict, List, Tuple
 
 st.set_page_config(page_title="Driver License App — AAMVA Strict", layout="wide")
+
+# ---------------------------
+# CSS personnalisé pour les indications (help-bubble)
+# ---------------------------
+st.markdown(
+    """
+    <style>
+    /* Conteneur global pour les petites indications */
+    .help-bubble {
+        display: inline-block;
+        font-size: 12px;
+        color: #0b3d91;
+        background: rgba(11,61,145,0.06);
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid rgba(11,61,145,0.12);
+        transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 220px;
+        vertical-align: middle;
+        cursor: default;
+    }
+
+    /* Effet au survol : curseur pointeur, légère élévation et changement de fond */
+    .help-bubble:hover {
+        transform: translateY(-3px) scale(1.02);
+        box-shadow: 0 6px 18px rgba(11,61,145,0.12);
+        background: rgba(11,61,145,0.12);
+        cursor: pointer;
+    }
+
+    /* Variante compacte pour écrans étroits */
+    @media (max-width: 640px) {
+        .help-bubble {
+            font-size: 11px;
+            max-width: 140px;
+            padding: 5px 6px;
+        }
+    }
+
+    /* Style pour le label des champs (pour cohérence visuelle) */
+    .field-label {
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 4px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ---------------------------
 # IIN mapping (US states + Canadian provinces)
@@ -63,7 +115,7 @@ US_ABBR = {
 US_STATES = sorted(list(IIN_US.keys()))
 CA_PROVINCES = sorted(list(IIN_CA.keys()))
 
-# Champs (DAQ inclus)
+# Champs (DAQ inclus) avec aides textuelles
 PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCG","Code du pays (CAN/US) — ex: CAN ou US"),
     ("DAQ","Numéro de permis (modifiable) — ex: N242094120896"),
@@ -97,7 +149,7 @@ for prefix, _ in PREFIX_FIELDS:
 
 # UI header
 st.markdown("<div style='text-align:center'><h1 style='margin:0;'>Driver License App — AAMVA Strict</h1></div>", unsafe_allow_html=True)
-st.write("Remplis les champs manuellement. Les petites indications sont affichées à droite de chaque case.")
+st.write("Remplis les champs manuellement. Les petites indications ont un effet visuel au survol du curseur.")
 
 # Country / subdivision
 cols = st.columns([1,2,1])
@@ -133,28 +185,26 @@ if subdivision and subdivision != prev_sub:
 elif not subdivision:
     st.session_state["prev_subdivision"] = ""
 
-# Form fields (grid) — display small help text to the right of each input
+# Form fields (grid) — affichage label / input / aide (avec style)
 if country:
     st.markdown("---")
     st.subheader("Champs préfixés (saisis manuellement)")
 
     default_dcg = "CAN" if country=="Canada" else "US" if country=="United States" else ""
 
-    # For each field, render: label (left), input (middle), small help text (right)
+    # Pour chaque champ : label (col 0), input (col 1), aide stylée (col 2)
     for i in range(0, len(PREFIX_FIELDS), 2):
         left = PREFIX_FIELDS[i]
         right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
 
-        # Use three columns per field row: label+input+help for left and right fields
-        row_cols = st.columns([1, 3, 2, 1, 3, 2])  # left label/input/help ; right label/input/help
+        # Six colonnes : label/input/help pour gauche ; label/input/help pour droite
+        row_cols = st.columns([1, 3, 2, 1, 3, 2])
 
         # LEFT field
         label_l = left[0]
         help_l = left[1]
         key_l = f"field_{label_l}"
-        # label (we show as caption to keep compact)
-        row_cols[0].markdown(f"**{label_l}**")
-        # input
+        row_cols[0].markdown(f"<div class='field-label'>{label_l}</div>", unsafe_allow_html=True)
         if label_l == "DCG":
             row_cols[1].text_input(label_l, value=st.session_state.get(key_l, default_dcg), key=key_l)
         elif label_l == "DAJ":
@@ -169,15 +219,16 @@ if country:
             row_cols[1].selectbox(label_l, options=["", "1 - Homme", "2 - Femme"], key=key_l)
         else:
             row_cols[1].text_input(label_l, value=st.session_state.get(key_l,""), key=key_l)
-        # help text
-        row_cols[2].caption(help_l)
+        # help bubble (HTML span with class)
+        safe_help_l = help_l.replace("'", "&#39;").replace('"', "&quot;")
+        row_cols[2].markdown(f"<span class='help-bubble' title='{safe_help_l}'>{safe_help_l}</span>", unsafe_allow_html=True)
 
-        # RIGHT field (if exists)
+        # RIGHT field (si présent)
         if right:
             label_r = right[0]
             help_r = right[1]
             key_r = f"field_{label_r}"
-            row_cols[3].markdown(f"**{label_r}**")
+            row_cols[3].markdown(f"<div class='field-label'>{label_r}</div>", unsafe_allow_html=True)
             if label_r == "DCG":
                 row_cols[4].text_input(label_r, value=st.session_state.get(key_r, default_dcg), key=key_r)
             elif label_r == "DAJ":
@@ -192,7 +243,8 @@ if country:
                 row_cols[4].selectbox(label_r, options=["", "1 - Homme", "2 - Femme"], key=key_r)
             else:
                 row_cols[4].text_input(label_r, value=st.session_state.get(key_r,""), key=key_r)
-            row_cols[5].caption(help_r)
+            safe_help_r = help_r.replace("'", "&#39;").replace('"', "&quot;")
+            row_cols[5].markdown(f"<span class='help-bubble' title='{safe_help_r}'>{safe_help_r}</span>", unsafe_allow_html=True)
 
     st.markdown("---")
 
