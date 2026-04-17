@@ -1,7 +1,10 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA strict (header sans espaces, DAQ modifiable, IIN selon juridiction)
-# Sortie EXACTE attendue, commençant par "@\nANSI{IIN}{VER}{DES}DL{OFFSET}{LENGTH}DL..." sans espaces dans la séquence numérique.
-# Usage: streamlit run driver_license_app.py
+# Streamlit — Générateur AAMVA strict (sortie = valeurs saisies)
+# - Aucun préremplissage automatique (sauf via bouton "Insérer exemple")
+# - DAQ modifiable et utilisé en priorité
+# - DAJ lié à la subdivision (abréviations CA/US) sans écraser saisies manuelles
+# - En-tête numérique IIN+VER+DES concaténé sans espaces
+# - Sortie commence par "@\n" et utilise les séquences littérales "\n"
 
 import streamlit as st
 import datetime
@@ -34,16 +37,13 @@ IIN_CA = {
     "Saskatchewan":"636034","Yukon":"636064"
 }
 
-# ---------------------------
-# Abréviations pour DAJ
-# ---------------------------
+# Abréviations
 CA_ABBR = {
     "Alberta":"AB","British Columbia":"BC","Manitoba":"MB","New Brunswick":"NB",
     "Newfoundland and Labrador":"NL","Northwest Territories":"NT","Nova Scotia":"NS",
     "Nunavut":"NU","Ontario":"ON","Prince Edward Island":"PE","Quebec":"QC",
     "Saskatchewan":"SK","Yukon":"YT"
 }
-
 US_ABBR = {
     "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
     "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
@@ -59,101 +59,61 @@ US_ABBR = {
     "American Samoa":"AS","Northern Mariana Islands":"MP"
 }
 
-# ---------------------------
-# Données pour selects
-# ---------------------------
 US_STATES = sorted(list(IIN_US.keys()))
 CA_PROVINCES = sorted(list(IIN_CA.keys()))
 
-# ---------------------------
-# Champs préfixés (nom, aide) — DAQ inclus et modifiable
-# ---------------------------
+# Champs (DAQ inclus)
 PREFIX_FIELDS: List[Tuple[str, str]] = [
-    ("DCG", "Code du pays (CAN / US)"),
-    ("DAQ", "Numéro de permis (modifiable)"),
-    ("DCS", "Nom de famille"),
-    ("DAC", "Prénom"),
-    ("DBB", "Date de naissance (YYYYMMDD)"),
-    ("DAG", "Adresse ligne 1"),
-    ("DAI", "Ville"),
-    ("DAJ", "Province/État (abréviation ou nom)"),
-    ("DAK", "Code postal / ZIP"),
-    ("DBD", "Date d'émission (YYYYMMDD)"),
-    ("DBA", "Date d'expiration (YYYYMMDD)"),
-    ("DBC", "Sexe (1=Homme,2=Femme)"),
-    ("DAU", "Taille (cm)"),
-    ("DAY", "Couleur des yeux"),
-    ("DCE", "Classe(s)"),
-    ("DCF", "Numéro de référence du document")
+    ("DCG","Code du pays (CAN/US)"),
+    ("DAQ","Numéro de permis (modifiable)"),
+    ("DCS","Nom de famille"),
+    ("DAC","Prénom"),
+    ("DBB","Date de naissance (YYYYMMDD)"),
+    ("DAG","Adresse ligne 1"),
+    ("DAI","Ville"),
+    ("DAJ","Province/État (abréviation ou nom)"),
+    ("DAK","Code postal / ZIP"),
+    ("DBD","Date d'émission (YYYYMMDD)"),
+    ("DBA","Date d'expiration (YYYYMMDD)"),
+    ("DBC","Sexe (1=Homme,2=Femme)"),
+    ("DAU","Taille (cm)"),
+    ("DAY","Couleur des yeux"),
+    ("DCE","Classe(s)"),
+    ("DCF","Numéro de référence du document")
 ]
 
-# ---------------------------
-# Exemples modifiables
-# ---------------------------
+# Exemples (optionnels via bouton)
 CANADA_EXAMPLE = {
-    "DCG": "CAN",
-    "DAQ": "N242094120896",
-    "DCS": "NICOLAS",
-    "DAC": "JEAN",
-    "DBB": "19941208",
-    "DAG": "1560 SHERBROOKE ST E",
-    "DAI": "MONTREAL",
-    "DAJ": "Quebec",
-    "DAK": "H2L4M1",
-    "DBD": "20230510",
-    "DBA": "20310509",
-    "DBC": "1",
-    "DAU": "180",
-    "DAY": "BRUN",
-    "DCE": "5",
-    "DCF": "PEJQ04N96"
+    "DCG":"CAN","DAQ":"N242094120896","DCS":"NICOLAS","DAC":"JEAN","DBB":"19941208",
+    "DAG":"1560 SHERBROOKE ST E","DAI":"MONTREAL","DAJ":"Quebec","DAK":"H2L4M1",
+    "DBD":"20230510","DBA":"20310509","DBC":"1","DAU":"180","DAY":"BRUN","DCE":"5","DCF":"PEJQ04N96"
 }
-
 USA_EXAMPLE = {
-    "DCG": "US",
-    "DAQ": "A123456789012",
-    "DCS": "DOE",
-    "DAC": "JOHN",
-    "DBB": "19800115",
-    "DAG": "123 MAIN ST",
-    "DAI": "ANYTOWN",
-    "DAJ": "California",
-    "DAK": "90001",
-    "DBD": "20220101",
-    "DBA": "20260101",
-    "DBC": "1",
-    "DAU": "175",
-    "DAY": "BRO",
-    "DCE": "D",
-    "DCF": "ABC1234567"
+    "DCG":"US","DAQ":"A123456789012","DCS":"DOE","DAC":"JOHN","DBB":"19800115",
+    "DAG":"123 MAIN ST","DAI":"ANYTOWN","DAJ":"California","DAK":"90001",
+    "DBD":"20220101","DBA":"20260101","DBC":"1","DAU":"175","DAY":"BRO","DCE":"D","DCF":"ABC1234567"
 }
 
-# ---------------------------
-# Session state init
-# ---------------------------
-if "last_aamva" not in st.session_state:
-    st.session_state["last_aamva"] = ""
+# Session init
 if "prev_subdivision" not in st.session_state:
     st.session_state["prev_subdivision"] = ""
+if "last_aamva" not in st.session_state:
+    st.session_state["last_aamva"] = ""
 
-# Ensure all field keys exist
+# Ensure fields exist
 for prefix, _ in PREFIX_FIELDS:
     key = f"field_{prefix}"
     if key not in st.session_state:
         st.session_state[key] = ""
 
-# ---------------------------
 # UI header
-# ---------------------------
 st.markdown("<div style='text-align:center'><h1 style='margin:0;'>Driver License App — AAMVA Strict</h1></div>", unsafe_allow_html=True)
-st.write("Choisis le pays et la subdivision ; les exemples sont insérés automatiquement (modifiable). Le champ DAQ est éditable.")
+st.write("Remplis les champs manuellement. Utilise les boutons 'Insérer exemple' si tu veux préremplir pour tester.")
 
-# ---------------------------
-# Country / Subdivision selects
-# ---------------------------
-cols = st.columns([1, 2, 1])
+# Country / subdivision
+cols = st.columns([1,2,1])
 with cols[1]:
-    c1, c2 = st.columns([1,1])
+    c1, c2, c3 = st.columns([1,1,1])
     with c1:
         country = st.selectbox("Pays", ["", "Canada", "United States"], key="country")
     with c2:
@@ -163,33 +123,22 @@ with cols[1]:
             subdivision = st.selectbox("État", [""] + US_STATES, key="subdivision")
         else:
             subdivision = st.selectbox("Subdivision", [""], key="subdivision")
+    with c3:
+        # boutons d'insertion d'exemple (optionnels)
+        if st.button("Insérer exemple Canada") and country == "Canada":
+            for k,v in CANADA_EXAMPLE.items():
+                st.session_state[f"field_{k}"] = v
+        if st.button("Insérer exemple USA") and country == "United States":
+            for k,v in USA_EXAMPLE.items():
+                st.session_state[f"field_{k}"] = v
 
-# ---------------------------
 # Hint
-# ---------------------------
 if country and not subdivision:
-    st.info("Sélectionne une subdivision pour préremplir DAJ automatiquement (modifiable).")
+    st.info("Choisis une subdivision pour préremplir DAJ automatiquement (si tu veux).")
 
-# ---------------------------
-# Auto-fill examples (only fill empty fields)
-# ---------------------------
-if country == "Canada":
-    for k, v in CANADA_EXAMPLE.items():
-        key = f"field_{k}"
-        if st.session_state.get(key, "") == "":
-            st.session_state[key] = v
-elif country == "United States":
-    for k, v in USA_EXAMPLE.items():
-        key = f"field_{k}"
-        if st.session_state.get(key, "") == "":
-            st.session_state[key] = v
-
-# ---------------------------
-# DAJ auto-update when subdivision chosen (use abbreviations for CA/US)
-# ---------------------------
-current_daj = st.session_state.get("field_DAJ", "").strip()
-prev_sub = st.session_state.get("prev_subdivision", "")
-
+# DAJ auto-update (abréviations) — ne pas écraser saisies manuelles
+current_daj = st.session_state.get("field_DAJ","").strip()
+prev_sub = st.session_state.get("prev_subdivision","")
 if subdivision and subdivision != prev_sub:
     if country == "Canada":
         daj_val = CA_ABBR.get(subdivision, subdivision)
@@ -197,67 +146,56 @@ if subdivision and subdivision != prev_sub:
         daj_val = US_ABBR.get(subdivision, subdivision)
     else:
         daj_val = subdivision
-
-    example_daj_can = CANADA_EXAMPLE.get("DAJ", "")
-    example_daj_us = USA_EXAMPLE.get("DAJ", "")
+    example_daj_can = CANADA_EXAMPLE.get("DAJ","")
+    example_daj_us = USA_EXAMPLE.get("DAJ","")
     if current_daj == "" or current_daj == prev_sub or current_daj == example_daj_can or current_daj == example_daj_us:
         st.session_state["field_DAJ"] = daj_val
-
     st.session_state["prev_subdivision"] = subdivision
 elif not subdivision:
     st.session_state["prev_subdivision"] = ""
 
-# ---------------------------
-# Form fields (grid) — DAQ is editable
-# ---------------------------
+# Form fields (grid) — DAQ editable
 if country:
     st.markdown("---")
-    st.subheader("Champs préfixés (modifiable)")
-
-    default_dcg = "CAN" if country == "Canada" else "US" if country == "United States" else ""
-
+    st.subheader("Champs préfixés (saisis manuellement)")
+    default_dcg = "CAN" if country=="Canada" else "US" if country=="United States" else ""
     for i in range(0, len(PREFIX_FIELDS), 2):
         left = PREFIX_FIELDS[i]
         right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
         cols = st.columns([1,1])
-
         # left
         key_l = f"field_{left[0]}"
         if left[0] == "DCG":
             cols[0].text_input(left[0], value=st.session_state.get(key_l, default_dcg), key=key_l)
         elif left[0] == "DAJ":
-            # show selectbox with current value
-            current = st.session_state.get(key_l, "")
-            options_display = [""] + ([st.session_state.get(key_l)] if st.session_state.get(key_l) else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != st.session_state.get(key_l)]
+            current = st.session_state.get(key_l,"")
+            display_opts = [""] + ([current] if current else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != current]
             try:
-                idx = options_display.index(current)
+                idx = display_opts.index(current)
             except ValueError:
                 idx = 0
-            cols[0].selectbox(left[0], options=options_display, index=idx, key=key_l)
+            cols[0].selectbox(left[0], options=display_opts, index=idx, key=key_l)
         else:
-            cols[0].text_input(left[0], value=st.session_state.get(key_l, ""), key=key_l)
-
+            cols[0].text_input(left[0], value=st.session_state.get(key_l,""), key=key_l)
         # right
         if right:
             key_r = f"field_{right[0]}"
             if right[0] == "DCG":
                 cols[1].text_input(right[0], value=st.session_state.get(key_r, default_dcg), key=key_r)
             elif right[0] == "DAJ":
-                current_r = st.session_state.get(key_r, "")
-                options_display_r = [""] + ([st.session_state.get(key_r)] if st.session_state.get(key_r) else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != st.session_state.get(key_r)]
+                current_r = st.session_state.get(key_r,"")
+                display_opts_r = [""] + ([current_r] if current_r else []) + [opt for opt in (CA_PROVINCES if country=="Canada" else US_STATES) if opt != current_r]
                 try:
-                    idx_r = options_display_r.index(current_r)
+                    idx_r = display_opts_r.index(current_r)
                 except ValueError:
                     idx_r = 0
-                cols[1].selectbox(right[0], options=options_display_r, index=idx_r, key=key_r)
+                cols[1].selectbox(right[0], options=display_opts_r, index=idx_r, key=key_r)
             else:
-                cols[1].text_input(right[0], value=st.session_state.get(key_r, ""), key=key_r)
+                cols[1].text_input(right[0], value=st.session_state.get(key_r,""), key=key_r)
 
     st.markdown("---")
 
-    # ---------------------------
-    # Build AAMVA block EXACT format
-    # ---------------------------
+    # Build strict AAMVA block (uses only values currently in the form)
     def get_iin(country_name: str, subdivision_name: str) -> str:
         if country_name == "United States":
             return IIN_US.get(subdivision_name, "000000")
@@ -266,69 +204,52 @@ if country:
         return "000000"
 
     def normalize_date(v: str) -> str:
-        return v.replace("-", "").strip()
+        return v.replace("-","").strip()
 
-    def build_strict_aamva(fields: Dict[str, str], country_name: str, subdivision_name: str) -> str:
-        """
-        Returns a single string starting with the literal sequence:
-        @\nANSI{IIN}{VER}{DES}DL{OFFSET}{LENGTH}DL... followed by data lines separated by literal '\n'
-        - No spaces inside the numeric sequence IIN+VER+DES (e.g. 636038080001)
-        - OFFSET and LENGTH are zero-padded as in examples
-        - LENGTH is computed on the real data block (with real newlines), then formatted as 4 digits
-        """
+    def build_strict_aamva(fields: Dict[str,str], country_name: str, subdivision_name: str) -> str:
+        # IIN sequence (no spaces) + version + design
         iin = get_iin(country_name, subdivision_name)
-        version = "08"    # default; can be exposed to UI if needed
-        design = "0001"   # default
-        iin_sequence = f"{iin}{version}{design}"  # concatenated without spaces
+        version = "08"
+        design = "0001"
+        iin_sequence = f"{iin}{version}{design}"  # e.g. 636038080001
 
-        # Build data lines in the requested order
+        # Build data lines from current fields (DAQ used in priority)
         data_lines = []
-
-        # DAQ: use field_DAQ if present, else fallback to DCF
-        daq = fields.get("DAQ", "") or fields.get("DCF", "")
+        daq = fields.get("DAQ","") or fields.get("DCF","")
         if daq:
             data_lines.append(f"DAQ{daq}")
 
         order = ["DCS","DAC","DBB","DAG","DAI","DAJ","DAK","DBD","DBA","DBC","DAU","DAY","DCE","DCG","DCF"]
         for code in order:
-            val = fields.get(code, "")
+            val = fields.get(code,"")
             if val:
                 if code in ("DBB","DBD","DBA"):
                     val = normalize_date(val)
-                # remove internal newlines and trim
-                val = str(val).replace("\n", " ").strip()
+                val = str(val).replace("\n"," ").strip()
                 data_lines.append(f"{code}{val}")
 
-        # Real data block with real newlines (for length calculation)
+        # Real data block for length calculation (with real newlines)
         real_data_block = "\n".join(data_lines) + ("\n" if data_lines else "")
-        length = f"{len(real_data_block):04d}"
+        length = f"{len(real_data_block):04d}"  # 4 digits
 
-        # OFFSET: default 0041 (kept as example); you can compute or expose if needed
-        offset = "0041"
+        offset = "0041"  # default; can be computed/adjusted if you want to match exact jurisdiction offset
 
-        # Header: "ANSI " + iin_sequence + "DL" + offset + length + "DL"
-        header = f"ANSI {iin_sequence}DL{offset}{length}DL"
+        header = f"ANSI {iin_sequence}DL{offset}{length}DL"  # note: no spaces inside numeric sequence
 
-        # Data block for output must use literal '\n' sequences between lines and end with '\n'
-        # i.e. "DCSNICOLAS\nDACJEAN\n..."
+        # Data block for output uses literal '\n' sequences
         data_block_literal = "\\n".join(data_lines) + "\\n" if data_lines else ""
 
-        # Final string: start with literal "@\n"
         final = "@\\n" + header + "\\n" + data_block_literal
         return final
 
-    # ---------------------------
     # Actions
-    # ---------------------------
     if st.button("Générer le bloc AAMVA strict (séquences '\\n' littérales)"):
-        fields_values = {}
-        for prefix, _ in PREFIX_FIELDS:
-            fields_values[prefix] = st.session_state.get(f"field_{prefix}", "").strip()
+        # Collect current form values (exactly what user entered)
+        fields_values = {p[0]: st.session_state.get(f"field_{p[0]}", "").strip() for p in PREFIX_FIELDS}
         aamva = build_strict_aamva(fields_values, country, subdivision)
         st.session_state["last_aamva"] = aamva
         st.success("Bloc généré — copie ci‑dessous (séquences '\\n' littérales).")
 
-    # Save / reset
     c1, c2 = st.columns([1,1])
     with c1:
         if st.button("Enregistrer (session)"):
@@ -344,7 +265,7 @@ if country:
                 st.session_state[f"field_{p[0]}"] = ""
             st.info("Champs réinitialisés.")
 
-    # Display result
+    # Display result (exactly what was generated)
     if st.session_state.get("last_aamva"):
         st.markdown("### Bloc AAMVA (texte brut) — format strict")
         st.code(st.session_state["last_aamva"], language=None)
@@ -352,4 +273,4 @@ if country:
 
 # Footer
 st.markdown("---")
-st.caption("Sortie strictement formatée. L'IIN est choisi selon la juridiction; OFFSET par défaut = 0041; VERSION/DESIGN = 08/0001 (modifiable dans le code si nécessaire).")
+st.caption("Remarque : ce générateur produit le bloc à partir des valeurs saisies. OFFSET par défaut = 0041; VERSION/DESIGN = 08/0001. Si tu veux que j'implémente le calcul exact de l'OFFSET selon règles AAMVA, je peux l'ajouter.")
