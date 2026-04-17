@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# country_subdivision_stacked_with_hint.py
+# country_subdivision_stacked_with_hint_no_placeholder.py
 # Streamlit — Pays (select) puis Subdivision (select) empilés, avec le texte d'aide affiché
 # directement sous les deux sélecteurs. Formulaire préfixes à droite.
-# Usage : streamlit run country_subdivision_stacked_with_hint.py
+# Usage : streamlit run country_subdivision_stacked_with_hint_no_placeholder.py
 
 import datetime
 from typing import Dict, List, Tuple
@@ -134,5 +134,4 @@ with col_right:
             st.markdown("---")
             st.subheader("Aperçu des données enregistrées (session)")
             st.json(st.session_state["last_prefix_payload"])
-    else:
-        st.info("Le formulaire apparaîtra ici après sélection d'une subdivision.")
+    # Note: le message informatif affiché précédemment a été supprimé comme demandé.
