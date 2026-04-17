@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-# country_subdivision_form_proportional.py
-# Streamlit — Pays et Subdivision côte à côte avec mise en page proportionnelle pour meilleur UI/UX
-# Usage : streamlit run country_subdivision_form_proportional.py
+# country_subdivision_form_equal_boxes.py
+# Streamlit — En-tête fixe, deux menus déroulants côte à côte de même taille,
+# et formulaire préfixes affiché dans la colonne de droite.
+# Usage : streamlit run country_subdivision_form_equal_boxes.py
 
 import datetime
 from typing import Dict, List, Tuple, Optional
 
 import streamlit as st
 
-st.set_page_config(page_title="Formulaire préfixes — mise en page proportionnelle", layout="wide")
+st.set_page_config(page_title="Formulaire préfixes — boîtes égales", layout="wide")
 
 # --- Données : US states (50) et Canada provinces/territories (13) ---
 US_STATES: Dict[str, str] = {
@@ -48,48 +49,43 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCF", "Numéro de référence du document (ex: PEJQ04N96) [5]")
 ]
 
-# --- UI ---
-st.title("Sélecteur Pays et Subdivision — Formulaire préfixes")
+# --- En-tête (toujours présent) ---
+st.title("Formulaire préfixes — Pays / Subdivision")
+st.caption("Usage pédagogique — remplissez les champs texte libre après sélection du pays et de la subdivision")
 
-# Layout proportionnel : gauche (menus) plus étroit, droite (formulaire) plus large
-left_col, right_col = st.columns([0.36, 0.64])
+# --- Layout principal ---
+# Trois colonnes : les deux premières pour les menus (mêmes largeurs), la troisième pour le formulaire
+col_menu_1, col_menu_2, col_form = st.columns([0.33, 0.33, 0.34])
 
-# --- Menus côte à côte dans la colonne de gauche (compact et aligné) ---
-with left_col:
-    st.markdown("### Sélection")
-    # petits sous-colonnes pour garder les menus côte à côte et proportionnés
-    menu_a, menu_b = st.columns([0.5, 0.5])
-    with menu_a:
-        country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="select_country")
-    # build options depending on country to show in the second small column
+# --- Menus côte à côte, mêmes tailles ---
+with col_menu_1:
+    country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="select_country_equal")
+
+with col_menu_2:
+    # Construire la liste liée en fonction du pays
     if country.startswith("United"):
         options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
-        subtitle = "État"
+        subdivision_label = "État"
     else:
         options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
-        subtitle = "Province / Territoire"
-    with menu_b:
-        subdivision = st.selectbox(subtitle, [""] + options, key="select_subdivision")
+        subdivision_label = "Province / Territoire"
+    subdivision = st.selectbox(subdivision_label, [""] + options, key="select_subdivision_equal")
 
-    # Optionnel : rappel compact de la sélection
-    if subdivision:
-        st.markdown(f"**{country.split('(')[0].strip()}** — {subdivision.split('(')[0].strip()}")
-
-# --- Formulaire dans la colonne de droite (plus d'espace pour les champs) ---
-with right_col:
+# --- Formulaire (colonne de droite) ---
+with col_form:
     if subdivision:
         default_country_code = "US" if country.startswith("United") else "CAN"
 
-        # Card visuel pour le formulaire (meilleure lisibilité)
-        st.markdown("<div style='padding:12px;border-radius:8px;background:#ffffff;box-shadow:0 1px 4px rgba(0,0,0,0.06)'>", unsafe_allow_html=True)
-        st.markdown("### Formulaire préfixes")
-        st.markdown("Remplissez les champs ci‑dessous (texte libre).")
+        # Card visuel pour meilleure lisibilité
+        st.markdown("<div style='padding:12px;border-radius:8px;background:#ffffff;box-shadow:0 1px 6px rgba(0,0,0,0.06)'>", unsafe_allow_html=True)
+        st.subheader("Champs préfixés (texte libre)")
+        st.markdown("Remplissez les champs ci‑dessous. Chaque champ est un champ texte libre avec un petit aide‑texte.")
 
-        # Utiliser une grille de champs : deux colonnes équilibrées
+        # Grille 2 colonnes équilibrées pour les champs
         for i in range(0, len(PREFIX_FIELDS), 2):
             left = PREFIX_FIELDS[i]
             right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
-            cols = st.columns([1,1])
+            cols = st.columns([1, 1])
             # Champ gauche
             key_left = f"field_{left[0]}"
             if left[0] == "DCG":
@@ -107,9 +103,9 @@ with right_col:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Actions alignées et proportionnées
+        # Actions
         st.markdown("")  # spacing
-        action_l, action_r = st.columns([1,1])
+        action_l, action_r = st.columns([1, 1])
         with action_l:
             if st.button("Enregistrer (session)"):
                 payload = {}
@@ -127,18 +123,16 @@ with right_col:
                 st.session_state["field_DCG"] = default_country_code
                 st.info("Champs réinitialisés.")
 
-        # Aperçu (occupant toute la largeur droite, mais compact)
+        # Aperçu si présent
         if st.session_state.get("last_prefix_payload"):
             st.markdown("---")
             st.subheader("Aperçu des données enregistrées (session)")
             st.json(st.session_state["last_prefix_payload"])
     else:
-        # Message discret quand rien n'est sélectionné
         st.info("Sélectionnez un pays et une subdivision pour afficher le formulaire.")
 
-# --- Notes UI/UX (non affichées dans l'app) ---
-# - Les proportions [0.36, 0.64] laissent suffisamment d'espace au formulaire tout en gardant les menus visibles.
-# - Les menus sont eux-mêmes contenus dans deux petites colonnes égales pour rester alignés et compacts.
-# - Le formulaire utilise une grille 2-colonnes pour une lecture rapide et une saisie efficace.
-# - Si tu veux des ajustements (ex : menus plus petits, formulaire encore plus large, ou champs sur 3 colonnes),
-#   dis-moi la proportion exacte souhaitée et j'adapte le layout.
+# --- Ajustements UI/UX supplémentaires (optionnels) ---
+# - Les deux menus sont strictement de la même largeur (colonnes [0.33, 0.33, 0.34]).
+# - L'en-tête reste toujours visible en haut comme demandé.
+# - Si tu veux que les labels des menus soient plus compacts (ex: 'Pays' et 'État'), je peux les raccourcir.
+# - Si tu veux que la colonne formulaire soit plus large, indique la proportion souhaitée (ex: [0.28,0.28,0.44]).
