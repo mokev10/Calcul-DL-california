@@ -50,7 +50,6 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
 
 # --- UI ---
 st.title("Sélecteur Pays et Subdivision — Formulaire préfixes")
-st.markdown("Choisissez le pays et la subdivision. Les deux menus sont affichés côte à côte.")
 
 # Afficher les deux menus côte à côte
 col_country, col_subdivision = st.columns([0.6, 1.4])
