@@ -1,5 +1,5 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA final (version complète)
+# Streamlit — Générateur AAMVA final (version complète, nettoyée)
 # - Aucun préremplissage automatique
 # - DAQ modifiable et utilisé en priorité
 # - DAJ s'auto-remplit selon la subdivision (abréviations CA/US) sans écraser saisies manuelles
@@ -456,4 +456,3 @@ st.caption(
     "L'en-tête ANSI utilise une séquence IIN+version+design concaténée sans espaces (ex: 636038080001DL00410214DL). "
     "Utilise ce texte à des fins de test et d'apprentissage uniquement."
 )
-st.markdown("</div>", unsafe_allow_html=True)
