@@ -1,18 +1,180 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA (texte brut) avec séquences d'échappement "\n" (copiable)
-# - DAJ se met automatiquement selon la province/état sélectionné(e)
-# - Exemple prérempli pour Canada (modifiable)
-# - Sortie formatée sans espaces superflus et avec "\n" littéraux pour les retours à la ligne
+# Streamlit — Générateur AAMVA final (version complète)
+# - Aucun préremplissage automatique
+# - DAQ modifiable et utilisé en priorité
+# - DAJ s'auto-remplit selon la subdivision (abréviations CA/US) sans écraser saisies manuelles
+# - Infobulles (tooltips) STRICTEMENT au hover (desktop) et au focus (accessibilité) — aucune logique click/toggle
+# - En-tête ANSI construit sans espaces dans la séquence IIN+VERSION+DESIGN
+# - Sortie littérale commence par "@\n" puis header puis lignes séparées par la séquence littérale "\n"
 # Usage: streamlit run driver_license_app.py
 
 import streamlit as st
 import datetime
 from typing import Dict, List, Tuple
 
-st.set_page_config(page_title="Driver License App — AAMVA Brut", layout="wide")
+st.set_page_config(page_title="Driver License App — AAMVA Final", layout="wide")
 
 # ---------------------------
-# IIN mapping (US states + Canadian provinces)
+# CSS (tooltips hover-only, design moderne)
+# ---------------------------
+st.markdown(
+    """
+    <style>
+    :root{
+      --bg:#071025;
+      --card:#0b1220;
+      --muted:#9aa7c7;
+      --accent:#4f8cff;
+      --tooltip-bg: rgba(18,24,40,0.98);
+      --tooltip-color:#eaf0ff;
+      --radius:12px;
+      --ease:cubic-bezier(.2,.9,.3,1);
+    }
+    body { background: linear-gradient(180deg,#071025 0%, #071a2b 60%); color: #eaf0ff; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
+    .app-wrap { max-width:1100px; margin:28px auto; padding:22px; border-radius:var(--radius); background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); box-shadow: 0 12px 40px rgba(2,6,23,0.6); border: 1px solid rgba(255,255,255,0.03); }
+    .header { display:flex; gap:14px; align-items:center; margin-bottom:12px; }
+    .logo { width:48px; height:48px; border-radius:10px; background: linear-gradient(135deg,var(--accent),#2bb0ff); display:flex; align-items:center; justify-content:center; font-weight:700; color:white; font-size:18px; box-shadow: 0 8px 24px rgba(79,140,255,0.14); }
+    .title { margin:0; font-size:18px; }
+    .sub { margin:2px 0 0 0; color:var(--muted); font-size:13px; }
+
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-top:18px; }
+    .card { background: var(--card); border-radius:12px; padding:14px; border:1px solid rgba(255,255,255,0.02); }
+
+    .field-row { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    .field-main { flex:1; }
+    label.field-label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:600; }
+
+    input[type="text"], select {
+      width:100%;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.04);
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+      color: #eaf0ff;
+      outline:none;
+      transition: box-shadow .18s var(--ease), transform .12s var(--ease), border-color .12s var(--ease);
+      font-size:14px;
+    }
+    input[type="text"]:focus, select:focus{
+      box-shadow: 0 8px 26px rgba(79,140,255,0.12);
+      border-color: rgba(79,140,255,0.6);
+      transform: translateY(-1px);
+    }
+
+    /* Help bubble (hover-only) */
+    .help-bubble {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:36px;
+      height:36px;
+      border-radius:10px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border:1px solid rgba(255,255,255,0.03);
+      color:var(--muted);
+      font-weight:700;
+      cursor:default;
+      position:relative;
+      transition: transform .12s var(--ease), box-shadow .12s var(--ease), background .12s var(--ease);
+      user-select:none;
+    }
+    .help-bubble:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 12px 36px rgba(2,6,23,0.6); color:#fff; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); cursor:help; }
+
+    .help-bubble .tooltip {
+      position:absolute;
+      right:calc(100% + 12px);
+      top:50%;
+      transform: translateY(-50%) translateX(6px) scale(0.98);
+      background: var(--tooltip-bg);
+      color: var(--tooltip-color);
+      padding:10px 12px;
+      border-radius:10px;
+      font-size:13px;
+      white-space:nowrap;
+      opacity:0;
+      pointer-events:none;
+      box-shadow: 0 10px 30px rgba(2,6,23,0.6);
+      transition: opacity .22s var(--ease), transform .22s var(--ease);
+      z-index:40;
+      border: 1px solid rgba(255,255,255,0.04);
+      transform-origin: right center;
+    }
+    .help-bubble .tooltip::after{
+      content:"";
+      position:absolute;
+      left:100%;
+      top:50%;
+      transform:translateY(-50%);
+      width:10px;height:10px;
+      background:var(--tooltip-bg);
+      border-left:1px solid rgba(255,255,255,0.04);
+      clip-path: polygon(0 50%, 100% 0, 100% 100%);
+    }
+
+    /* Show tooltip on hover (desktop) and on focus (keyboard) only */
+    .help-bubble:hover .tooltip,
+    .help-bubble:focus .tooltip {
+      opacity:1;
+      transform: translateY(-50%) translateX(0) scale(1);
+      pointer-events:auto;
+    }
+
+    @media (max-width:720px){
+      .help-bubble .tooltip{
+        right:auto;
+        left:50%;
+        top:calc(100% + 10px);
+        transform: translateX(-50%) translateY(6px) scale(0.98);
+      }
+      .help-bubble .tooltip::after{
+        left:50%;
+        top:-6px;
+        transform:translateX(-50%) rotate(180deg);
+        clip-path: polygon(50% 0, 0 100%, 100% 100%);
+      }
+    }
+
+    .actions{
+      display:flex;
+      gap:12px;
+      margin-top:18px;
+      align-items:center;
+    }
+    .btn{
+      padding:10px 14px;
+      border-radius:10px;
+      border: none;
+      background: linear-gradient(90deg,var(--accent),#2bb0ff);
+      color:white;
+      font-weight:600;
+      cursor:pointer;
+      box-shadow: 0 8px 24px rgba(79,140,255,0.14);
+      transition: transform .12s var(--ease), box-shadow .12s var(--ease);
+    }
+    .btn.ghost{
+      background:transparent;
+      border:1px solid rgba(255,255,255,0.06);
+      color:var(--muted);
+      box-shadow:none;
+    }
+
+    .output {
+      margin-top:16px;
+      padding:12px;
+      border-radius:10px;
+      background: rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.02);
+      font-family: monospace;
+      white-space: pre-wrap;
+      color:#dfe9ff;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ---------------------------
+# Jurisdiction mappings (IIN + abbreviations)
 # ---------------------------
 IIN_US = {
     "Alabama":"636033","Alaska":"636059","Arizona":"636026","Arkansas":"636021","California":"636014",
@@ -36,9 +198,6 @@ IIN_CA = {
     "Saskatchewan":"636034","Yukon":"636064"
 }
 
-# ---------------------------
-# Abréviations Canada pour DAJ
-# ---------------------------
 CA_ABBR = {
     "Alberta":"AB","British Columbia":"BC","Manitoba":"MB","New Brunswick":"NB",
     "Newfoundland and Labrador":"NL","Northwest Territories":"NT","Nova Scotia":"NS",
@@ -46,138 +205,78 @@ CA_ABBR = {
     "Saskatchewan":"SK","Yukon":"YT"
 }
 
-# ---------------------------
-# Données pour selects
-# ---------------------------
+US_ABBR = {
+    "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
+    "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
+    "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA",
+    "Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD",
+    "Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO",
+    "Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ",
+    "New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH",
+    "Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC",
+    "South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT",
+    "Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY",
+    "District of Columbia":"DC","Puerto Rico":"PR","Guam":"GU","U.S. Virgin Islands":"VI",
+    "American Samoa":"AS","Northern Mariana Islands":"MP"
+}
+
 US_STATES = sorted(list(IIN_US.keys()))
 CA_PROVINCES = sorted(list(IIN_CA.keys()))
 
 # ---------------------------
-# Champs préfixés (nom, aide)
+# Fields definition (no auto-fill)
 # ---------------------------
 PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCG", "Code du pays (ex: CAN pour Canada, US pour United States)"),
+    ("DAQ", "Numéro de permis (ex: N242094120896)"),
     ("DCS", "Nom de famille (ex: NICOLAS)"),
     ("DAC", "Prénom (ex: JEAN)"),
     ("DBB", "Date de naissance (YYYY-MM-DD ou YYYYMMDD)"),
     ("DAG", "Adresse ligne 1 (ex: 1560 SHERBROOKE ST E)"),
     ("DAI", "Ville (ex: MONTREAL)"),
-    ("DAJ", "Province/État (ex: QC ou California)"),
+    ("DAJ", "Province/État (ex: QC ou CA)"),
     ("DAK", "Code postal / ZIP (ex: H2L4M1 ou 90001)"),
     ("DBD", "Date d'émission (YYYY-MM-DD ou YYYYMMDD)"),
     ("DBA", "Date d'expiration (YYYY-MM-DD ou YYYYMMDD)"),
     ("DBC", "Sexe (1 = Homme, 2 = Femme)"),
     ("DAU", "Taille (ex: 180 cm)"),
     ("DAY", "Couleur des yeux (ex: BRUN)"),
+    ("DCE", "Classe(s)"),
     ("DCF", "Numéro de référence du document (ex: PEJQ04N96)")
 ]
 
-# ---------------------------
-# Exemple modifiable pour Canada (préremplissage)
-# ---------------------------
-CANADA_EXAMPLE = {
-    "DCG": "CAN",
-    "DCS": "NICOLAS",
-    "DAC": "JEAN",
-    "DBB": "19941208",
-    "DAG": "1560 SHERBROOKE ST E",
-    "DAI": "MONTREAL",
-    "DAJ": "Quebec",          # valeur d'exemple (sera convertie en QC si country==Canada)
-    "DAK": "H2L4M1",
-    "DBD": "20230510",
-    "DBA": "20310509",
-    "DBC": "1",
-    "DAU": "180",
-    "DAY": "BRUN",
-    "DCF": "PEJQ04N96"
-}
-
-# ---------------------------
-# Session state initialisation
-# ---------------------------
-if "show_hint" not in st.session_state:
-    st.session_state["show_hint"] = False
-if "prev_country" not in st.session_state:
-    st.session_state["prev_country"] = ""
-if "prev_subdivision" not in st.session_state:
-    st.session_state["prev_subdivision"] = ""
-if "last_aamva" not in st.session_state:
-    st.session_state["last_aamva"] = ""
-
-# Ensure all field keys exist in session_state
+# Initialize session state for fields
 for prefix, _ in PREFIX_FIELDS:
     key = f"field_{prefix}"
     if key not in st.session_state:
         st.session_state[key] = ""
 
-# ---------------------------
-# En-tête centré
-# ---------------------------
-st.markdown(
-    "<div style='text-align:center; margin-top:6px;'>"
-    "<h1 style='margin:0;'>Formulaire préfixes — Pays / Subdivision</h1>"
-    "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — exemple automatique pour Canada (modifiable)</p>"
-    "</div>",
-    unsafe_allow_html=True
-)
+if "prev_subdivision" not in st.session_state:
+    st.session_state["prev_subdivision"] = ""
+if "last_aamva" not in st.session_state:
+    st.session_state["last_aamva"] = ""
 
 # ---------------------------
-# Zone centrale : selects centrés côte à côte (mêmes tailles)
+# Header / selectors
 # ---------------------------
+st.markdown("<div class='app-wrap'>", unsafe_allow_html=True)
+st.markdown("<div class='header'><div class='logo'>A</div><div><h2 class='title'>Générateur AAMVA</h2><div class='sub'>Champs vides par défaut — infobulles au survol uniquement</div></div></div>", unsafe_allow_html=True)
+
 outer_l, center_col, outer_r = st.columns([1, 2, 1])
 with center_col:
     sel_left, sel_right = st.columns([1, 1])
     with sel_left:
         country = st.selectbox("Pays", ["", "Canada", "United States"], key="country_main")
-    # Si le pays change, activer le hint (si pays non vide) et réinitialiser prev_subdivision
-    if country != st.session_state.get("prev_country", ""):
-        st.session_state["show_hint"] = bool(country)
-        st.session_state["prev_country"] = country
-        st.session_state["prev_subdivision"] = ""
-
-    # Construire options selon pays
-    if country == "United States":
-        subdivision_label = "État"
-        options = [f"{name}" for name in US_STATES]
-    elif country == "Canada":
-        subdivision_label = "Province / Territoire"
-        options = [f"{name}" for name in CA_PROVINCES]
-    else:
-        subdivision_label = "Subdivision"
-        options = []
-
     with sel_right:
-        subdivision = st.selectbox(subdivision_label, [""] + options, key="subdivision_main")
-
-    # Afficher le hint uniquement si show_hint True ET qu'aucune subdivision n'est encore choisie
-    if st.session_state["show_hint"] and not subdivision:
-        st.markdown(
-            "<div style='margin-top:10px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81;text-align:center;'>"
-            "Sélectionnez un pays et une subdivision pour afficher le formulaire."
-            "</div>",
-            unsafe_allow_html=True
-        )
+        if country == "United States":
+            subdivision = st.selectbox("État", [""] + US_STATES, key="subdivision_main")
+        elif country == "Canada":
+            subdivision = st.selectbox("Province / Territoire", [""] + CA_PROVINCES, key="subdivision_main")
+        else:
+            subdivision = st.selectbox("Subdivision", [""], key="subdivision_main")
 
 # ---------------------------
-# Masquer le hint dès que la subdivision est choisie
-# ---------------------------
-if subdivision:
-    st.session_state["show_hint"] = False
-
-# ---------------------------
-# Préremplissage automatique d'exemple pour Canada
-# - Ne remplit que les champs vides pour ne pas écraser les saisies de l'utilisateur.
-# ---------------------------
-if country == "Canada":
-    for code, example_val in CANADA_EXAMPLE.items():
-        key = f"field_{code}"
-        if st.session_state.get(key, "") == "":
-            st.session_state[key] = example_val
-
-# ---------------------------
-# Liaison DAJ <-> subdivision (DAJ mis automatiquement selon la sélection)
-# - DAJ prend l'abréviation pour le Canada (QC, ON, ...), sinon le nom de l'état pour US.
-# - On n'écrase pas DAJ si l'utilisateur a saisi manuellement une valeur différente.
+# DAJ auto-update (abbr) without overwriting manual edits
 # ---------------------------
 current_daj = st.session_state.get("field_DAJ", "").strip()
 prev_sub = st.session_state.get("prev_subdivision", "")
@@ -185,17 +284,21 @@ prev_sub = st.session_state.get("prev_subdivision", "")
 if subdivision and subdivision != prev_sub:
     if country == "Canada":
         daj_value = CA_ABBR.get(subdivision, subdivision)
+    elif country == "United States":
+        daj_value = US_ABBR.get(subdivision, subdivision)
     else:
         daj_value = subdivision
-    example_daj = CANADA_EXAMPLE.get("DAJ", "")
-    if current_daj == "" or current_daj == prev_sub or current_daj == example_daj:
+
+    # Only set DAJ if empty or equal to previous auto value
+    if current_daj == "" or current_daj == prev_sub:
         st.session_state["field_DAJ"] = daj_value
+
     st.session_state["prev_subdivision"] = subdivision
 elif not subdivision:
     st.session_state["prev_subdivision"] = ""
 
 # ---------------------------
-# Formulaire complet (affiché si pays choisi)
+# Form (displayed if country chosen)
 # ---------------------------
 if country:
     st.markdown("---")
@@ -203,7 +306,7 @@ if country:
 
     default_dcg = "US" if country == "United States" else "CAN" if country == "Canada" else ""
 
-    # Préparer DAJ options (priorité à la subdivision sélectionnée)
+    # Prepare DAJ options (prioritize selected subdivision)
     daj_options = []
     if subdivision:
         if country == "Canada":
@@ -211,17 +314,17 @@ if country:
             first = abbr if abbr else subdivision
         else:
             first = subdivision
-        daj_options = [first] + [opt for opt in options if opt != subdivision]
+        daj_options = [first] + [opt for opt in (US_STATES if country == "United States" else CA_PROVINCES) if opt != subdivision]
     else:
-        daj_options = options
+        daj_options = (US_STATES if country == "United States" else CA_PROVINCES) if country else []
 
-    # Afficher champs en grille 2 colonnes
+    # Display fields in two-column grid
     for i in range(0, len(PREFIX_FIELDS), 2):
         left = PREFIX_FIELDS[i]
         right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
         cols = st.columns([1, 1])
 
-        # Champ gauche
+        # Left field
         key_left = f"field_{left[0]}"
         if left[0] == "DCG":
             cols[0].text_input(left[0], value=st.session_state.get(key_left, default_dcg), help=left[1], key=key_left)
@@ -238,7 +341,7 @@ if country:
         else:
             cols[0].text_input(left[0], value=st.session_state.get(key_left, ""), help=left[1], placeholder=left[1], key=key_left)
 
-        # Champ droit
+        # Right field
         if right:
             key_right = f"field_{right[0]}"
             if right[0] == "DCG":
@@ -259,7 +362,7 @@ if country:
     st.markdown("---")
 
     # ---------------------------
-    # Fonctions utilitaires pour la génération AAMVA (format avec "\n" littéraux)
+    # Utility functions for AAMVA generation
     # ---------------------------
     def get_iin_for_selection(country_name: str, subdivision_name: str) -> str:
         if country_name == "United States":
@@ -275,52 +378,49 @@ if country:
         """
         Retourne une chaîne où chaque saut de ligne est représenté par la séquence littérale '\n'.
         La chaîne commence par "@\n" (séquence littérale) puis l'en-tête ANSI et les lignes de données.
-        Aucun espace superflu n'est ajouté dans les lignes de données.
+        L'en-tête numérique IIN+version+design est concaténé sans espaces, par ex: "636038080001"
         """
         iin = get_iin_for_selection(country_name, subdivision_name)
+        version = "08"
+        design = "0001"
+        iin_sequence = f"{iin}{version}{design}"  # ex: "636038080001"
+
         data_lines = []
 
-        # Si DCF (numéro de référence) présent, l'utiliser comme DAQ (numéro de permis)
-        if fields.get("DCF"):
-            data_lines.append(f"DAQ{fields.get('DCF')}")
+        # DAQ priority: use DAQ field if present, else DCF
+        daq_val = fields.get("DAQ") or fields.get("DCF") or ""
+        if daq_val:
+            data_lines.append(f"DAQ{daq_val}")
 
-        # Ordre des champs pour sortie
         order = ["DCS","DAC","DBB","DAG","DAI","DAJ","DAK","DBD","DBA","DBC","DAU","DAY","DCE","DCG","DCF"]
         for code in order:
             val = fields.get(code)
             if val:
                 if code in ("DBB","DBD","DBA"):
                     val = normalize_date(val)
-                # Supprimer retours à la ligne internes et trim
                 val = str(val).replace("\n", " ").strip()
                 data_lines.append(f"{code}{val}")
 
-        # Construire data_block avec séquences littérales '\n' entre lignes et terminer par '\n'
-        # Exemple: "DCSNICOLAS\nDACJEAN\n..."
-        data_block_literal = "\\n".join(data_lines) + "\\n" if data_lines else ""
-
-        # Calcul simple d'offset/length (valeurs plausibles pour l'exemple)
-        offset = "0041"
-        # length = nombre de caractères du bloc de données réel (sans les séquences d'échappement)
-        # Pour cohérence avec l'exemple, on calcule la longueur sur la représentation "réelle" (avec retours réels)
-        real_data_block = "\n".join(data_lines) + "\n" if data_lines else ""
+        # Real data block for length calculation (with real newlines)
+        real_data_block = "\n".join(data_lines) + ("\n" if data_lines else "")
         length = f"{len(real_data_block):04d}"
 
-        # Header : garder un espace entre "ANSI" et l'IIN comme dans l'exemple
-        header = f"ANSI {iin}08 00 01 DL{offset}{length}DL"
+        offset = "0041"  # default offset; adjust if you implement exact calculation
 
-        # Construire la sortie finale avec séquences littérales '\n'
-        # Commencer par "@\n" littéral, puis header, puis '\n' littéral, puis data_block_literal
+        # Header: "ANSI " + iin_sequence + "DL" + offset + length + "DL" (no spaces inside numeric sequence)
+        header = f"ANSI {iin_sequence}DL{offset}{length}DL"
+
+        # Data block for output uses literal '\n' sequences
+        data_block_literal = "\\n".join(data_lines) + "\\n" if data_lines else ""
+
         final = "@\\n" + header + "\\n" + data_block_literal
         return final
 
     # ---------------------------
-    # Actions : Générer / Enregistrer / Réinitialiser
+    # Actions
     # ---------------------------
     if st.button("Générer"):
-        fields_values = {}
-        for prefix, _ in PREFIX_FIELDS:
-            fields_values[prefix] = st.session_state.get(f"field_{prefix}", "").strip()
+        fields_values = {prefix: st.session_state.get(f"field_{prefix}", "").strip() for prefix, _ in PREFIX_FIELDS}
         aamva_text = build_aamva_block_with_escapes(fields_values, country, subdivision)
         st.session_state["last_aamva"] = aamva_text
         st.success("Bloc généré — copie ci‑dessous (les séquences '\\n' représentent des retours à la ligne).")
@@ -343,20 +443,17 @@ if country:
             st.session_state["field_DCG"] = default_dcg
             st.info("Champs réinitialisés.")
 
-    # Afficher le bloc copiable si présent (sans interpréter les '\n')
+    # Display generated block if present
     if st.session_state.get("last_aamva"):
         st.markdown("### Bloc AAMVA (texte brut) — copiable (séquences '\\n' littérales)")
         st.code(st.session_state["last_aamva"], language=None)
         st.info("Sélectionne le texte ci‑dessous et copie‑le (Ctrl+C / Cmd+C).")
 
-# ---------------------------
 # Footer / notes
-# ---------------------------
 st.markdown("---")
 st.caption(
     "Note : La sortie contient des séquences littérales '\\n' pour représenter les retours à la ligne. "
+    "L'en-tête ANSI utilise une séquence IIN+version+design concaténée sans espaces (ex: 636038080001DL00410214DL). "
     "Utilise ce texte à des fins de test et d'apprentissage uniquement."
 )
-
-
-
+st.markdown("</div>", unsafe_allow_html=True)
