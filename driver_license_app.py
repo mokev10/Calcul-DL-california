@@ -1,8 +1,6 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA (texte brut) avec séquences d'échappement "\n" (copiable)
-# - DAJ se met automatiquement selon la province/état sélectionné(e)
-# - Exemple prérempli pour Canada (modifiable)
-# - Sortie formatée sans espaces superflus et avec "\n" littéraux pour les retours à la ligne
+# Streamlit — Générateur AAMVA (texte brut) avec DAJ lié à la subdivision
+# Correction : en-tête ANSI sans espaces dans la séquence IIN+version+design (ex: "636033080001")
 # Usage: streamlit run driver_license_app.py
 
 import streamlit as st
@@ -260,6 +258,7 @@ if country:
 
     # ---------------------------
     # Fonctions utilitaires pour la génération AAMVA (format avec "\n" littéraux)
+    # Correction : en-tête construit sans espaces dans la séquence IIN+version+design.
     # ---------------------------
     def get_iin_for_selection(country_name: str, subdivision_name: str) -> str:
         if country_name == "United States":
@@ -275,7 +274,8 @@ if country:
         """
         Retourne une chaîne où chaque saut de ligne est représenté par la séquence littérale '\n'.
         La chaîne commence par "@\n" (séquence littérale) puis l'en-tête ANSI et les lignes de données.
-        Aucun espace superflu n'est ajouté dans les lignes de données.
+        IMPORTANT: la séquence numérique IIN+version+design est concaténée sans espaces,
+        par exemple: "636033080001" (IIN=636033, version=08, design=0001).
         """
         iin = get_iin_for_selection(country_name, subdivision_name)
         data_lines = []
@@ -296,28 +296,29 @@ if country:
                 data_lines.append(f"{code}{val}")
 
         # Construire data_block avec séquences littérales '\n' entre lignes et terminer par '\n'
-        # Exemple: "DCSNICOLAS\nDACJEAN\n..."
         data_block_literal = "\\n".join(data_lines) + "\\n" if data_lines else ""
 
         # Calcul simple d'offset/length (valeurs plausibles pour l'exemple)
         offset = "0041"
-        # length = nombre de caractères du bloc de données réel (sans les séquences d'échappement)
-        # Pour cohérence avec l'exemple, on calcule la longueur sur la représentation "réelle" (avec retours réels)
+        # length = nombre de caractères du bloc de données réel (avec retours réels)
         real_data_block = "\n".join(data_lines) + "\n" if data_lines else ""
         length = f"{len(real_data_block):04d}"
 
-        # Header : garder un espace entre "ANSI" et l'IIN comme dans l'exemple
-        header = f"ANSI {iin}08 00 01 DL{offset}{length}DL"
+        # En-tête : **un espace** après "ANSI", puis la séquence IIN+version+design **sans espaces**
+        # version = "08", design = "0001" (exemple), concaténés directement après l'IIN
+        version = "08"
+        design = "0001"
+        iin_sequence = f"{iin}{version}{design}"  # ex: "636033080001" (aucun espace)
+        header = f"ANSI {iin_sequence}DL{offset}{length}DL"
 
         # Construire la sortie finale avec séquences littérales '\n'
-        # Commencer par "@\n" littéral, puis header, puis '\n' littéral, puis data_block_literal
         final = "@\\n" + header + "\\n" + data_block_literal
         return final
 
     # ---------------------------
     # Actions : Générer / Enregistrer / Réinitialiser
     # ---------------------------
-    if st.button("Générer"):
+    if st.button("Générer le bloc AAMVA copiable (avec '\\n' littéraux)"):
         fields_values = {}
         for prefix, _ in PREFIX_FIELDS:
             fields_values[prefix] = st.session_state.get(f"field_{prefix}", "").strip()
@@ -355,8 +356,6 @@ if country:
 st.markdown("---")
 st.caption(
     "Note : La sortie contient des séquences littérales '\\n' pour représenter les retours à la ligne. "
+    "L'en-tête ANSI utilise une séquence IIN+version+design concaténée sans espaces (ex: 636033080001). "
     "Utilise ce texte à des fins de test et d'apprentissage uniquement."
 )
-
-
-
