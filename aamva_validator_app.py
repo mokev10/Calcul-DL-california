@@ -1,371 +1,359 @@
-#!/usr/bin/env python3
-# aamva_validator_app.py
-# Streamlit app — Validateur et générateur d'exemples AAMVA / PDF417
-# Ajout : détection automatique des erreurs courantes et génération d'une version corrigée.
-#
-# Usage: streamlit run aamva_validator_app.py
+# driver_license_app.py
+# Streamlit — Générateur AAMVA (texte brut) avec séquences d'échappement "\n" (copiable)
+# - DAJ se met automatiquement selon la province/état sélectionné(e)
+# - Exemple prérempli pour Canada (modifiable)
+# - Sortie formatée sans espaces superflus et avec "\n" littéraux pour les retours à la ligne
+# Usage: streamlit run driver_license_app.py
 
 import streamlit as st
-import re
 import datetime
-from typing import List, Tuple, Dict, Optional, Any
+from typing import Dict, List, Tuple
 
-st.set_page_config(page_title="AAMVA Validator & Example", layout="centered")
+st.set_page_config(page_title="Driver License App — AAMVA Brut", layout="wide")
 
-# -------------------------
-# Utilitaires de validation
-GS = "\x1E"  # Group Separator (AAMVA uses 0x1E between data elements)
-REQUIRED_TAGS = [
-    "DAQ", "DCS", "DAC", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF"
+# ---------------------------
+# IIN mapping (US states + Canadian provinces)
+# ---------------------------
+IIN_US = {
+    "Alabama":"636033","Alaska":"636059","Arizona":"636026","Arkansas":"636021","California":"636014",
+    "Colorado":"636020","Connecticut":"636006","Delaware":"636011","Florida":"636010","Georgia":"636055",
+    "Hawaii":"636047","Idaho":"636050","Illinois":"636035","Indiana":"636037","Iowa":"636018",
+    "Kansas":"636022","Kentucky":"636046","Louisiana":"636007","Maine":"636041","Maryland":"636003",
+    "Massachusetts":"636002","Michigan":"636032","Minnesota":"636038","Mississippi":"636051","Missouri":"636030",
+    "Montana":"636008","Nebraska":"636054","Nevada":"636049","New Hampshire":"636039","New Jersey":"636036",
+    "New Mexico":"636009","New York":"636001","North Carolina":"636004","North Dakota":"636034","Ohio":"636023",
+    "Oklahoma":"636058","Oregon":"636029","Pennsylvania":"636025","Rhode Island":"636052","South Carolina":"636005",
+    "South Dakota":"636042","Tennessee":"636053","Texas":"636015","Utah":"636040","Vermont":"636024",
+    "Virginia":"636000","Washington":"636045","West Virginia":"636061","Wisconsin":"636031","Wyoming":"636060",
+    "District of Columbia":"636043","Puerto Rico":"636017","Guam":"636019","U.S. Virgin Islands":"636016",
+    "American Samoa":"636044","Northern Mariana Islands":"636056"
+}
+
+IIN_CA = {
+    "Alberta":"636031","British Columbia":"636028","Manitoba":"636030","New Brunswick":"636027",
+    "Newfoundland and Labrador":"636029","Northwest Territories":"636062","Nova Scotia":"636025",
+    "Nunavut":"636063","Ontario":"636032","Prince Edward Island":"636026","Quebec":"636033",
+    "Saskatchewan":"636034","Yukon":"636064"
+}
+
+# ---------------------------
+# Abréviations Canada pour DAJ
+# ---------------------------
+CA_ABBR = {
+    "Alberta":"AB","British Columbia":"BC","Manitoba":"MB","New Brunswick":"NB",
+    "Newfoundland and Labrador":"NL","Northwest Territories":"NT","Nova Scotia":"NS",
+    "Nunavut":"NU","Ontario":"ON","Prince Edward Island":"PE","Quebec":"QC",
+    "Saskatchewan":"SK","Yukon":"YT"
+}
+
+# ---------------------------
+# Données pour selects
+# ---------------------------
+US_STATES = sorted(list(IIN_US.keys()))
+CA_PROVINCES = sorted(list(IIN_CA.keys()))
+
+# ---------------------------
+# Champs préfixés (nom, aide)
+# ---------------------------
+PREFIX_FIELDS: List[Tuple[str, str]] = [
+    ("DCG", "Code du pays (ex: CAN pour Canada, US pour United States)"),
+    ("DCS", "Nom de famille (ex: NICOLAS)"),
+    ("DAC", "Prénom (ex: JEAN)"),
+    ("DBB", "Date de naissance (YYYY-MM-DD ou YYYYMMDD)"),
+    ("DAG", "Adresse ligne 1 (ex: 1560 SHERBROOKE ST E)"),
+    ("DAI", "Ville (ex: MONTREAL)"),
+    ("DAJ", "Province/État (ex: QC ou California)"),
+    ("DAK", "Code postal / ZIP (ex: H2L4M1 ou 90001)"),
+    ("DBD", "Date d'émission (YYYY-MM-DD ou YYYYMMDD)"),
+    ("DBA", "Date d'expiration (YYYY-MM-DD ou YYYYMMDD)"),
+    ("DBC", "Sexe (1 = Homme, 2 = Femme)"),
+    ("DAU", "Taille (ex: 180 cm)"),
+    ("DAY", "Couleur des yeux (ex: BRUN)"),
+    ("DCF", "Numéro de référence du document (ex: PEJQ04N96)")
 ]
-DATE_TAGS = ["DBB", "DBA", "DBD"]
 
+# ---------------------------
+# Exemple modifiable pour Canada (préremplissage)
+# ---------------------------
+CANADA_EXAMPLE = {
+    "DCG": "CAN",
+    "DCS": "NICOLAS",
+    "DAC": "JEAN",
+    "DBB": "19941208",
+    "DAG": "1560 SHERBROOKE ST E",
+    "DAI": "MONTREAL",
+    "DAJ": "Quebec",          # valeur d'exemple (sera convertie en QC si country==Canada)
+    "DAK": "H2L4M1",
+    "DBD": "20230510",
+    "DBA": "20310509",
+    "DBC": "1",
+    "DAU": "180",
+    "DAY": "BRUN",
+    "DCF": "PEJQ04N96"
+}
 
-def has_valid_header(payload: str) -> Tuple[bool, str]:
-    if not payload:
-        return False, "Payload vide."
-    head = payload[:200].upper()
-    if "ANSI" not in head or "DL" not in head:
-        return False, "Header manquant ou incorrect (attendu 'ANSI ... DL')."
-    if not re.search(r"ANSI\s+63\d{2}", head):
-        return False, "Header AAMVA non conforme (code version absent ou invalide)."
-    return True, "Header OK."
+# ---------------------------
+# Session state initialisation
+# ---------------------------
+if "show_hint" not in st.session_state:
+    st.session_state["show_hint"] = False
+if "prev_country" not in st.session_state:
+    st.session_state["prev_country"] = ""
+if "prev_subdivision" not in st.session_state:
+    st.session_state["prev_subdivision"] = ""
+if "last_aamva" not in st.session_state:
+    st.session_state["last_aamva"] = ""
 
+# Ensure all field keys exist in session_state
+for prefix, _ in PREFIX_FIELDS:
+    key = f"field_{prefix}"
+    if key not in st.session_state:
+        st.session_state[key] = ""
 
-def uses_group_separator(payload: str) -> Tuple[bool, str]:
-    if GS in payload:
-        return True, "Séparateur de groupe (0x1E) présent."
-    if "\\u001e" in payload or "\\x1E" in payload:
-        return False, "Séparateur trouvé sous forme d'échappement (\\u001e)."
-    return False, "Séparateur de groupe (0x1E) absent."
-
-
-def ends_with_cr(payload: str) -> Tuple[bool, str]:
-    if payload.endswith("\r") or payload.endswith("\r\n") or payload.endswith("\n\r"):
-        return True, "Fin de record OK (CR présent)."
-    return False, "Fin de record manquante (ajouter un CR '\\r' à la fin)."
-
-
-def find_tags(payload: str) -> List[str]:
-    tags = re.findall(r"([A-Z]{3})(?=[^\r\n\x1E]*)", payload)
-    seen = set()
-    out = []
-    for t in tags:
-        if t not in seen:
-            seen.add(t)
-            out.append(t)
-    return out
-
-
-def check_required_tags(payload: str) -> Tuple[bool, List[str]]:
-    missing = []
-    for tag in REQUIRED_TAGS:
-        if tag not in payload:
-            missing.append(tag)
-    return (len(missing) == 0, missing)
-
-
-def check_date_format(value: str) -> bool:
-    if not re.fullmatch(r"\d{8}", value):
-        return False
-    try:
-        mm = int(value[0:2]); dd = int(value[2:4]); yyyy = int(value[4:8])
-        datetime.date(yyyy, mm, dd)
-        return True
-    except Exception:
-        return False
-
-
-def extract_tag_value(payload: str, tag: str) -> Optional[str]:
-    m = re.search(re.escape(tag) + r"([^\x1E\r\n]*)", payload)
-    if m:
-        return m.group(1).strip()
-    return None
-
-
-def check_dates_in_payload(payload: str) -> List[str]:
-    errors = []
-    for tag in DATE_TAGS:
-        val = extract_tag_value(payload, tag)
-        if val is None:
-            errors.append(f"{tag} absent.")
-            continue
-        if not check_date_format(val):
-            errors.append(f"{tag} a un format invalide (attendu MMDDYYYY) : '{val}'")
-    return errors
-
-
-def check_ascii(payload: str) -> Tuple[bool, str]:
-    try:
-        payload.encode("ascii")
-        return True, "Encodage ASCII OK."
-    except UnicodeEncodeError as e:
-        return False, f"Caractères non-ASCII détectés (accents ou symboles). Détail: {str(e)}"
-
-
-def minimal_length_check(payload: str) -> Tuple[bool, str]:
-    if len(payload) < 40:
-        return False, "Payload très court — probablement incomplet."
-    return True, "Longueur minimale OK."
-
-
-def svg_basic_checks(svg_text: str) -> List[str]:
-    issues = []
-    if "<svg" not in svg_text.lower():
-        issues.append("Le texte collé ne semble pas être un SVG.")
-        return issues
-    if not re.search(r"viewBox|viewbox|width=\"\d+\"|height=\"\d+\"", svg_text, flags=re.IGNORECASE):
-        issues.append("SVG sans width/height ni viewBox explicite — vérifier dimensions.")
-    if not re.search(r"<rect\b", svg_text, flags=re.IGNORECASE):
-        issues.append("SVG sans <rect> détecté — le rasteriseur simple peut échouer si le SVG est complexe.")
-    issues.append("Recommandation : utiliser un scale entier (2–4) et laisser une marge blanche (quiet zone) autour du PDF417.")
-    return issues
-
-
-def validate_aamva_payload(payload: str) -> Dict[str, List[str]]:
-    errors = []; warnings = []; infos = []
-    if not payload or not payload.strip():
-        errors.append("Payload vide."); return {"errors": errors, "warnings": warnings, "infos": infos}
-
-    ok, msg = has_valid_header(payload)
-    (infos if ok else errors).append(msg)
-
-    ok_gs, msg_gs = uses_group_separator(payload)
-    (infos if ok_gs else errors).append(msg_gs)
-
-    ok_end, msg_end = ends_with_cr(payload)
-    (infos if ok_end else warnings).append(msg_end)
-
-    ok_len, msg_len = minimal_length_check(payload)
-    (infos if ok_len else warnings).append(msg_len)
-
-    ok_tags, missing = check_required_tags(payload)
-    if not ok_tags:
-        errors.append("Champs obligatoires manquants: " + ", ".join(missing))
-    else:
-        infos.append("Tous les champs obligatoires sont présents (au moins en apparence).")
-
-    date_errors = check_dates_in_payload(payload)
-    if date_errors:
-        errors.extend(date_errors)
-    else:
-        infos.append("Formats de date OK (MMDDYYYY).")
-
-    ok_ascii, ascii_msg = check_ascii(payload)
-    (infos if ok_ascii else warnings).append(ascii_msg)
-
-    tags = find_tags(payload)
-    infos.append("Tags détectés (extrait) : " + ", ".join(tags[:20]) + ("..." if len(tags) > 20 else ""))
-
-    if "<svg" in payload.lower():
-        svg_issues = svg_basic_checks(payload)
-        for s in svg_issues:
-            warnings.append("SVG: " + s)
-
-    if "\\u001e" in payload or "\\x1E" in payload:
-        errors.append("Séparateur trouvé sous forme d'échappement (\\u001e ou \\x1E). Remplacer par le caractère 0x1E réel.")
-    return {"errors": errors, "warnings": warnings, "infos": infos}
-
-
-# -------------------------
-# Auto-correction utilities
-def replace_escaped_separators(payload: str) -> str:
-    # Remplace les séquences littérales par le caractère GS réel
-    payload = payload.replace("\\u001e", GS).replace("\\x1E", GS)
-    return payload
-
-
-def ensure_trailing_cr(payload: str) -> str:
-    # Ajoute CR final si absent
-    if not (payload.endswith("\r") or payload.endswith("\r\n") or payload.endswith("\n\r")):
-        return payload + "\r"
-    return payload
-
-
-def normalize_whitespace_around_tags(payload: str) -> str:
-    # Supprime espaces superflus entre tag et valeur (ex: "DAQ H407" -> "DAQH407")
-    # Mais attention : on ne veut pas supprimer les espaces dans les valeurs d'adresse.
-    # On ne touche que aux cas où un tag est suivi d'un espace puis d'un mot sans autre séparateur.
-    def repl(m):
-        tag = m.group(1)
-        val = m.group(2)
-        return f"{tag}{val}"
-    return re.sub(r"([A-Z]{3})\s+([^\x1E\r\n]+)", repl, payload)
-
-
-def auto_correct_payload(payload: str) -> Tuple[str, List[str]]:
-    """
-    Applique des corrections sûres et retourne (corrected_payload, list_of_applied_corrections)
-    Corrections appliquées :
-      - remplacement des séquences échappées \u001e / \x1E par le caractère GS (0x1E)
-      - ajout d'un CR final si manquant
-      - normalisation légère des espaces après tags (prudente)
-    """
-    corrections = []
-    p = payload
-
-    # 1) Remplacer séquences échappées
-    if "\\u001e" in p or "\\x1E" in p:
-        p = replace_escaped_separators(p)
-        corrections.append("Remplacement des séquences échappées '\\u001e' / '\\x1E' par le caractère 0x1E.")
-
-    # 2) Normaliser espaces après tags (prudence)
-    # On n'applique cette correction que si on détecte des patterns tag + espace + token (et pas d'adresse multi-mots juste après)
-    # Exemple sûr : "DAQ H40759" -> "DAQH40759"
-    if re.search(r"[A-Z]{3}\s+[A-Z0-9\-]{1,20}(\x1E|$)", p):
-        p2 = normalize_whitespace_around_tags(p)
-        if p2 != p:
-            p = p2
-            corrections.append("Suppression d'espaces superflus entre tags et valeurs (ex: 'DAQ H407' -> 'DAQH407').")
-
-    # 3) Ajouter CR final si absent
-    if not (p.endswith("\r") or p.endswith("\r\n") or p.endswith("\n\r")):
-        p = ensure_trailing_cr(p)
-        corrections.append("Ajout d'un CR final '\\r'.")
-
-    return p, corrections
-
-
-# -------------------------
-# Générateur d'exemple AAMVA (valeurs fictives)
-def build_aamva_tags(fields: Dict[str, str]) -> str:
-    header = "@\r\nANSI 636014080102DL"
-    parts = [header]
-    order = ["DAQ", "DCS", "DAC", "DAD", "DBB", "DBA", "DBD", "DAG", "DAI", "DAJ", "DAK", "DCF", "DAU", "DAY", "DAZ"]
-    for tag in order:
-        val = fields.get(tag)
-        if val is not None:
-            parts.append(f"{tag}{val}")
-    payload = GS.join(parts) + "\r"
-    return payload
-
-
-def example_payload() -> str:
-    fields = {
-        "DAQ": "H40759", "DCS": "HARMS", "DAC": "ROSA", "DAD": "MARIE",
-        "DBB": "01011990", "DBA": "01012031", "DBD": "04102026",
-        "DAG": "2570 24TH STREET", "DAI": "OAKLAND", "DAJ": "CA", "DAK": "94601",
-        "DCF": "1234567890", "DAU": "510", "DAY": "BRN", "DAZ": "BRN",
-    }
-    return build_aamva_tags(fields)
-
-
-# -------------------------
-# Streamlit UI
-st.title("Validateur AAMVA / PDF417 — Vérifier payload et éviter les pièges")
-
+# ---------------------------
+# En-tête centré
+# ---------------------------
 st.markdown(
-    "Colle ici le **payload AAMVA brut** (texte encodé pour le PDF417) ou clique sur **Générer un exemple** pour tester. "
-    "Le validateur vérifie header, séparateurs (0x1E), formats de date, encodage et signale les erreurs courantes."
+    "<div style='text-align:center; margin-top:6px;'>"
+    "<h1 style='margin:0;'>Formulaire préfixes — Pays / Subdivision</h1>"
+    "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — exemple automatique pour Canada (modifiable)</p>"
+    "</div>",
+    unsafe_allow_html=True
 )
 
-# Initialise la clé session si elle n'existe pas
-if "payload_input" not in st.session_state:
-    st.session_state["payload_input"] = ""
+# ---------------------------
+# Zone centrale : selects centrés côte à côte (mêmes tailles)
+# ---------------------------
+outer_l, center_col, outer_r = st.columns([1, 2, 1])
+with center_col:
+    sel_left, sel_right = st.columns([1, 1])
+    with sel_left:
+        country = st.selectbox("Pays", ["", "Canada", "United States"], key="country_main")
+    # Si le pays change, activer le hint (si pays non vide) et réinitialiser prev_subdivision
+    if country != st.session_state.get("prev_country", ""):
+        st.session_state["show_hint"] = bool(country)
+        st.session_state["prev_country"] = country
+        st.session_state["prev_subdivision"] = ""
 
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.text_area(
-        "Payload AAMVA (brut)",
-        height=220,
-        value=st.session_state["payload_input"],
-        placeholder="Colle le payload AAMVA ici (commence par @ et ANSI ... DL).",
-        key="payload_input"
-    )
-with col2:
-    if st.button("Générer un exemple"):
-        st.session_state["payload_input"] = example_payload()
+    # Construire options selon pays
+    if country == "United States":
+        subdivision_label = "État"
+        options = [f"{name}" for name in US_STATES]
+    elif country == "Canada":
+        subdivision_label = "Province / Territoire"
+        options = [f"{name}" for name in CA_PROVINCES]
+    else:
+        subdivision_label = "Subdivision"
+        options = []
 
-if not st.session_state["payload_input"]:
-    st.info("Aucun payload collé. Clique sur 'Générer un exemple' pour insérer un payload de test.")
-else:
-    if st.button("Valider le payload"):
-        payload_input = st.session_state["payload_input"]
-        results = validate_aamva_payload(payload_input)
-        errors = results["errors"]
-        warnings = results["warnings"]
-        infos = results["infos"]
+    with sel_right:
+        subdivision = st.selectbox(subdivision_label, [""] + options, key="subdivision_main")
 
-        # Affichage des résultats
-        if errors:
-            st.error(f"Erreurs détectées ({len(errors)}) :")
-            for e in errors:
-                st.write("- " + e)
+    # Afficher le hint uniquement si show_hint True ET qu'aucune subdivision n'est encore choisie
+    if st.session_state["show_hint"] and not subdivision:
+        st.markdown(
+            "<div style='margin-top:10px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81;text-align:center;'>"
+            "Sélectionnez un pays et une subdivision pour afficher le formulaire."
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+# ---------------------------
+# Masquer le hint dès que la subdivision est choisie
+# ---------------------------
+if subdivision:
+    st.session_state["show_hint"] = False
+
+# ---------------------------
+# Préremplissage automatique d'exemple pour Canada
+# - Ne remplit que les champs vides pour ne pas écraser les saisies de l'utilisateur.
+# ---------------------------
+if country == "Canada":
+    for code, example_val in CANADA_EXAMPLE.items():
+        key = f"field_{code}"
+        if st.session_state.get(key, "") == "":
+            st.session_state[key] = example_val
+
+# ---------------------------
+# Liaison DAJ <-> subdivision (DAJ mis automatiquement selon la sélection)
+# - DAJ prend l'abréviation pour le Canada (QC, ON, ...), sinon le nom de l'état pour US.
+# - On n'écrase pas DAJ si l'utilisateur a saisi manuellement une valeur différente.
+# ---------------------------
+current_daj = st.session_state.get("field_DAJ", "").strip()
+prev_sub = st.session_state.get("prev_subdivision", "")
+
+if subdivision and subdivision != prev_sub:
+    if country == "Canada":
+        daj_value = CA_ABBR.get(subdivision, subdivision)
+    else:
+        daj_value = subdivision
+    example_daj = CANADA_EXAMPLE.get("DAJ", "")
+    if current_daj == "" or current_daj == prev_sub or current_daj == example_daj:
+        st.session_state["field_DAJ"] = daj_value
+    st.session_state["prev_subdivision"] = subdivision
+elif not subdivision:
+    st.session_state["prev_subdivision"] = ""
+
+# ---------------------------
+# Formulaire complet (affiché si pays choisi)
+# ---------------------------
+if country:
+    st.markdown("---")
+    st.subheader("Champs préfixés (saisie)")
+
+    default_dcg = "US" if country == "United States" else "CAN" if country == "Canada" else ""
+
+    # Préparer DAJ options (priorité à la subdivision sélectionnée)
+    daj_options = []
+    if subdivision:
+        if country == "Canada":
+            abbr = CA_ABBR.get(subdivision, "")
+            first = abbr if abbr else subdivision
         else:
-            st.success("Aucune erreur bloquante détectée.")
+            first = subdivision
+        daj_options = [first] + [opt for opt in options if opt != subdivision]
+    else:
+        daj_options = options
 
-        if warnings:
-            st.warning(f"Avertissements ({len(warnings)}) :")
-            for w in warnings:
-                st.write("- " + w)
+    # Afficher champs en grille 2 colonnes
+    for i in range(0, len(PREFIX_FIELDS), 2):
+        left = PREFIX_FIELDS[i]
+        right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
+        cols = st.columns([1, 1])
 
-        if infos:
-            st.info("Informations :")
-            for i in infos:
-                st.write("- " + i)
+        # Champ gauche
+        key_left = f"field_{left[0]}"
+        if left[0] == "DCG":
+            cols[0].text_input(left[0], value=st.session_state.get(key_left, default_dcg), help=left[1], key=key_left)
+        elif left[0] == "DAJ":
+            current_val = st.session_state.get(key_left, "")
+            display_options = [""] + daj_options
+            try:
+                idx = display_options.index(current_val)
+            except ValueError:
+                idx = 0
+            cols[0].selectbox(left[0], options=display_options, index=idx, help=left[1], key=key_left)
+        elif left[0] == "DBC":
+            cols[0].selectbox(left[0], options=["", "1 - Homme", "2 - Femme"], help=left[1], key=key_left)
+        else:
+            cols[0].text_input(left[0], value=st.session_state.get(key_left, ""), help=left[1], placeholder=left[1], key=key_left)
 
-        # Proposer une correction automatique si des problèmes simples sont détectés
-        # (séparateur échappé, fin de record manquante, espaces superflus)
-        needs_correction = False
-        correction_reasons = []
-        if any("Séparateur trouvé sous forme d'échappement" in e for e in errors):
-            needs_correction = True
-            correction_reasons.append("séparateur échappé")
-        if any("Fin de record manquante" in w for w in warnings):
-            needs_correction = True
-            correction_reasons.append("fin de record manquante")
-        # also check for tag-space patterns
-        if re.search(r"[A-Z]{3}\s+[A-Z0-9\-]{1,20}(\x1E|$)", payload_input):
-            needs_correction = True
-            correction_reasons.append("espaces superflus après tags")
-
-        if needs_correction:
-            st.markdown("### Version corrigée proposée")
-            corrected, applied = auto_correct_payload(payload_input)
-            if applied:
-                st.markdown("Corrections appliquées :")
-                for a in applied:
-                    st.write("- " + a)
+        # Champ droit
+        if right:
+            key_right = f"field_{right[0]}"
+            if right[0] == "DCG":
+                cols[1].text_input(right[0], value=st.session_state.get(key_right, default_dcg), help=right[1], key=key_right)
+            elif right[0] == "DAJ":
+                current_val_r = st.session_state.get(key_right, "")
+                display_options_r = [""] + daj_options
+                try:
+                    idx_r = display_options_r.index(current_val_r)
+                except ValueError:
+                    idx_r = 0
+                cols[1].selectbox(right[0], options=display_options_r, index=idx_r, help=right[1], key=key_right)
+            elif right[0] == "DBC":
+                cols[1].selectbox(right[0], options=["", "1 - Homme", "2 - Femme"], help=right[1], key=key_right)
             else:
-                st.write("- Aucune correction automatique applicable.")
+                cols[1].text_input(right[0], value=st.session_state.get(key_right, ""), help=right[1], placeholder=right[1], key=key_right)
 
-            # Afficher la version corrigée dans une zone éditable pour que l'utilisateur puisse la copier ou l'appliquer
-            st.text_area("Payload corrigé (modifiable)", value=corrected, height=220, key="corrected_payload")
+    st.markdown("---")
 
-            # Bouton pour appliquer la correction dans la zone principale
-            if st.button("Appliquer la correction au payload principal"):
-                st.session_state["payload_input"] = st.session_state.get("corrected_payload", corrected)
-                st.success("Correction appliquée. Le champ principal a été mis à jour.")
-        else:
-            st.info("Aucune correction automatique nécessaire pour les problèmes détectés.")
+    # ---------------------------
+    # Fonctions utilitaires pour la génération AAMVA (format avec "\n" littéraux)
+    # ---------------------------
+    def get_iin_for_selection(country_name: str, subdivision_name: str) -> str:
+        if country_name == "United States":
+            return IIN_US.get(subdivision_name, "000000")
+        if country_name == "Canada":
+            return IIN_CA.get(subdivision_name, "000000")
+        return "000000"
 
-        st.markdown("### Suggestions automatiques pour corriger les pièges fréquents")
-        suggs = []
-        ok_head, _ = has_valid_header(payload_input)
-        if not ok_head:
-            suggs.append("Vérifier l'en-tête : il doit contenir 'ANSI' et 'DL' (ex: '@\\r\\nANSI 636014080102DL').")
-        ok_gs, _ = uses_group_separator(payload_input)
-        if not ok_gs:
-            suggs.append("Remplacer les séquences '\\\\u001e' ou '\\\\x1E' par le caractère réel 0x1E (Group Separator).")
-        date_errs = check_dates_in_payload(payload_input)
-        if date_errs:
-            suggs.append("Corriger les dates au format MMDDYYYY (ex: 01011990).")
-        ok_ascii, ascii_msg = check_ascii(payload_input)
-        if not ok_ascii:
-            suggs.append("Supprimer ou translittérer les caractères accentués / non-ASCII (ex: é -> e).")
-        if "<svg" in payload_input.lower():
-            suggs.append("Si tu fournis un SVG, assure-toi qu'il contient <rect> (PDF417 simple) ou utilise la conversion côté navigateur si le SVG est complexe.")
-        suggs.append("Pour l'impression/scan, viser ≥300 DPI et utiliser un scale entier (2–4) lors de la rasterisation; laisser une quiet zone blanche autour du code.")
-        for s in suggs:
-            st.write("- " + s)
+    def normalize_date(value: str) -> str:
+        return value.replace("-", "").strip()
 
-        st.markdown("### Exemple de payload (fictif) — prêt à copier")
-        st.code(example_payload(), language="text")
+    def build_aamva_block_with_escapes(fields: Dict[str, str], country_name: str, subdivision_name: str) -> str:
+        """
+        Retourne une chaîne où chaque saut de ligne est représenté par la séquence littérale '\n'.
+        La chaîne commence par "@\n" (séquence littérale) puis l'en-tête ANSI et les lignes de données.
+        Aucun espace superflu n'est ajouté dans les lignes de données.
+        """
+        iin = get_iin_for_selection(country_name, subdivision_name)
+        data_lines = []
 
+        # Si DCF (numéro de référence) présent, l'utiliser comme DAQ (numéro de permis)
+        if fields.get("DCF"):
+            data_lines.append(f"DAQ{fields.get('DCF')}")
+
+        # Ordre des champs pour sortie
+        order = ["DCS","DAC","DBB","DAG","DAI","DAJ","DAK","DBD","DBA","DBC","DAU","DAY","DCE","DCG","DCF"]
+        for code in order:
+            val = fields.get(code)
+            if val:
+                if code in ("DBB","DBD","DBA"):
+                    val = normalize_date(val)
+                # Supprimer retours à la ligne internes et trim
+                val = str(val).replace("\n", " ").strip()
+                data_lines.append(f"{code}{val}")
+
+        # Construire data_block avec séquences littérales '\n' entre lignes et terminer par '\n'
+        # Exemple: "DCSNICOLAS\nDACJEAN\n..."
+        data_block_literal = "\\n".join(data_lines) + "\\n" if data_lines else ""
+
+        # Calcul simple d'offset/length (valeurs plausibles pour l'exemple)
+        offset = "0041"
+        # length = nombre de caractères du bloc de données réel (sans les séquences d'échappement)
+        # Pour cohérence avec l'exemple, on calcule la longueur sur la représentation "réelle" (avec retours réels)
+        real_data_block = "\n".join(data_lines) + "\n" if data_lines else ""
+        length = f"{len(real_data_block):04d}"
+
+        # Header : garder un espace entre "ANSI" et l'IIN comme dans l'exemple
+        header = f"ANSI {iin}08 00 01 DL{offset}{length}DL"
+
+        # Construire la sortie finale avec séquences littérales '\n'
+        # Commencer par "@\n" littéral, puis header, puis '\n' littéral, puis data_block_literal
+        final = "@\\n" + header + "\\n" + data_block_literal
+        return final
+
+    # ---------------------------
+    # Actions : Générer / Enregistrer / Réinitialiser
+    # ---------------------------
+    if st.button("Générer"):
+        fields_values = {}
+        for prefix, _ in PREFIX_FIELDS:
+            fields_values[prefix] = st.session_state.get(f"field_{prefix}", "").strip()
+        aamva_text = build_aamva_block_with_escapes(fields_values, country, subdivision)
+        st.session_state["last_aamva"] = aamva_text
+        st.success("Bloc généré — copie ci‑dessous (les séquences '\\n' représentent des retours à la ligne).")
+
+    action_l, action_r = st.columns([1, 1])
+    with action_l:
+        if st.button("Enregistrer (session)"):
+            payload = {}
+            for prefix, _ in PREFIX_FIELDS:
+                payload[prefix] = st.session_state.get(f"field_{prefix}", "")
+            payload["COUNTRY_LABEL"] = country
+            payload["SUBDIVISION_LABEL"] = subdivision
+            payload["TIMESTAMP"] = datetime.datetime.now().isoformat()
+            st.session_state["last_prefix_payload"] = payload
+            st.success("Données enregistrées en session (usage pédagogique).")
+    with action_r:
+        if st.button("Réinitialiser les champs"):
+            for prefix, _ in PREFIX_FIELDS:
+                st.session_state[f"field_{prefix}"] = ""
+            st.session_state["field_DCG"] = default_dcg
+            st.info("Champs réinitialisés.")
+
+    # Afficher le bloc copiable si présent (sans interpréter les '\n')
+    if st.session_state.get("last_aamva"):
+        st.markdown("### Bloc AAMVA (texte brut) — copiable (séquences '\\n' littérales)")
+        st.code(st.session_state["last_aamva"], language=None)
+        st.info("Sélectionne le texte ci‑dessous et copie‑le (Ctrl+C / Cmd+C).")
+
+# ---------------------------
+# Footer / notes
+# ---------------------------
 st.markdown("---")
-st.markdown(
-    "**Notes** :\n\n"
-    "- Ce validateur effectue des contrôles syntaxiques et des recommandations pratiques; il ne remplace pas un test réel sur les SDKs de Verisoul/Persona/Samsub.\n"
-    "- Pour des tests finaux, génère le PDF417 (SVG/PNG) et testez avec les outils/sandboxes des fournisseurs de vérification.\n"
-    "- Si tu veux, j'intègre une vérification automatique du PDF417 (génération SVG via pdf417gen) et une rasterisation avancée (prise en charge complète des <path>) — dis‑moi si tu veux que j'ajoute cela dans ce fichier."
+st.caption(
+    "Note : La sortie contient des séquences littérales '\\n' pour représenter les retours à la ligne. "
+    "Utilise ce texte à des fins de test et d'apprentissage uniquement."
 )
