@@ -1,5 +1,5 @@
 # driver_license_app.py
-# Version finale — base conservée + règles supplémentaires et génération de bloc AAMVA copiable
+# Streamlit — Version finale : DAJ se met automatiquement selon l'État / Province sélectionné(e)
 # Usage: streamlit run driver_license_app.py
 
 import streamlit as st
@@ -66,8 +66,14 @@ if "show_hint" not in st.session_state:
     st.session_state["show_hint"] = False
 if "prev_country" not in st.session_state:
     st.session_state["prev_country"] = ""
+if "prev_subdivision" not in st.session_state:
+    st.session_state["prev_subdivision"] = ""
 if "last_aamva" not in st.session_state:
     st.session_state["last_aamva"] = ""
+
+# Ensure DAJ field exists in session_state to allow automatic updates
+if "field_DAJ" not in st.session_state:
+    st.session_state["field_DAJ"] = ""
 
 # ---------------------------
 # En-tête centré (base inchangée)
@@ -88,10 +94,15 @@ with center_col:
     sel_left, sel_right = st.columns([1, 1])
     with sel_left:
         country = st.selectbox("Pays", ["", "Canada", "United States"], key="country_main")
-    # Si le pays change, activer le hint (si pays non vide)
+    # Si le pays change, activer le hint (si pays non vide) et réinitialiser prev_subdivision
     if country != st.session_state.get("prev_country", ""):
         st.session_state["show_hint"] = bool(country)
         st.session_state["prev_country"] = country
+        # reset previous subdivision tracking so DAJ can update for new country
+        st.session_state["prev_subdivision"] = ""
+        # If country changed, clear DAJ only if it was previously auto-filled (equal to prev_subdivision)
+        if st.session_state.get("field_DAJ", "") == st.session_state.get("prev_subdivision", ""):
+            st.session_state["field_DAJ"] = ""
 
     # Construire options selon pays
     if country == "United States":
@@ -123,6 +134,26 @@ if subdivision:
     st.session_state["show_hint"] = False
 
 # ---------------------------
+# Comportement demandé : mettre à jour automatiquement DAJ selon la subdivision choisie
+# - On met à jour DAJ automatiquement quand l'utilisateur choisit une subdivision différente de prev_subdivision.
+# - On n'écrase pas DAJ si l'utilisateur a saisi manuellement autre chose (détection simple).
+# - Si DAJ était vide ou égal à la précédente subdivision auto-remplie, on remplace par la nouvelle subdivision.
+# ---------------------------
+current_daj = st.session_state.get("field_DAJ", "").strip()
+prev_sub = st.session_state.get("prev_subdivision", "")
+
+if subdivision and subdivision != prev_sub:
+    # Si DAJ est vide ou correspondait à l'ancienne valeur auto-remplie, on met à jour
+    if current_daj == "" or current_daj == prev_sub:
+        st.session_state["field_DAJ"] = subdivision
+    # Mettre à jour le prev_subdivision pour la prochaine comparaison
+    st.session_state["prev_subdivision"] = subdivision
+elif not subdivision:
+    # Si l'utilisateur a désélectionné la subdivision, on ne force pas la suppression de DAJ
+    # mais on met prev_subdivision à vide pour permettre de futures mises à jour automatiques
+    st.session_state["prev_subdivision"] = ""
+
+# ---------------------------
 # Formulaire complet (affiché si pays choisi) — base conservée
 # ---------------------------
 if country:
@@ -149,12 +180,12 @@ if country:
         if left[0] == "DCG":
             cols[0].text_input(left[0], value=default_dcg, help=left[1], key=key_left)
         elif left[0] == "DAJ":
-            # proposer la subdivision sélectionnée si disponible
-            cols[0].selectbox(left[0], options=[""] + daj_options, index=0 if not subdivision else 0, help=left[1], key=key_left)
+            # proposer la subdivision sélectionnée si disponible ; la valeur affichée provient de session_state
+            cols[0].selectbox(left[0], options=[""] + daj_options, index=0 if st.session_state.get(key_left, "") == "" else None, help=left[1], key=key_left)
         elif left[0] == "DBC":
             cols[0].selectbox(left[0], options=["", "1 - Homme", "2 - Femme"], help=left[1], key=key_left)
         else:
-            cols[0].text_input(left[0], value="", help=left[1], placeholder=left[1], key=key_left)
+            cols[0].text_input(left[0], value=st.session_state.get(key_left, ""), help=left[1], placeholder=left[1], key=key_left)
 
         # Champ droit
         if right:
@@ -162,11 +193,11 @@ if country:
             if right[0] == "DCG":
                 cols[1].text_input(right[0], value=default_dcg, help=right[1], key=key_right)
             elif right[0] == "DAJ":
-                cols[1].selectbox(right[0], options=[""] + daj_options, index=0 if not subdivision else 0, help=right[1], key=key_right)
+                cols[1].selectbox(right[0], options=[""] + daj_options, index=0 if st.session_state.get(key_right, "") == "" else None, help=right[1], key=key_right)
             elif right[0] == "DBC":
                 cols[1].selectbox(right[0], options=["", "1 - Homme", "2 - Femme"], help=right[1], key=key_right)
             else:
-                cols[1].text_input(right[0], value="", help=right[1], placeholder=right[1], key=key_right)
+                cols[1].text_input(right[0], value=st.session_state.get(key_right, ""), help=right[1], placeholder=right[1], key=key_right)
 
     st.markdown("---")
 
