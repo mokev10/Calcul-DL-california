@@ -1,5 +1,5 @@
 # driver_license_app.py
-# Streamlit — Version finale : DAJ se met automatiquement selon l'État / Province sélectionné(e)
+# Streamlit — Version finale : préremplissage d'exemple pour Canada + DAJ auto selon subdivision
 # Usage: streamlit run driver_license_app.py
 
 import streamlit as st
@@ -34,6 +34,16 @@ IIN_CA = {
 }
 
 # ---------------------------
+# Abbr mapping for DAJ (Canada)
+# ---------------------------
+CA_ABBR = {
+    "Alberta":"AB","British Columbia":"BC","Manitoba":"MB","New Brunswick":"NB",
+    "Newfoundland and Labrador":"NL","Northwest Territories":"NT","Nova Scotia":"NS",
+    "Nunavut":"NU","Ontario":"ON","Prince Edward Island":"PE","Quebec":"QC",
+    "Saskatchewan":"SK","Yukon":"YT"
+}
+
+# ---------------------------
 # Données pour selects
 # ---------------------------
 US_STATES = sorted(list(IIN_US.keys()))
@@ -60,6 +70,26 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
 ]
 
 # ---------------------------
+# Exemple modifiable pour Canada (préremplissage)
+# ---------------------------
+CANADA_EXAMPLE = {
+    "DCG": "CAN",
+    "DCS": "NICOLAS",
+    "DAC": "JEAN",
+    "DBB": "19941208",
+    "DAG": "1560 SHERBROOKE ST E",
+    "DAI": "MONTREAL",
+    "DAJ": "Quebec",          # sera converti en QC si on veut abbr
+    "DAK": "H2L4M1",
+    "DBD": "20230510",
+    "DBA": "20310509",
+    "DBC": "1",
+    "DAU": "180",
+    "DAY": "BRUN",
+    "DCF": "PEJQ04N96"
+}
+
+# ---------------------------
 # Session state initialisation
 # ---------------------------
 if "show_hint" not in st.session_state:
@@ -71,17 +101,19 @@ if "prev_subdivision" not in st.session_state:
 if "last_aamva" not in st.session_state:
     st.session_state["last_aamva"] = ""
 
-# Ensure DAJ field exists in session_state to allow automatic updates
-if "field_DAJ" not in st.session_state:
-    st.session_state["field_DAJ"] = ""
+# Ensure all field keys exist in session_state
+for prefix, _ in PREFIX_FIELDS:
+    key = f"field_{prefix}"
+    if key not in st.session_state:
+        st.session_state[key] = ""
 
 # ---------------------------
-# En-tête centré (base inchangée)
+# En-tête centré
 # ---------------------------
 st.markdown(
     "<div style='text-align:center; margin-top:6px;'>"
     "<h1 style='margin:0;'>Formulaire préfixes — Pays / Subdivision</h1>"
-    "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — remplissez les champs après sélection</p>"
+    "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — exemple automatique pour Canada (modifiable)</p>"
     "</div>",
     unsafe_allow_html=True
 )
@@ -94,15 +126,12 @@ with center_col:
     sel_left, sel_right = st.columns([1, 1])
     with sel_left:
         country = st.selectbox("Pays", ["", "Canada", "United States"], key="country_main")
-    # Si le pays change, activer le hint (si pays non vide) et réinitialiser prev_subdivision
+    # Si le pays change, activer le hint (si pays non vide)
     if country != st.session_state.get("prev_country", ""):
         st.session_state["show_hint"] = bool(country)
         st.session_state["prev_country"] = country
         # reset previous subdivision tracking so DAJ can update for new country
         st.session_state["prev_subdivision"] = ""
-        # If country changed, clear DAJ only if it was previously auto-filled (equal to prev_subdivision)
-        if st.session_state.get("field_DAJ", "") == st.session_state.get("prev_subdivision", ""):
-            st.session_state["field_DAJ"] = ""
 
     # Construire options selon pays
     if country == "United States":
@@ -134,27 +163,46 @@ if subdivision:
     st.session_state["show_hint"] = False
 
 # ---------------------------
+# Préremplissage automatique d'exemple pour Canada
+# - Ne remplit que les champs vides pour ne pas écraser les saisies de l'utilisateur.
+# - S'exécute dès que country == "Canada" et avant l'affichage du formulaire.
+# ---------------------------
+if country == "Canada":
+    for code, example_val in CANADA_EXAMPLE.items():
+        key = f"field_{code}"
+        # Si DAJ doit être l'abréviation et subdivision déjà choisie, on gère plus bas.
+        if st.session_state.get(key, "") == "":
+            st.session_state[key] = example_val
+
+# ---------------------------
 # Comportement demandé : mettre à jour automatiquement DAJ selon la subdivision choisie
 # - On met à jour DAJ automatiquement quand l'utilisateur choisit une subdivision différente de prev_subdivision.
 # - On n'écrase pas DAJ si l'utilisateur a saisi manuellement autre chose (détection simple).
-# - Si DAJ était vide ou égal à la précédente subdivision auto-remplie, on remplace par la nouvelle subdivision.
+# - Si DAJ était vide ou égal à l'ancienne valeur auto-remplie, on remplace par la nouvelle subdivision.
+# - Pour le Canada, on propose l'abréviation (QC) si disponible.
 # ---------------------------
 current_daj = st.session_state.get("field_DAJ", "").strip()
 prev_sub = st.session_state.get("prev_subdivision", "")
 
 if subdivision and subdivision != prev_sub:
+    # Déterminer la valeur à mettre dans DAJ selon le pays
+    if country == "Canada":
+        # utiliser l'abréviation si disponible
+        daj_value = CA_ABBR.get(subdivision, subdivision)
+    else:
+        daj_value = subdivision
+
     # Si DAJ est vide ou correspondait à l'ancienne valeur auto-remplie, on met à jour
-    if current_daj == "" or current_daj == prev_sub:
-        st.session_state["field_DAJ"] = subdivision
+    if current_daj == "" or current_daj == prev_sub or current_daj == CANADA_EXAMPLE.get("DAJ", ""):
+        st.session_state["field_DAJ"] = daj_value
+
     # Mettre à jour le prev_subdivision pour la prochaine comparaison
     st.session_state["prev_subdivision"] = subdivision
 elif not subdivision:
-    # Si l'utilisateur a désélectionné la subdivision, on ne force pas la suppression de DAJ
-    # mais on met prev_subdivision à vide pour permettre de futures mises à jour automatiques
     st.session_state["prev_subdivision"] = ""
 
 # ---------------------------
-# Formulaire complet (affiché si pays choisi) — base conservée
+# Formulaire complet (affiché si pays choisi)
 # ---------------------------
 if country:
     st.markdown("---")
@@ -169,7 +217,7 @@ if country:
     else:
         daj_options = options
 
-    # Afficher champs en grille 2 colonnes (base inchangée)
+    # Afficher champs en grille 2 colonnes
     for i in range(0, len(PREFIX_FIELDS), 2):
         left = PREFIX_FIELDS[i]
         right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
@@ -178,10 +226,18 @@ if country:
         # Champ gauche
         key_left = f"field_{left[0]}"
         if left[0] == "DCG":
-            cols[0].text_input(left[0], value=default_dcg, help=left[1], key=key_left)
+            cols[0].text_input(left[0], value=st.session_state.get(key_left, default_dcg), help=left[1], key=key_left)
         elif left[0] == "DAJ":
-            # proposer la subdivision sélectionnée si disponible ; la valeur affichée provient de session_state
-            cols[0].selectbox(left[0], options=[""] + daj_options, index=0 if st.session_state.get(key_left, "") == "" else None, help=left[1], key=key_left)
+            # afficher selectbox avec la valeur actuelle de session_state si présente
+            current_val = st.session_state.get(key_left, "")
+            # construire options pour selectbox (afficher abbr pour Canada si applicable)
+            display_options = [""] + daj_options
+            # index selection: find current_val in display_options if present
+            try:
+                idx = display_options.index(current_val)
+            except ValueError:
+                idx = 0
+            cols[0].selectbox(left[0], options=display_options, index=idx, help=left[1], key=key_left)
         elif left[0] == "DBC":
             cols[0].selectbox(left[0], options=["", "1 - Homme", "2 - Femme"], help=left[1], key=key_left)
         else:
@@ -191,9 +247,15 @@ if country:
         if right:
             key_right = f"field_{right[0]}"
             if right[0] == "DCG":
-                cols[1].text_input(right[0], value=default_dcg, help=right[1], key=key_right)
+                cols[1].text_input(right[0], value=st.session_state.get(key_right, default_dcg), help=right[1], key=key_right)
             elif right[0] == "DAJ":
-                cols[1].selectbox(right[0], options=[""] + daj_options, index=0 if st.session_state.get(key_right, "") == "" else None, help=right[1], key=key_right)
+                current_val_r = st.session_state.get(key_right, "")
+                display_options_r = [""] + daj_options
+                try:
+                    idx_r = display_options_r.index(current_val_r)
+                except ValueError:
+                    idx_r = 0
+                cols[1].selectbox(right[0], options=display_options_r, index=idx_r, help=right[1], key=key_right)
             elif right[0] == "DBC":
                 cols[1].selectbox(right[0], options=["", "1 - Homme", "2 - Femme"], help=right[1], key=key_right)
             else:
@@ -215,36 +277,27 @@ if country:
         return value.replace("-", "").strip()
 
     def build_aamva_block(fields: Dict[str, str], country_name: str, subdivision_name: str) -> str:
-        # IIN
         iin = get_iin_for_selection(country_name, subdivision_name)
-        # Construire les lignes de données dans l'ordre souhaité
         data_lines = []
-        # Si DCF (numéro de référence) présent, l'utiliser comme DAQ (numéro de permis)
         if fields.get("DCF"):
             data_lines.append(f"DAQ{fields.get('DCF')}")
-        # Ordre des champs pour sortie (conforme à l'exemple fourni)
         order = ["DCS","DAC","DBB","DAG","DAI","DAJ","DAK","DBD","DBA","DBC","DAU","DAY","DCE","DCG","DCF"]
         for code in order:
             val = fields.get(code)
             if val:
-                # normaliser les dates si nécessaire
                 if code in ("DBB","DBD","DBA"):
                     val = normalize_date(val)
                 data_lines.append(f"{code}{val}")
-        # Concaténation des données (chaque code sur sa propre ligne pour lisibilité/copiable)
         data_block = "\n".join(data_lines)
-        # Calcul simple d'offset/length (valeurs plausibles pour l'exemple)
         offset = "0041"
         length = f"{len(data_block):04d}"
         header = f"ANSI {iin}08 00 01 DL{offset}{length}DL"
-        # Retourner header + lignes de données
         return header + "\n" + data_block
 
     # ---------------------------
     # Actions : Générer / Enregistrer / Réinitialiser
     # ---------------------------
     if st.button("Générer le bloc AAMVA copiable"):
-        # Récupérer valeurs
         fields_values = {}
         for prefix, _ in PREFIX_FIELDS:
             fields_values[prefix] = st.session_state.get(f"field_{prefix}", "").strip()
@@ -277,10 +330,10 @@ if country:
         st.info("Sélectionne le texte ci‑dessous et copie‑le (Ctrl+C / Cmd+C).")
 
 # ---------------------------
-# Footer / notes (inchangées)
+# Footer / notes
 # ---------------------------
 st.markdown("---")
 st.caption(
-    "Note : Ce générateur produit un bloc texte pédagogique inspiré du format AAMVA. "
-    "Les en‑têtes (offset/length) sont simplifiés pour l'exemple. Utilise ce texte à des fins de test et d'apprentissage uniquement."
+    "Note : Les valeurs d'exemple pour le Canada sont insérées automatiquement (modifiable). "
+    "Le générateur produit un bloc texte pédagogique inspiré du format AAMVA. Les en‑têtes sont simplifiés."
 )
