@@ -1,9 +1,9 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA final (version complète, nettoyée)
+# Streamlit — Générateur AAMVA final (zone flottante centrée supprimée)
 # - Aucun préremplissage automatique
 # - DAQ modifiable et utilisé en priorité
 # - DAJ s'auto-remplit selon la subdivision (abréviations CA/US) sans écraser saisies manuelles
-# - Infobulles (tooltips) STRICTEMENT au hover (desktop) et au focus (accessibilité) — aucune logique click/toggle
+# - Infobulles (tooltips) STRICTEMENT au hover (desktop) et au focus (accessibilité)
 # - En-tête ANSI construit sans espaces dans la séquence IIN+VERSION+DESIGN
 # - Sortie littérale commence par "@\n" puis header puis lignes séparées par la séquence littérale "\n"
 # Usage: streamlit run driver_license_app.py
@@ -257,23 +257,22 @@ if "last_aamva" not in st.session_state:
     st.session_state["last_aamva"] = ""
 
 # ---------------------------
-# Header / selectors
+# Header / selectors (non-flottant)
 # ---------------------------
 st.markdown("<div class='app-wrap'>", unsafe_allow_html=True)
 st.markdown("<div class='header'><div class='logo'>A</div><div><h2 class='title'>Générateur AAMVA</h2><div class='sub'>Champs vides par défaut — infobulles au survol uniquement</div></div></div>", unsafe_allow_html=True)
 
-outer_l, center_col, outer_r = st.columns([1, 2, 1])
-with center_col:
-    sel_left, sel_right = st.columns([1, 1])
-    with sel_left:
-        country = st.selectbox("Pays", ["", "Canada", "United States"], key="country_main")
-    with sel_right:
-        if country == "United States":
-            subdivision = st.selectbox("État", [""] + US_STATES, key="subdivision_main")
-        elif country == "Canada":
-            subdivision = st.selectbox("Province / Territoire", [""] + CA_PROVINCES, key="subdivision_main")
-        else:
-            subdivision = st.selectbox("Subdivision", [""], key="subdivision_main")
+# Place selectors inline (no floating centered container)
+country_col, subdivision_col = st.columns([1,1])
+with country_col:
+    country = st.selectbox("Pays", ["", "Canada", "United States"], key="country_main")
+with subdivision_col:
+    if country == "United States":
+        subdivision = st.selectbox("État", [""] + US_STATES, key="subdivision_main")
+    elif country == "Canada":
+        subdivision = st.selectbox("Province / Territoire", [""] + CA_PROVINCES, key="subdivision_main")
+    else:
+        subdivision = st.selectbox("Subdivision", [""], key="subdivision_main")
 
 # ---------------------------
 # DAJ auto-update (abbr) without overwriting manual edits
