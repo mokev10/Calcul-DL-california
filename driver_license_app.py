@@ -1,26 +1,21 @@
 # driver_license_app.py
-# Streamlit — Générateur AAMVA avec infobulles modernes (hover-only, animation fluide, auto-hide)
+# Streamlit — Générateur AAMVA strict, interface moderne
 # - Aucun préremplissage automatique ni boutons d'exemple
 # - DAQ modifiable et utilisé en priorité
 # - DAJ lié automatiquement à la subdivision (abréviations CA/US) sans écraser saisies manuelles
-# - En-tête numérique IIN+VER+DES concaténé sans espaces
-# - Sortie commence par "@\n" et utilise les séquences littérales "\n"
-# - Infobulles : apparaissent uniquement au survol, animation fluide, disparaissent au mouseleave
-# - Sur mobile : tap affiche brièvement l'infobulle (auto-hide), accessible au clavier
+# - Infobulles (tooltips) visibles UNIQUEMENT au survol (hover) avec transition fluide et auto-hide au mouseleave
+# - Accessible (focus/blur), tactile : tap affiche brièvement (auto-hide)
+# - En-tête ANSI construit sans espaces (IIN+VER+DES), sortie littérale commençant par "@\n"
+# Usage: streamlit run driver_license_app.py
 
 import streamlit as st
-import datetime
 from typing import Dict, List, Tuple
+import datetime
 
-st.set_page_config(page_title="Driver License App — AAMVA (Tooltips)", layout="wide")
+st.set_page_config(page_title="Driver License App — AAMVA", layout="wide")
 
 # ---------------------------
-# CSS + JS injectés pour tooltips modernes
-# - Tooltips visibles uniquement au hover (desktop)
-# - Transition fluide d'apparition/disparition
-# - Auto-hide au mouseleave
-# - Tap on mobile shows tooltip briefly (3s)
-# - Accessible via keyboard (focus/blur)
+# Inject CSS + JS for modern tooltips (hover-only, smooth transitions, auto-hide)
 # ---------------------------
 st.markdown(
     """
@@ -35,6 +30,7 @@ st.markdown(
       --radius:12px;
       --ease: cubic-bezier(.2,.9,.3,1);
     }
+    /* Container */
     .app-wrap {
       max-width:1100px;
       margin:28px auto;
@@ -46,10 +42,10 @@ st.markdown(
       color: #eaf0ff;
       font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     }
-    .app-header { display:flex; gap:14px; align-items:center; margin-bottom:12px; }
-    .app-logo { width:48px; height:48px; border-radius:10px; background: linear-gradient(135deg,var(--accent),#2bb0ff); display:flex; align-items:center; justify-content:center; font-weight:700; color:white; font-size:18px; box-shadow: 0 8px 24px rgba(79,140,255,0.14); }
-    .app-title { margin:0; font-size:18px; }
-    .app-sub { margin:2px 0 0 0; color:var(--muted); font-size:13px; }
+    .header { display:flex; gap:14px; align-items:center; margin-bottom:12px; }
+    .logo { width:48px; height:48px; border-radius:10px; background: linear-gradient(135deg,var(--accent),#2bb0ff); display:flex; align-items:center; justify-content:center; font-weight:700; color:white; font-size:18px; box-shadow: 0 8px 24px rgba(79,140,255,0.14); }
+    .title { margin:0; font-size:18px; }
+    .subtitle { margin:2px 0 0 0; color:var(--muted); font-size:13px; }
 
     .grid { display:grid; grid-template-columns: 1fr 1fr; gap:18px; margin-top:18px; }
     .card { background: var(--card); border-radius:12px; padding:14px; border:1px solid rgba(255,255,255,0.02); }
@@ -133,7 +129,7 @@ st.markdown(
       pointer-events:auto;
     }
 
-    /* On small screens, place tooltip below */
+    /* Responsive: tooltip below on small screens */
     @media (max-width:720px){
       .help-bubble .tooltip { right:auto; left:50%; top:calc(100% + 10px); transform: translateX(-50%) translateY(6px) scale(0.98); }
       .help-bubble .tooltip::after { left:50%; top:-6px; transform:translateX(-50%) rotate(180deg); clip-path: polygon(50% 0, 0 100%, 100% 100%); }
@@ -147,45 +143,40 @@ st.markdown(
     </style>
 
     <script>
-    // JS to support mobile/touch: show tooltip briefly on tap and auto-hide on mouseleave
+    // Ensure tooltips appear only on hover (desktop) and on tap briefly (mobile).
+    // Auto-hide on mouseleave. Accessible via keyboard (focus/blur).
     document.addEventListener('DOMContentLoaded', function(){
-      // delegate: find all help-bubble elements injected by Streamlit
-      function setupHelpBubbles(){
+      function initBubbles(){
         const bubbles = document.querySelectorAll('.help-bubble');
         bubbles.forEach(b => {
-          // ensure we don't attach multiple listeners
-          if (b.dataset.tooltipInit === '1') return;
-          b.dataset.tooltipInit = '1';
+          if (b.dataset._init === '1') return;
+          b.dataset._init = '1';
 
-          // show on focus (keyboard)
-          b.addEventListener('focus', () => { b.classList.add('show'); });
-          b.addEventListener('blur', () => { b.classList.remove('show'); });
+          // focus/blur for keyboard
+          b.addEventListener('focus', () => b.classList.add('show'));
+          b.addEventListener('blur', () => b.classList.remove('show'));
 
-          // on touch/click: toggle show briefly (mobile)
-          b.addEventListener('click', (ev) => {
-            // prevent immediate blur/focus issues
-            ev.stopPropagation();
+          // click/tap: show briefly then auto-hide (mobile)
+          b.addEventListener('click', (e) => {
+            e.stopPropagation();
             b.classList.add('show');
-            // auto-hide after 3000ms
-            clearTimeout(b._hideTimeout);
-            b._hideTimeout = setTimeout(() => { b.classList.remove('show'); }, 3000);
+            clearTimeout(b._t);
+            b._t = setTimeout(() => b.classList.remove('show'), 3000);
           });
 
-          // ensure tooltip hides on mouseleave immediately
+          // mouseleave: hide immediately
           b.addEventListener('mouseleave', () => {
             b.classList.remove('show');
-            clearTimeout(b._hideTimeout);
+            clearTimeout(b._t);
           });
 
-          // also hide when clicking elsewhere
-          document.addEventListener('click', function docClick(){ b.classList.remove('show'); clearTimeout(b._hideTimeout); document.removeEventListener('click', docClick); }, { once: true });
+          // hide when clicking elsewhere
+          document.addEventListener('click', function hideOnce(){ b.classList.remove('show'); clearTimeout(b._t); document.removeEventListener('click', hideOnce); }, { once: true });
         });
       }
-
-      // initial setup and also observe DOM changes (Streamlit re-renders)
-      setupHelpBubbles();
-      const observer = new MutationObserver(() => { setupHelpBubbles(); });
-      observer.observe(document.body, { childList: true, subtree: true });
+      initBubbles();
+      const obs = new MutationObserver(initBubbles);
+      obs.observe(document.body, { childList: true, subtree: true });
     });
     </script>
     """,
@@ -193,7 +184,7 @@ st.markdown(
 )
 
 # ---------------------------
-# Data / mappings
+# Jurisdiction mappings
 # ---------------------------
 IIN_US = {
     "Alabama":"636033","Alaska":"636059","Arizona":"636026","Arkansas":"636021","California":"636014",
@@ -222,7 +213,7 @@ US_STATES = sorted(list(IIN_US.keys()))
 CA_PROVINCES = sorted(list(IIN_CA.keys()))
 
 # ---------------------------
-# Fields definition and session init
+# Fields definition
 # ---------------------------
 FIELDS: List[Tuple[str, str]] = [
     ("DCG","Code du pays (CAN/US) — ex: CAN ou US"),
@@ -243,6 +234,7 @@ FIELDS: List[Tuple[str, str]] = [
     ("DCF","Numéro de référence du document — ex: PEJQ04N96")
 ]
 
+# Initialize session fields
 for code, _ in FIELDS:
     key = f"field_{code}"
     if key not in st.session_state:
@@ -254,10 +246,10 @@ if "last_aamva" not in st.session_state:
     st.session_state["last_aamva"] = ""
 
 # ---------------------------
-# Page layout
+# Layout: header + selectors
 # ---------------------------
 st.markdown("<div class='app-wrap'>", unsafe_allow_html=True)
-st.markdown("<div class='app-header'><div class='app-logo'>A</div><div><h2 class='app-title'>Générateur AAMVA</h2><div class='app-sub'>Infobulles modernes au survol — apparence fluide</div></div></div>", unsafe_allow_html=True)
+st.markdown("<div class='header'><div class='logo'>A</div><div><h2 class='title'>Générateur AAMVA</h2><div class='subtitle'>Saisie manuelle — infobulles au survol</div></div></div>", unsafe_allow_html=True)
 
 cols = st.columns([1,2,1])
 with cols[1]:
@@ -275,9 +267,9 @@ with cols[1]:
 if country and not subdivision:
     st.info("Choisis une subdivision pour préremplir DAJ automatiquement (modifiable).")
 
-# DAJ auto-update (abréviations) — ne pas écraser saisies manuelles
-current_daj = st.session_state.get("field_DAJ","").strip()
-prev_sub = st.session_state.get("prev_subdivision","")
+# DAJ auto-update (abbr) without overwriting manual edits
+current_daj = st.session_state.get("field_DAJ", "").strip()
+prev_sub = st.session_state.get("prev_subdivision", "")
 if subdivision and subdivision != prev_sub:
     if country == "Canada":
         daj_val = CA_ABBR.get(subdivision, subdivision)
@@ -285,25 +277,27 @@ if subdivision and subdivision != prev_sub:
         daj_val = US_ABBR.get(subdivision, subdivision)
     else:
         daj_val = subdivision
-    if current_daj == "" or current_daj == prev_sub:
+    example_daj_can = "Quebec"  # placeholder example name; we only check if DAJ equals previous auto value
+    if current_daj == "" or current_daj == prev_sub or current_daj == example_daj_can:
         st.session_state["field_DAJ"] = daj_val
     st.session_state["prev_subdivision"] = subdivision
 elif not subdivision:
     st.session_state["prev_subdivision"] = ""
 
-# Grid of fields with help bubbles (right column contains the bubble)
+# ---------------------------
+# Fields grid with help-bubbles (tooltips appear only on hover)
+# ---------------------------
 st.markdown("<div class='grid'>", unsafe_allow_html=True)
 
-# Left card (first half of fields)
+# Left card
 st.markdown("<div class='card'><h3 style='margin-top:0'>Informations personnelles</h3>", unsafe_allow_html=True)
 for code, help_text in FIELDS[:8]:
     col_input, col_help = st.columns([8,1])
     with col_input:
-        label = f"{code}"
         if code == "DBC":
-            st.selectbox(label, ["", "1 - Homme", "2 - Femme"], key=f"field_{code}")
+            st.selectbox(f"{code}", ["", "1 - Homme", "2 - Femme"], key=f"field_{code}")
         else:
-            st.text_input(label, value=st.session_state.get(f"field_{code}", ""), key=f"field_{code}")
+            st.text_input(f"{code}", value=st.session_state.get(f"field_{code}", ""), key=f"field_{code}")
     safe_help = help_text.replace("'", "&#39;").replace('"', "&quot;")
     help_html = f"""
       <div class="help-bubble" tabindex="0" role="button" aria-label="{safe_help}">
@@ -315,16 +309,15 @@ for code, help_text in FIELDS[:8]:
         st.markdown(help_html, unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-# Right card (remaining fields)
+# Right card
 st.markdown("<div class='card'><h3 style='margin-top:0'>Adresse & Détails</h3>", unsafe_allow_html=True)
 for code, help_text in FIELDS[8:]:
     col_input, col_help = st.columns([8,1])
     with col_input:
-        label = f"{code}"
         if code == "DBC":
-            st.selectbox(label, ["", "1 - Homme", "2 - Femme"], key=f"field_{code}")
+            st.selectbox(f"{code}", ["", "1 - Homme", "2 - Femme"], key=f"field_{code}")
         else:
-            st.text_input(label, value=st.session_state.get(f"field_{code}", ""), key=f"field_{code}")
+            st.text_input(f"{code}", value=st.session_state.get(f"field_{code}", ""), key=f"field_{code}")
     safe_help = help_text.replace("'", "&#39;").replace('"', "&quot;")
     help_html = f"""
       <div class="help-bubble" tabindex="0" role="button" aria-label="{safe_help}">
@@ -338,41 +331,54 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("</div>", unsafe_allow_html=True)  # close grid
 
-# Actions
+# ---------------------------
+# Actions: generate / reset
+# ---------------------------
 col_a, col_b = st.columns([1,1])
 with col_a:
     if st.button("Générer le bloc AAMVA (séquences '\\n' littérales)"):
+        # collect current values exactly as entered
         fields_values = {code: st.session_state.get(f"field_{code}", "").strip() for code, _ in FIELDS}
+
         def get_iin(country_name: str, subdivision_name: str) -> str:
             if country_name == "United States":
                 return IIN_US.get(subdivision_name, "000000")
             if country_name == "Canada":
                 return IIN_CA.get(subdivision_name, "000000")
             return "000000"
+
         def normalize_date(v: str) -> str:
             return v.replace("-", "").strip()
+
         iin = get_iin(country, subdivision)
         version = "08"
         design = "0001"
-        iin_sequence = f"{iin}{version}{design}"
+        iin_sequence = f"{iin}{version}{design}"  # concatenated without spaces
+
         data_lines = []
-        daq = fields_values.get("DAQ","") or fields_values.get("DCF","")
+        # DAQ priority: use DAQ field if present, else DCF
+        daq = fields_values.get("DAQ", "") or fields_values.get("DCF", "")
         if daq:
             data_lines.append(f"DAQ{daq}")
+
         order = ["DCS","DAC","DBB","DAG","DAI","DAJ","DAK","DBD","DBA","DBC","DAU","DAY","DCE","DCG","DCF"]
         for code in order:
-            val = fields_values.get(code,"")
+            val = fields_values.get(code, "")
             if val:
                 if code in ("DBB","DBD","DBA"):
                     val = normalize_date(val)
-                val = str(val).replace("\n"," ").strip()
+                val = str(val).replace("\n", " ").strip()
                 data_lines.append(f"{code}{val}")
+
+        # real data block for length calculation (with real newlines)
         real_data_block = "\n".join(data_lines) + ("\n" if data_lines else "")
         length = f"{len(real_data_block):04d}"
-        offset = "0041"
+        offset = "0041"  # default; can be computed later if needed
+
         header = f"ANSI {iin_sequence}DL{offset}{length}DL"
         data_block_literal = "\\n".join(data_lines) + "\\n" if data_lines else ""
         final = "@\\n" + header + "\\n" + data_block_literal
+
         st.session_state["last_aamva"] = final
 with col_b:
     if st.button("Réinitialiser"):
@@ -381,7 +387,9 @@ with col_b:
         st.session_state["last_aamva"] = ""
         st.experimental_rerun()
 
+# ---------------------------
 # Output
+# ---------------------------
 if st.session_state.get("last_aamva"):
     st.markdown("<div class='output-card'>", unsafe_allow_html=True)
     st.code(st.session_state["last_aamva"], language=None)
