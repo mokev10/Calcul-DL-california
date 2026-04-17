@@ -1,16 +1,20 @@
-#!/usr/bin/env python3
-# app_final.py
-# Streamlit — Pas d'upload d'images. En-tête centré, deux selects côte-à-côte centrés,
-# texte d'aide sous les selects, puis tous les champs (avec selectboxes quand pertinent).
-# Usage : streamlit run app_final.py
+# driver_license_app.py
+# Streamlit — Version finale demandée
+# - En-tête centré
+# - Deux selects côte à côte, centrés et de même taille (Pays / Subdivision)
+# - Texte d'aide affiché **après** la sélection du pays et **masqué** dès que la subdivision ou le formulaire suivant apparaît
+# - Formulaire complet des préfixes (DCG, DCS, DAC, ...) affiché après sélection de la subdivision
+# - Comportement réactif : si l'utilisateur change de pays, le texte d'aide réapparaît
 
+import streamlit as st
 import datetime
 from typing import Dict, List, Tuple
-import streamlit as st
 
-st.set_page_config(page_title="Pays / Subdivision — Formulaire complet", layout="wide")
+st.set_page_config(page_title="Driver License App", layout="wide")
 
-# --- Données complètes ---
+# ---------------------------
+# Données : États US et Provinces CAN
+# ---------------------------
 US_STATES: Dict[str, str] = {
     "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
     "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
@@ -30,7 +34,9 @@ CAN_PROVINCES_TERRITORIES: Dict[str, str] = {
     "Newfoundland and Labrador":"NL","Yukon":"YT","Northwest Territories":"NT","Nunavut":"NU"
 }
 
-# --- Champs préfixés (nom, aide) ---
+# ---------------------------
+# Champs préfixés (nom, aide)
+# ---------------------------
 PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCG", "Code du pays (ex: CAN pour Canada, US pour United States)"),
     ("DCS", "Nom de famille (ex: NICOLAS)"),
@@ -48,37 +54,72 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
     ("DCF", "Numéro de référence du document (ex: PEJQ04N96)")
 ]
 
-# --- En-tête centré ---
-st.markdown("<div style='text-align:center; margin-top:6px;'>"
-            "<h1 style='margin:0;'>Formulaire préfixes — Pays / Subdivision</h1>"
-            "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — remplissez les champs après sélection</p>"
-            "</div>", unsafe_allow_html=True)
+# ---------------------------
+# Session state initialisation
+# ---------------------------
+if "show_hint" not in st.session_state:
+    st.session_state["show_hint"] = False
 
-# --- Zone centrale pour selects (centrés) ---
+if "prev_country" not in st.session_state:
+    st.session_state["prev_country"] = ""
+
+# ---------------------------
+# En-tête centré
+# ---------------------------
+st.markdown(
+    "<div style='text-align:center; margin-top:6px;'>"
+    "<h1 style='margin:0;'>Formulaire préfixes — Pays / Subdivision</h1>"
+    "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — remplissez les champs après sélection</p>"
+    "</div>",
+    unsafe_allow_html=True
+)
+
+# ---------------------------
+# Zone centrale : selects centrés côte à côte (mêmes tailles)
+# ---------------------------
 outer_l, center_col, outer_r = st.columns([1, 2, 1])
 with center_col:
     sel_left, sel_right = st.columns([1, 1])
     with sel_left:
-        country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="country_main")
-    # construire options selon pays
+        country = st.selectbox("Pays", ["", "United States (US)", "Canada (CAN)"], key="country_main")
+    # Si le pays change par rapport à la session, réactiver le hint
+    if country != st.session_state.get("prev_country", ""):
+        # si l'utilisateur a choisi un pays non vide, on affiche le hint
+        st.session_state["show_hint"] = bool(country)
+        st.session_state["prev_country"] = country
+
+    # Construire options selon pays
     if country.startswith("United"):
         subdivision_label = "État"
         options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
-    else:
+    elif country.startswith("Canada") or country == "Canada (CAN)":
         subdivision_label = "Province / Territoire"
         options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
+    else:
+        subdivision_label = "Subdivision"
+        options = []
+
     with sel_right:
         subdivision = st.selectbox(subdivision_label, [""] + options, key="subdivision_main")
 
-    # texte d'aide centré sous les deux selects
-    st.markdown(
-        "<div style='margin-top:10px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81;text-align:center;'>"
-        "Sélectionnez un pays et une subdivision pour afficher le formulaire."
-        "</div>",
-        unsafe_allow_html=True
-    )
+    # Afficher le hint uniquement si show_hint True ET qu'aucune subdivision n'est encore choisie
+    if st.session_state["show_hint"] and not subdivision:
+        st.markdown(
+            "<div style='margin-top:10px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81;text-align:center;'>"
+            "Sélectionnez un pays et une subdivision pour afficher le formulaire."
+            "</div>",
+            unsafe_allow_html=True
+        )
 
-# --- Formulaire complet (affiché si subdivision choisie) ---
+# ---------------------------
+# Logique : masquer le hint dès que la subdivision est choisie (ou quand le formulaire s'affiche)
+# ---------------------------
+if subdivision:
+    st.session_state["show_hint"] = False
+
+# ---------------------------
+# Formulaire complet (affiché si subdivision choisie)
+# ---------------------------
 if subdivision:
     default_country_code = "US" if country.startswith("United") else "CAN"
 
@@ -86,6 +127,9 @@ if subdivision:
     st.subheader("Champs préfixés (saisie)")
 
     # Présentation en grille 2 colonnes ; utiliser selectboxes pour les champs qui s'y prêtent
+    # Préparer la liste d'options pour DAJ (Province/État) afin de proposer la subdivision sélectionnée en priorité
+    daj_options = [subdivision] + [opt for opt in options if opt != subdivision]
+
     for i in range(0, len(PREFIX_FIELDS), 2):
         left = PREFIX_FIELDS[i]
         right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
@@ -96,16 +140,9 @@ if subdivision:
         if left[0] == "DCG":
             cols[0].text_input(left[0], value=default_country_code, help=left[1], key=key_left)
         elif left[0] == "DAJ":
-            # DAJ : proposer la subdivision sélectionnée en priorité
-            cols[0].selectbox(left[0],
-                              options=[subdivision] + [opt for opt in (options if options else []) if opt != subdivision],
-                              index=0,
-                              help=left[1],
-                              key=key_left)
+            cols[0].selectbox(left[0], options=daj_options, index=0, help=left[1], key=key_left)
         elif left[0] == "DBC":
             cols[0].selectbox(left[0], options=["", "1 - Homme", "2 - Femme"], help=left[1], key=key_left)
-        elif left[0] in ("DAU", "DAY"):
-            cols[0].text_input(left[0], value="", help=left[1], placeholder=left[1], key=key_left)
         else:
             cols[0].text_input(left[0], value="", help=left[1], placeholder=left[1], key=key_left)
 
@@ -115,15 +152,9 @@ if subdivision:
             if right[0] == "DCG":
                 cols[1].text_input(right[0], value=default_country_code, help=right[1], key=key_right)
             elif right[0] == "DAJ":
-                cols[1].selectbox(right[0],
-                                  options=[subdivision] + [opt for opt in (options if options else []) if opt != subdivision],
-                                  index=0,
-                                  help=right[1],
-                                  key=key_right)
+                cols[1].selectbox(right[0], options=daj_options, index=0, help=right[1], key=key_right)
             elif right[0] == "DBC":
                 cols[1].selectbox(right[0], options=["", "1 - Homme", "2 - Femme"], help=right[1], key=key_right)
-            elif right[0] in ("DAU", "DAY"):
-                cols[1].text_input(right[0], value="", help=right[1], placeholder=right[1], key=key_right)
             else:
                 cols[1].text_input(right[0], value="", help=right[1], placeholder=right[1], key=key_right)
 
