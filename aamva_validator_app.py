@@ -306,8 +306,13 @@ if country:
         real_data_block = "\n".join(data_lines) + "\n" if data_lines else ""
         length = f"{len(real_data_block):04d}"
 
-        # Header : garder un espace entre "ANSI" et l'IIN comme dans l'exemple
-        header = f"ANSI {iin}08 00 01 DL{offset}{length}DL"
+        # Correction : concaténer IIN + version + design sans espaces
+        version = "08"
+        design = "0001"
+        iin_sequence = f"{iin}{version}{design}"  # ex: "636033080001"
+
+        # Header : "ANSI " + iin_sequence + "DL" + offset + length + "DL" (no spaces inside numeric sequence)
+        header = f"ANSI {iin_sequence}DL{offset}{length}DL"
 
         # Construire la sortie finale avec séquences littérales '\n'
         # Commencer par "@\n" littéral, puis header, puis '\n' littéral, puis data_block_literal
