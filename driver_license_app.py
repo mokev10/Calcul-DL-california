@@ -1,12 +1,12 @@
 # driver_license_app.py
-# Streamlit — Formulaire + génération d'un bloc AAMVA copiable (texte "brut")
+# Version finale — base conservée + règles supplémentaires et génération de bloc AAMVA copiable
 # Usage: streamlit run driver_license_app.py
 
 import streamlit as st
 import datetime
 from typing import Dict, List, Tuple
 
-st.set_page_config(page_title="Driver License App — Générateur AAMVA", layout="wide")
+st.set_page_config(page_title="Driver License App", layout="wide")
 
 # ---------------------------
 # IIN mapping (US states + Canadian provinces)
@@ -34,7 +34,7 @@ IIN_CA = {
 }
 
 # ---------------------------
-# Données pour selects (extraits ; tu peux remplacer par listes complètes)
+# Données pour selects
 # ---------------------------
 US_STATES = sorted(list(IIN_US.keys()))
 CA_PROVINCES = sorted(list(IIN_CA.keys()))
@@ -43,151 +43,213 @@ CA_PROVINCES = sorted(list(IIN_CA.keys()))
 # Champs préfixés (nom, aide)
 # ---------------------------
 PREFIX_FIELDS: List[Tuple[str, str]] = [
-    ("DCG", "Code du pays (ex: CAN, US)"),
-    ("DCS", "Nom de famille"),
-    ("DAC", "Prénom"),
-    ("DBB", "Date de naissance (YYYYMMDD ou YYYY-MM-DD)"),
-    ("DAG", "Adresse ligne 1"),
-    ("DAI", "Ville"),
-    ("DAJ", "Province/État (abréviation ou nom)"),
-    ("DAK", "Code postal / ZIP"),
-    ("DBD", "Date d'émission (YYYYMMDD)"),
-    ("DBA", "Date d'expiration (YYYYMMDD)"),
+    ("DCG", "Code du pays (ex: CAN pour Canada, US pour United States)"),
+    ("DCS", "Nom de famille (ex: NICOLAS)"),
+    ("DAC", "Prénom (ex: JEAN)"),
+    ("DBB", "Date de naissance (YYYY-MM-DD ou YYYYMMDD)"),
+    ("DAG", "Adresse ligne 1 (ex: 1560 SHERBROOKE ST E)"),
+    ("DAI", "Ville (ex: MONTREAL)"),
+    ("DAJ", "Province/État (ex: QC ou California)"),
+    ("DAK", "Code postal / ZIP (ex: H2L4M1 ou 90001)"),
+    ("DBD", "Date d'émission (YYYY-MM-DD ou YYYYMMDD)"),
+    ("DBA", "Date d'expiration (YYYY-MM-DD ou YYYYMMDD)"),
     ("DBC", "Sexe (1 = Homme, 2 = Femme)"),
-    ("DAU", "Taille (cm)"),
-    ("DAY", "Couleur des yeux"),
-    ("DCF", "Numéro de référence du document")
+    ("DAU", "Taille (ex: 180 cm)"),
+    ("DAY", "Couleur des yeux (ex: BRUN)"),
+    ("DCF", "Numéro de référence du document (ex: PEJQ04N96)")
 ]
 
 # ---------------------------
-# UI : en-tête
+# Session state initialisation
 # ---------------------------
-st.markdown("<div style='text-align:center'><h1 style='margin:0;'>Driver License App — Générateur AAMVA</h1></div>", unsafe_allow_html=True)
-st.write("Remplis les champs puis clique sur **Générer le bloc** pour obtenir le texte brut copiable.")
+if "show_hint" not in st.session_state:
+    st.session_state["show_hint"] = False
+if "prev_country" not in st.session_state:
+    st.session_state["prev_country"] = ""
+if "last_aamva" not in st.session_state:
+    st.session_state["last_aamva"] = ""
 
 # ---------------------------
-# Sélecteurs pays / subdivision (centrés côte à côte)
+# En-tête centré (base inchangée)
+# ---------------------------
+st.markdown(
+    "<div style='text-align:center; margin-top:6px;'>"
+    "<h1 style='margin:0;'>Formulaire préfixes — Pays / Subdivision</h1>"
+    "<p style='color:gray; margin:4px 0 12px 0;'>Usage pédagogique — remplissez les champs après sélection</p>"
+    "</div>",
+    unsafe_allow_html=True
+)
+
+# ---------------------------
+# Zone centrale : selects centrés côte à côte (mêmes tailles)
 # ---------------------------
 outer_l, center_col, outer_r = st.columns([1, 2, 1])
 with center_col:
-    c1, c2 = st.columns([1,1])
-    with c1:
-        country = st.selectbox("Pays", ["", "Canada", "United States"], key="country")
-    with c2:
-        if country == "United States":
-            subdivision = st.selectbox("État", [""] + US_STATES, key="subdivision")
-        elif country == "Canada":
-            subdivision = st.selectbox("Province / Territoire", [""] + CA_PROVINCES, key="subdivision")
-        else:
-            subdivision = st.selectbox("Subdivision", [""], key="subdivision")
+    sel_left, sel_right = st.columns([1, 1])
+    with sel_left:
+        country = st.selectbox("Pays", ["", "Canada", "United States"], key="country_main")
+    # Si le pays change, activer le hint (si pays non vide)
+    if country != st.session_state.get("prev_country", ""):
+        st.session_state["show_hint"] = bool(country)
+        st.session_state["prev_country"] = country
+
+    # Construire options selon pays
+    if country == "United States":
+        subdivision_label = "État"
+        options = [f"{name}" for name in US_STATES]
+    elif country == "Canada":
+        subdivision_label = "Province / Territoire"
+        options = [f"{name}" for name in CA_PROVINCES]
+    else:
+        subdivision_label = "Subdivision"
+        options = []
+
+    with sel_right:
+        subdivision = st.selectbox(subdivision_label, [""] + options, key="subdivision_main")
+
+    # Afficher le hint uniquement si show_hint True ET qu'aucune subdivision n'est encore choisie
+    if st.session_state["show_hint"] and not subdivision:
+        st.markdown(
+            "<div style='margin-top:10px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81;text-align:center;'>"
+            "Sélectionnez un pays et une subdivision pour afficher le formulaire."
+            "</div>",
+            unsafe_allow_html=True
+        )
 
 # ---------------------------
-# Texte d'aide : s'affiche après sélection du pays et disparaît quand subdivision choisie
+# Masquer le hint dès que la subdivision est choisie
 # ---------------------------
-if country and not subdivision:
-    st.info("Sélectionnez un pays et une subdivision pour afficher le formulaire.")
+if subdivision:
+    st.session_state["show_hint"] = False
 
 # ---------------------------
-# Formulaire des champs préfixés (affiché si pays choisi)
+# Formulaire complet (affiché si pays choisi) — base conservée
 # ---------------------------
 if country:
     st.markdown("---")
     st.subheader("Champs préfixés (saisie)")
-    # Préremplir DCG selon pays
+
     default_dcg = "US" if country == "United States" else "CAN" if country == "Canada" else ""
-    # Afficher les champs en grille 2 colonnes
+
+    # Préparer DAJ options (priorité à la subdivision sélectionnée)
+    daj_options = []
+    if subdivision:
+        daj_options = [subdivision] + [opt for opt in options if opt != subdivision]
+    else:
+        daj_options = options
+
+    # Afficher champs en grille 2 colonnes (base inchangée)
     for i in range(0, len(PREFIX_FIELDS), 2):
         left = PREFIX_FIELDS[i]
         right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
-        cols = st.columns([1,1])
-        # gauche
+        cols = st.columns([1, 1])
+
+        # Champ gauche
         key_left = f"field_{left[0]}"
         if left[0] == "DCG":
             cols[0].text_input(left[0], value=default_dcg, help=left[1], key=key_left)
-        elif left[0] == "DAJ" and subdivision:
-            cols[0].text_input(left[0], value=subdivision, help=left[1], key=key_left)
+        elif left[0] == "DAJ":
+            # proposer la subdivision sélectionnée si disponible
+            cols[0].selectbox(left[0], options=[""] + daj_options, index=0 if not subdivision else 0, help=left[1], key=key_left)
+        elif left[0] == "DBC":
+            cols[0].selectbox(left[0], options=["", "1 - Homme", "2 - Femme"], help=left[1], key=key_left)
         else:
             cols[0].text_input(left[0], value="", help=left[1], placeholder=left[1], key=key_left)
-        # droite
+
+        # Champ droit
         if right:
             key_right = f"field_{right[0]}"
             if right[0] == "DCG":
                 cols[1].text_input(right[0], value=default_dcg, help=right[1], key=key_right)
-            elif right[0] == "DAJ" and subdivision:
-                cols[1].text_input(right[0], value=subdivision, help=right[1], key=key_right)
+            elif right[0] == "DAJ":
+                cols[1].selectbox(right[0], options=[""] + daj_options, index=0 if not subdivision else 0, help=right[1], key=key_right)
+            elif right[0] == "DBC":
+                cols[1].selectbox(right[0], options=["", "1 - Homme", "2 - Femme"], help=right[1], key=key_right)
             else:
                 cols[1].text_input(right[0], value="", help=right[1], placeholder=right[1], key=key_right)
 
     st.markdown("---")
 
     # ---------------------------
-    # Génération du bloc AAMVA (texte brut)
+    # Fonctions utilitaires pour la génération AAMVA
     # ---------------------------
     def get_iin_for_selection(country_name: str, subdivision_name: str) -> str:
         if country_name == "United States":
-            # subdivision_name attendu comme "State" exact
             return IIN_US.get(subdivision_name, "000000")
         if country_name == "Canada":
             return IIN_CA.get(subdivision_name, "000000")
         return "000000"
 
     def normalize_date(value: str) -> str:
-        # Simpliste : retire les tirets si présent (YYYY-MM-DD -> YYYYMMDD)
         return value.replace("-", "").strip()
 
     def build_aamva_block(fields: Dict[str, str], country_name: str, subdivision_name: str) -> str:
         # IIN
         iin = get_iin_for_selection(country_name, subdivision_name)
-        # Fixed header parts (version etc.) — tu peux ajuster 08/00/01/ etc.
-        # On construit un en-tête minimal similaire à ton exemple
-        # Format: ANSI <IIN><version><design><subfilecount>DL<offset><length>DL
-        # Pour simplifier on met des valeurs plausibles et on calcule la longueur approximative
+        # Construire les lignes de données dans l'ordre souhaité
         data_lines = []
-        # DAQ (numéro de permis) si fourni
+        # Si DCF (numéro de référence) présent, l'utiliser comme DAQ (numéro de permis)
         if fields.get("DCF"):
             data_lines.append(f"DAQ{fields.get('DCF')}")
-        # Ajouter tous les autres champs dans l'ordre demandé (utiliser les préfixes)
+        # Ordre des champs pour sortie (conforme à l'exemple fourni)
         order = ["DCS","DAC","DBB","DAG","DAI","DAJ","DAK","DBD","DBA","DBC","DAU","DAY","DCE","DCG","DCF"]
-        # Mais on veut chaque ligne préfixée par le code (ex: DCSNICOLAS)
         for code in order:
             val = fields.get(code)
             if val:
+                # normaliser les dates si nécessaire
+                if code in ("DBB","DBD","DBA"):
+                    val = normalize_date(val)
                 data_lines.append(f"{code}{val}")
-        # Concaténation des données
-        data_block = "".join(data_lines)
-        # Calculs simples pour offset/length (approx) — ici on met des valeurs statiques raisonnables
-        # offset: position où commence la section DL (on met 0041 comme dans ton exemple)
+        # Concaténation des données (chaque code sur sa propre ligne pour lisibilité/copiable)
+        data_block = "\n".join(data_lines)
+        # Calcul simple d'offset/length (valeurs plausibles pour l'exemple)
         offset = "0041"
-        length = f"{len(data_block):04d}"  # longueur sur 4 chiffres
+        length = f"{len(data_block):04d}"
         header = f"ANSI {iin}08 00 01 DL{offset}{length}DL"
-        # Retourner header + DL + data_block (avec un saut de ligne entre chaque code pour lisibilité)
-        # L'utilisateur a demandé le "brut" comme dans l'exemple (chaque code sur une ligne)
-        lines = [header]
-        # Convert data_block into lines per code (we already have data_lines)
-        lines.extend(data_lines)
-        return "\n".join(lines)
+        # Retourner header + lignes de données
+        return header + "\n" + data_block
 
-    # Bouton de génération
+    # ---------------------------
+    # Actions : Générer / Enregistrer / Réinitialiser
+    # ---------------------------
     if st.button("Générer le bloc AAMVA copiable"):
-        # Récupérer les valeurs des champs depuis session_state
+        # Récupérer valeurs
         fields_values = {}
         for prefix, _ in PREFIX_FIELDS:
             fields_values[prefix] = st.session_state.get(f"field_{prefix}", "").strip()
-        # Si DCF vide, essayer de prendre un champ alternatif (ex: DAQ) — ici on laisse tel quel
         aamva_text = build_aamva_block(fields_values, country, subdivision)
         st.session_state["last_aamva"] = aamva_text
         st.success("Bloc généré — copie ci‑dessous.")
+
+    action_l, action_r = st.columns([1, 1])
+    with action_l:
+        if st.button("Enregistrer (session)"):
+            payload = {}
+            for prefix, _ in PREFIX_FIELDS:
+                payload[prefix] = st.session_state.get(f"field_{prefix}", "")
+            payload["COUNTRY_LABEL"] = country
+            payload["SUBDIVISION_LABEL"] = subdivision
+            payload["TIMESTAMP"] = datetime.datetime.now().isoformat()
+            st.session_state["last_prefix_payload"] = payload
+            st.success("Données enregistrées en session (usage pédagogique).")
+    with action_r:
+        if st.button("Réinitialiser les champs"):
+            for prefix, _ in PREFIX_FIELDS:
+                st.session_state[f"field_{prefix}"] = ""
+            st.session_state["field_DCG"] = default_dcg
+            st.info("Champs réinitialisés.")
 
     # Afficher le bloc copiable si présent
     if st.session_state.get("last_aamva"):
         st.markdown("### Bloc AAMVA (texte brut) — copiable")
         st.code(st.session_state["last_aamva"], language=None)
-        # Bouton pour copier (Streamlit n'a pas un copy-to-clipboard natif, mais l'utilisateur peut copier depuis la zone)
         st.info("Sélectionne le texte ci‑dessous et copie‑le (Ctrl+C / Cmd+C).")
 
 # ---------------------------
-# Footer / notes
+# Footer / notes (inchangées)
 # ---------------------------
 st.markdown("---")
-st.caption("Note : Ce générateur produit un bloc texte pédagogique inspiré du format AAMVA. " 
-           "Les en‑têtes (offset/length) sont simplifiés pour l'exemple. Utilise ce texte à des fins de test et d'apprentissage uniquement.")
+st.caption(
+    "Note : Ce générateur produit un bloc texte pédagogique inspiré du format AAMVA. "
+    "Les en‑têtes (offset/length) sont simplifiés pour l'exemple. Utilise ce texte à des fins de test et d'apprentissage uniquement."
+)
