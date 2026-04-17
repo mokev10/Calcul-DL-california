@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# country_subdivision_stacked_with_hint_no_placeholder.py
-# Streamlit — Pays (select) puis Subdivision (select) empilés, avec le texte d'aide affiché
-# directement sous les deux sélecteurs. Formulaire préfixes à droite.
-# Usage : streamlit run country_subdivision_stacked_with_hint_no_placeholder.py
+# country_subdivision_side_by_side_with_hint.py
+# Streamlit — En-tête fixe, deux selects côte à côte (mêmes tailles) et texte d'aide affiché
+# directement sous ces deux selects. Formulaire préfixes à droite.
+# Usage : streamlit run country_subdivision_side_by_side_with_hint.py
 
 import datetime
 from typing import Dict, List, Tuple
 
 import streamlit as st
 
-st.set_page_config(page_title="Pays → Subdivision (stacked) — aide sous selects", layout="wide")
+st.set_page_config(page_title="Pays → Subdivision", layout="wide")
 
 # --- Données : US states (50) et Canada provinces/territories (13) ---
 US_STATES: Dict[str, str] = {
@@ -53,34 +53,38 @@ PREFIX_FIELDS: List[Tuple[str, str]] = [
 st.title("Formulaire préfixes — Pays / Subdivision")
 st.caption("Usage pédagogique — remplissez les champs texte libre après sélection du pays et de la subdivision")
 
-# --- Layout principal ---
+# --- Layout principal : gauche pour selects + hint, droite pour formulaire ---
 col_left, col_right = st.columns([0.36, 0.64])
 
 with col_left:
-    # Les deux menus sont empilés dans la même colonne : ils auront la même largeur visuelle
-    country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="select_country_stacked_hint")
-
-    # Le menu "Subdivision" placé directement sous "Pays"
+    # Row with two selects side-by-side and equal width
+    select_a, select_b = st.columns([1, 1])
+    with select_a:
+        country = st.selectbox("Pays", ["United States (US)", "Canada (CAN)"], key="country_select")
+    # Build options depending on country
     if country.startswith("United"):
         subdivision_label = "État"
         options = [f"{name} ({abbr})" for name, abbr in sorted(US_STATES.items(), key=lambda x: x[0])]
     else:
         subdivision_label = "Province / Territoire"
         options = [f"{name} ({abbr})" for name, abbr in sorted(CAN_PROVINCES_TERRITORIES.items(), key=lambda x: x[0])]
+    with select_b:
+        subdivision = st.selectbox(subdivision_label, [""] + options, key="subdivision_select")
 
-    subdivision = st.selectbox(subdivision_label, [""] + options, key="select_subdivision_stacked_hint")
+    # Hint text displayed directly under the two selects (spans the left column)
+    st.markdown(
+        "<div style='margin-top:8px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81'>"
+        "Sélectionnez un pays et une subdivision pour afficher le formulaire."
+        "</div>",
+        unsafe_allow_html=True
+    )
 
-    # --- TEXTE D'AIDE : affiché directement sous les deux selectboxes ---
-    st.markdown("<div style='margin-top:8px;padding:10px;border-radius:6px;background:#eef6ff;color:#0f4c81'>"
-                "Sélectionnez un pays et une subdivision pour afficher le formulaire."
-                "</div>", unsafe_allow_html=True)
-
-    # Rappel compact de la sélection (sous le texte d'aide)
+    # Compact selection summary (optional)
     if subdivision:
         st.markdown(f"**{country.split('(')[0].strip()}** — {subdivision.split('(')[0].strip()}")
 
 with col_right:
-    # Formulaire affiché à droite ; n'apparaît que si une subdivision est choisie
+    # Formulaire affiché à droite uniquement si subdivision choisie
     if subdivision:
         default_country_code = "US" if country.startswith("United") else "CAN"
 
@@ -93,14 +97,12 @@ with col_right:
             left = PREFIX_FIELDS[i]
             right = PREFIX_FIELDS[i+1] if i+1 < len(PREFIX_FIELDS) else None
             cols = st.columns([1, 1])
-            # Champ gauche
             key_left = f"field_{left[0]}"
             if left[0] == "DCG":
                 cols[0].text_input(left[0], value=default_country_code, help=left[1], key=key_left)
             else:
                 cols[0].text_input(left[0], value="", help=left[1], placeholder=left[1], key=key_left)
 
-            # Champ droit
             if right:
                 key_right = f"field_{right[0]}"
                 if right[0] == "DCG":
@@ -134,4 +136,3 @@ with col_right:
             st.markdown("---")
             st.subheader("Aperçu des données enregistrées (session)")
             st.json(st.session_state["last_prefix_payload"])
-    # Note: le message informatif affiché précédemment a été supprimé comme demandé.
