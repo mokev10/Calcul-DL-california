@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple
 
 st.set_page_config(
     page_title="Driver License App — AAMVA Brut",
-   page_icon="https://img.icons8.com/external-linear-outline-icons-papa-vector/50/external-Drivers-License-car-sharing-linear-outline-icons-papa-vector.png",
+   page_icon="https://img.icons8.com/ios-filled/50/contents-insurance.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
