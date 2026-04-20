@@ -9,8 +9,12 @@ import streamlit as st
 import datetime
 from typing import Dict, List, Tuple
 
-st.set_page_config(page_title="Driver License App — AAMVA Brut", layout="wide")
-
+st.set_page_config(
+    page_title="Driver License App — AAMVA Brut", layout="wide"
+   page_icon="https://img.icons8.com/external-inipagistudio-mixed-inipagistudio/24/external-ai-web-programmer-inipagistudio-mixed-inipagistudio.png",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 # ---------------------------
 # IIN mapping (US states + Canadian provinces)
 # ---------------------------
